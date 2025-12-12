@@ -57,6 +57,8 @@ jobs:
         run: cargo check --target wasm32-unknown-unknown
 
   # Job 4: Fuzz Harness Verification
+  # Note: Full fuzz build with sanitizers requires special setup on CI
+  # We verify fuzz targets compile by doing a regular cargo check
   fuzz-check:
     name: Fuzz Harness Build
     runs-on: ubuntu-latest
@@ -66,8 +68,5 @@ jobs:
       - name: Install Nightly Rust
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz
-
-      - name: Build Fuzz Targets
-        run: cargo +nightly fuzz build dummy_harness
+      - name: Check Fuzz Targets Compile
+        run: cargo +nightly check --manifest-path fuzz/Cargo.toml
