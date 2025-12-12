@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeVec Console</title>
+    <link rel="stylesheet" href="./style.css">
+    <style>
+        /* Extra style for Export button */
+        #btnExport:not(:disabled) {
+            border-color: #fcee09;
+            color: #fcee09;
+            background: rgba(252, 238, 9, 0.05);
+        }
+        #btnExport:not(:disabled):hover {
+            background: rgba(252, 238, 9, 0.15);
+            box-shadow: 0 0 15px rgba(252, 238, 9, 0.3);
+            text-shadow: 0 0 5px #fcee09;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>EdgeVec <span style="color: var(--neon-cyan)">//</span> Console</h1>
+            <span class="subtitle">High-Performance WASM Vector Engine</span>
+        </div>
+        <div style="display: flex; gap: 2rem; align-items: center;">
+             <a href="https://github.com/matteopanzeri/edgevec" target="_blank" style="color: var(--text-muted); text-decoration: none; font-size: 0.9rem; font-family: var(--font-mono);">GitHub</a>
+             <span style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--neon-cyan); border: 1px solid var(--neon-cyan); padding: 2px 8px; border-radius: 4px;">v0.1.0-alpha</span>
+        </div>
+    </header>
+
+    <div class="dashboard">
+        <aside class="controls">
+            <div class="control-group">
+                <label>01. Core System</label>
+                <button id="btnInit">Initialize Engine</button>
+            </div>
+
+            <div class="control-group">
+                <label>02. Data Ingestion</label>
+                <button id="btnInsert" disabled>Generate 10k Vectors</button>
+            </div>
+            
+            <div class="control-group">
+                <label>03. Query Engine</label>
+                <button id="btnSearch" disabled>Execute Search</button>
+            </div>
+
+            <div class="control-group">
+                <label>04. Persistence</label>
+                <button id="btnSave" disabled>Save Snapshot</button>
+                <button id="btnLoad" disabled class="danger">Load Snapshot</button>
+                <button id="btnExport" disabled>Export Data</button>
+            </div>
+            
+            <div style="margin-top: auto; border-top: 1px solid #222; padding-top: 1rem;">
+                <label>Metrics</label>
+                <div style="font-family: var(--font-mono); font-size: 0.8rem; color: #666; display: flex; justify-content: space-between; margin-top: 0.5rem;">
+                    <span>Vectors:</span>
+                    <span id="statCount" style="color: var(--text-primary)">0</span>
+                </div>
+                <div style="font-family: var(--font-mono); font-size: 0.8rem; color: #666; display: flex; justify-content: space-between; margin-top: 0.2rem;">
+                    <span>Dimensions:</span>
+                    <span id="statDims" style="color: var(--text-primary)">-</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="terminal-container">
+            <div class="terminal-header">
+                <span>> LIVE LOG</span>
+                <div style="display: flex; align-items: center;">
+                    <span id="statusIndicator" class="status-indicator"></span>
+                    <span id="statusText">SYSTEM READY</span>
+                </div>
+            </div>
+            <div id="log">
+                <div class="log-entry">
+                    <span class="timestamp">[SYSTEM]</span>
+                    <span class="message">Waiting for initialization...</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="./index.js"></script>
+</body>
+</html>

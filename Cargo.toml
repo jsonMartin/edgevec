@@ -1,0 +1,168 @@
+# EdgeVec Cargo Configuration
+# =============================
+# Architecture: APPROVED (Gate 1 Complete: 2025-12-05)
+# Planning: Week 1 Day 1 — Repository Initialization
+#
+# IMPLEMENTED: W1.D1 — Basic dependencies for testing infrastructure
+
+[package]
+name = "edgevec"
+version = "0.2.0-alpha.1"
+edition = "2021"
+rust-version = "1.70"
+description = "High-performance embedded vector database for Browser, Node, and Edge"
+license = "MIT"
+repository = "https://github.com/[user]/edgevec"
+keywords = ["vector", "database", "wasm", "hnsw", "similarity-search"]
+categories = ["database", "wasm", "algorithms"]
+
+[lib]
+name = "edgevec"
+crate-type = ["lib", "cdylib"]
+
+# =============================================================================
+# DEPENDENCIES — Day 1: Core Infrastructure
+# =============================================================================
+
+[dependencies]
+bitvec = { version = "1.0", features = ["serde"] }
+# Error handling (required by Day 1 spec)
+thiserror = "1.0"
+
+# Serialization (required by Day 1 spec)
+serde = { version = "1.0", features = ["derive"] }
+
+# Safe type casting for WASM (required by Day 1 spec)
+bytemuck = { version = "1.14", features = ["derive"] }
+crc32fast = "1.3"
+
+# Random Number Generation (Required for HNSW construction)
+rand = { version = "0.8", features = ["small_rng"] }
+rand_chacha = { version = "0.3", features = ["serde1"] }
+
+# Serde helpers for binary efficiency
+serde_bytes = "0.11"
+postcard = { version = "1.0", features = ["use-std"] }
+
+# WASM Dependencies (W4.1)
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["console", "Window", "Performance", "IdbFactory", "IdbDatabase", "IdbTransaction", "IdbTransactionMode", "IdbObjectStore", "IdbRequest", "DomException"] }
+serde-wasm-bindgen = "0.6"
+console_error_panic_hook = "0.1"
+console_log = "1.0"
+log = "0.4"
+getrandom = { version = "0.2.14", features = ["js"] }
+cfg-if = "1.0.4"
+
+# =============================================================================
+# DEV DEPENDENCIES — Day 1: Testing Infrastructure
+# =============================================================================
+
+[dev-dependencies]
+# Property-based testing (required for "Nvidia Grade" verification)
+proptest = { version = "=1.4.0", default-features = false, features = ["std"] }
+# WASM testing
+wasm-bindgen-test = "0.3"
+serde_json = "1.0"
+
+# Benchmarking framework (required for performance budgets)
+criterion = { version = "0.5", features = ["html_reports"], default-features = false }
+tempfile = "=3.10.0"
+
+[[bench]]
+name = "distance_bench"
+harness = false
+
+[[bench]]
+name = "persistence_bench"
+harness = false
+
+[[bench]]
+name = "storage_bench"
+harness = false
+
+[[bench]]
+name = "search_bench"
+harness = false
+
+[[bench]]
+name = "hnsw_init_bench"
+harness = false
+
+[[bench]]
+name = "insert_bench"
+harness = false
+
+[[bench]]
+name = "simd_bench"
+harness = false
+
+[[bench]]
+name = "delete_bench"
+harness = false
+
+[[bench]]
+name = "scaling_bench"
+harness = false
+
+[[bench]]
+name = "quant_bench"
+harness = false
+
+[[bench]]
+name = "memory_bench"
+harness = false
+
+[[bench]]
+name = "bench_quantization"
+harness = false
+
+# =============================================================================
+# FUTURE DEPENDENCIES (Not in Day 1 scope)
+# =============================================================================
+# To be added in Week 1 Day 3-5:
+# - rand / rand_chacha (deterministic RNG for tests)
+
+# =============================================================================
+# BUILD PROFILES
+# =============================================================================
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[profile.release]
+opt-level = 3       # Performance First (was "z" for size)
+lto = true          # Link-time optimization
+codegen-units = 1   # Single codegen unit for maximum optimization
+strip = true        # Strip symbols for smaller binary
+
+[profile.release-wasm]
+inherits = "release"
+opt-level = "z"     # Optimize for size in WASM (changed from "s" to match Day 1 spec)
+
+[profile.bench]
+inherits = "release"
+opt-level = 3       # Optimize for speed during benchmarks
+debug = true        # Include debug info for profiling
+
+# =============================================================================
+# FEATURES (Minimal set for Day 1)
+# =============================================================================
+
+[features]
+default = []
+simd = []
+
+# =============================================================================
+# CONFIGURATION STATUS
+# =============================================================================
+# ✅ Architecture: APPROVED (2025-12-05)
+# ✅ Planning: Week 1 Day 1 Tasks APPROVED
+# ✅ Dependencies: Day 1 spec (thiserror, serde, bytemuck)
+# ✅ Dev Dependencies: Day 1 spec (proptest, criterion)
+# ✅ Build Profile: Performance (opt-level = 3, lto = true)
+#
+# Next: Day 2-5 will add fuzz infrastructure and additional test harness
+# =============================================================================

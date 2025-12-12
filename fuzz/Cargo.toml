@@ -1,0 +1,71 @@
+[package]
+name = "edgevec-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1.3", features = ["derive"] }
+postcard = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+[dependencies.edgevec]
+path = ".."
+
+[[bin]]
+name = "persistence_load"
+path = "fuzz_targets/persistence_load.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "graph_ops"
+path = "fuzz_targets/graph_ops.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_quantization"
+path = "fuzz_targets/fuzz_quantization.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "header_parse"
+path = "fuzz_targets/header_parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "search_robustness"
+path = "fuzz_targets/search_robustness.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "wal_replay"
+path = "fuzz_targets/wal_replay.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "hnsw_config_init"
+path = "fuzz_targets/hnsw_config_init.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "hnsw_search"
+path = "fuzz_targets/hnsw_search.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "hnsw_insert"
+path = "fuzz_targets/hnsw_insert.rs"
+test = false
+doc = false

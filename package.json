@@ -1,0 +1,80 @@
+{
+  "name": "@edgevec/core",
+  "version": "0.1.0",
+  "description": "High-performance embedded vector database for edge computing. HNSW indexing with WASM-first architecture for browser, Node.js, and Rust.",
+  "type": "module",
+  "main": "./wasm/dist/index.js",
+  "module": "./wasm/dist/index.js",
+  "types": "./wasm/dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./wasm/dist/index.d.ts",
+      "import": "./wasm/dist/index.js",
+      "require": "./wasm/index.cjs"
+    },
+    "./wasm": {
+      "types": "./pkg/edgevec.d.ts",
+      "import": "./pkg/edgevec.js"
+    }
+  },
+  "files": [
+    "wasm/dist",
+    "!wasm/dist/**/*.map",
+    "!wasm/dist/__tests__",
+    "!wasm/README.md",
+    "wasm/index.cjs",
+    "pkg",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "vector-database",
+    "vector-search",
+    "hnsw",
+    "approximate-nearest-neighbor",
+    "ann",
+    "wasm",
+    "webassembly",
+    "browser",
+    "edge-computing",
+    "embedding",
+    "similarity-search",
+    "semantic-search",
+    "knn",
+    "indexeddb",
+    "rust",
+    "simd",
+    "quantization"
+  ],
+  "author": "Matteo Panzeri",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/matteocrippa/edgevec.git"
+  },
+  "homepage": "https://github.com/matteocrippa/edgevec#readme",
+  "bugs": {
+    "url": "https://github.com/matteocrippa/edgevec/issues"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "wasm-pack build --target web --out-dir pkg && npm run build:ts",
+    "build:ts": "tsc --project wasm/tsconfig.json",
+    "build:node": "wasm-pack build --target nodejs --out-dir pkg-node",
+    "test": "cargo test && npm run test:wasm",
+    "test:wasm": "cd wasm && npm test",
+    "test:coverage": "cd wasm && npm run test:coverage",
+    "typecheck": "tsc --noEmit --project wasm/tsconfig.json",
+    "pack:dry": "npm pack --dry-run",
+    "prepublishOnly": "npm run build && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.26",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {},
+  "dependencies": {}
+}

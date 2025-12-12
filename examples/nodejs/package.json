@@ -1,0 +1,17 @@
+{
+  "name": "edgevec-nodejs-examples",
+  "version": "1.0.0",
+  "description": "Node.js examples for EdgeVec vector database",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "quickstart": "node quickstart.js",
+    "benchmark": "node benchmark.js"
+  },
+  "dependencies": {
+    "@edgevec/core": "file:../.."
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

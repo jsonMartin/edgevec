@@ -1,0 +1,33 @@
+# Rust source
+src/
+*.rs
+Cargo.toml
+Cargo.lock
+
+# Tests
+tests/
+fuzz/
+benches/
+__tests__/
+
+# Development
+.claude/
+docs/
+examples/
+node_modules/
+wasm/node_modules/
+
+# Build
+target/
+*.log
+
+# TypeScript source (keep compiled only)
+wasm/**/*.ts
+!wasm/**/*.d.ts
+
+# Keep compiled outputs and WASM
+!wasm/dist
+!wasm/index.cjs
+!pkg
+!README.md
+!LICENSE

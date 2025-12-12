@@ -1,0 +1,23 @@
+# Cargo configuration for EdgeVec
+# Enables CPU-specific optimizations for maximum performance
+
+[build]
+# Enable native CPU features (AVX2, FMA, SSE4.2, etc.) for maximum performance
+# This is critical for SIMD-accelerated quantized distance calculations
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "opt-level=3",
+    "-C", "llvm-args=-enable-no-infs-fp-math",  # Aggressive float optimizations
+    "-C", "llvm-args=-enable-no-nans-fp-math",  # Aggressive float optimizations
+]
+
+[profile.release]
+# Additional release optimizations
+lto = "fat"            # Full LTO for maximum performance
+codegen-units = 1      # Better optimization, slower compile
+panic = "abort"        # Smaller, faster panic handling
+
+[profile.bench]
+# Inherit from release and add specific bench opts
+inherits = "release"
+debug = 1              # Minimal debug info for profiling

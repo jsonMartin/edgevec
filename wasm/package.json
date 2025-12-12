@@ -1,0 +1,33 @@
+{
+  "name": "@edgevec/client",
+  "version": "0.1.0",
+  "description": "TypeScript wrapper for EdgeVec WASM bindings",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "vector-database",
+    "wasm",
+    "embeddings",
+    "similarity-search"
+  ],
+  "author": "EdgeVec Contributors",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.19.26",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "edgevec": "*"
+  }
+}

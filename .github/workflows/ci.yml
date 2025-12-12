@@ -1,0 +1,75 @@
+name: EdgeVec CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  # Job 1: Correctness & Testing
+  test:
+    name: Test Suite (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Run Unit Tests
+        run: cd edgevec && cargo test --verbose
+
+  # Job 2: Code Quality
+  lint:
+    name: Clippy & Formatting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Check Formatting
+        run: cd edgevec && cargo fmt -- --check
+
+      - name: Run Clippy
+        run: cd edgevec && cargo clippy --all-targets -- -D warnings
+
+  # Job 3: WASM Compatibility Check
+  wasm-check:
+    name: WASM Compilation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust with WASM target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Check WASM Build
+        run: cd edgevec && cargo check --target wasm32-unknown-unknown
+
+  # Job 4: Fuzz Harness Verification
+  fuzz-check:
+    name: Fuzz Harness Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Nightly Rust
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Build Fuzz Targets
+        run: cd edgevec && cargo +nightly fuzz build dummy_harness
+
