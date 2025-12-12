@@ -15,7 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.0-alpha.1] - 2025-12-12
+## [0.2.0-alpha.2] - 2025-12-12
+
+### Fixed
+- **npm package missing snippets directory** — The v0.2.0-alpha.1 package was missing the `snippets/` directory containing IndexedDB storage JS code, causing import failures in Node.js. This hotfix adds the missing files.
+
+### Changed
+- Updated package.json `files` array to include `snippets` directory
+
+---
+
+## [0.2.0-alpha.1] - 2025-12-12 [DEPRECATED]
+
+> ⚠️ **DEPRECATED**: This version is missing the `snippets/` directory. Use v0.2.0-alpha.2 instead.
 
 ### Added
 

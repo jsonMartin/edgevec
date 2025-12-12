@@ -2,7 +2,7 @@
   "name": "edgevec",
   "type": "module",
   "description": "High-performance embedded vector database for Browser, Node, and Edge",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "license": "MIT",
   "repository": {
     "type": "git",
