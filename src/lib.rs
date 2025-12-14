@@ -115,12 +115,16 @@ pub mod wasm;
 /// Quantization support.
 pub mod quantization;
 
+/// SIMD capability detection and runtime optimization.
+pub mod simd;
+
 pub use batch::BatchInsertable;
 pub use error::BatchError;
 pub use hnsw::{HnswConfig, HnswIndex, SearchResult};
 pub use metric::Metric;
 pub use persistence::ChunkedWriter;
 pub use quantization::{BinaryQuantizer, QuantizedVector, QuantizerConfig, ScalarQuantizer};
+pub use simd::{capabilities, warn_if_suboptimal, SimdCapabilities};
 pub use storage::VectorStorage;
 
 /// The crate version string.
