@@ -371,6 +371,67 @@ Native bindings (hnswlib-node) are faster but require C++ compilation and don't 
 
 ---
 
+## Development Environment
+
+### Local CI Simulation
+
+Before pushing changes, run the local CI simulation to catch issues:
+
+```bash
+# Run full CI check with timing validation
+cargo xtask ci-check
+
+# Run pre-release validation (CI + docs + publish dry-run)
+cargo xtask pre-release
+```
+
+The `ci-check` command:
+- Sets CI environment variables (`RUSTFLAGS`, `PROPTEST_CASES`, `NUM_VECTORS`)
+- Runs formatting, clippy, tests, and WASM checks
+- Validates each step completes within CI timeout limits
+
+**Timing Budgets (xtask / CI timeout):**
+| Step | Local Limit | CI Timeout | Typical |
+|:-----|:------------|:-----------|:--------|
+| Formatting | 30s | 5min | <1s |
+| Clippy | 180s | 10min | ~20s |
+| Tests | 600s | 30min | ~50s |
+| WASM Check | 120s | 10min | <1s |
+
+If a step exceeds its local limit, the build fails to catch performance regressions before CI.
+
+### Environment Variables
+
+| Variable | Local Default | CI Value | Purpose |
+|:---------|:--------------|:---------|:--------|
+| `RUSTFLAGS` | (native) | `-C target-cpu=x86-64-v2` | Prevent SIGILL on CI runners |
+| `PROPTEST_CASES` | 256 | 32 | Reduce proptest runtime |
+| `NUM_VECTORS` | 10000 | 1000 | Reduce integration test runtime |
+
+### Building
+
+```bash
+# Standard build
+cargo build --release
+
+# WASM build
+wasm-pack build --release
+
+# Run tests
+cargo test --all
+
+# Run benchmarks
+cargo bench
+```
+
+### Release Process
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full release process, including:
+- [Release Checklist](./docs/RELEASE_CHECKLIST.md)
+- [Rollback Procedures](./docs/ROLLBACK_PROCEDURES.md)
+
+---
+
 ## Origins
 
 `EdgeVec` builds upon lessons learned from [binary_semantic_cache](../binary_semantic_cache/), a high-performance semantic caching library. Specifically:

@@ -1,0 +1,10 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "EdgeVec development tasks"
+publish = false
+
+# Minimal dependencies - xtask should be fast to compile
+[dependencies]

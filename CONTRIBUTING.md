@@ -14,6 +14,7 @@ EdgeVec follows a **"Nvidia Grade"** development protocol where correctness and 
 4. [Testing Standards](#testing-standards)
 5. [Code Review Process](#code-review-process)
 6. [Development Workflow](#development-workflow)
+7. [Release Process](#release-process)
 
 ---
 
@@ -540,11 +541,38 @@ If you have questions about these standards:
 2. Check existing code for patterns
 3. Ask in issues or discussions
 
-**Remember:** Strict standards produce reliable software. Thank you for helping build EdgeVec to "Nvidia Grade" quality! 🚀
+**Remember:** Strict standards produce reliable software. Thank you for helping build EdgeVec to "Nvidia Grade" quality!
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2025-12-05  
+## Release Process
+
+### For Maintainers
+
+EdgeVec follows a rigorous release process to prevent post-release issues. Before any release:
+
+1. **Run Pre-Release Validation:**
+   ```bash
+   ./scripts/pre-release-check.sh
+   ```
+
+2. **Follow the Release Checklist:**
+   See [docs/RELEASE_CHECKLIST.md](./docs/RELEASE_CHECKLIST.md) for the complete release protocol.
+
+3. **Emergency Procedures:**
+   If issues are discovered post-release, see [docs/ROLLBACK_PROCEDURES.md](./docs/ROLLBACK_PROCEDURES.md) for incident response.
+
+### Release Documentation
+
+| Document | Purpose |
+|:---------|:--------|
+| [RELEASE_CHECKLIST.md](./docs/RELEASE_CHECKLIST.md) | Step-by-step release protocol |
+| [ROLLBACK_PROCEDURES.md](./docs/ROLLBACK_PROCEDURES.md) | Incident response for failed releases |
+| [CHANGELOG.md](./CHANGELOG.md) | Version history and changes |
+
+---
+
+**Document Version:** 1.1
+**Last Updated:** 2025-12-15
 **Status:** ACTIVE
 

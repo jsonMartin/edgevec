@@ -1,0 +1,37 @@
+# proptest.toml
+# EdgeVec Property Testing Configuration
+#
+# This file configures proptest behavior across the entire project.
+# Environment variables can override these settings:
+# - PROPTEST_CASES: Override case count (default: 256)
+# - CI environments should set PROPTEST_CASES=32 for faster builds
+#
+# W18.2: CI Hardening — Eliminates proptest regression file warnings
+
+[default]
+# Default cases for local development (more thorough)
+# CI overrides this via PROPTEST_CASES=32 environment variable
+cases = 256
+
+# Reduce shrinking iterations for faster failure diagnosis
+max_shrink_iters = 100
+
+# Disable persistence files to avoid CI warnings
+# Persistence is useful for local debugging but causes noise in CI
+# Set to "off" to prevent .proptest-regressions files
+failure_persistence = "off"
+
+# Fork to catch panics in separate process
+# Disabled for WASM compatibility
+fork = false
+
+# Timeout per test case (milliseconds)
+# 30 seconds should be sufficient for any single case
+timeout = 30000
+
+# Verbose output level (0 = minimal)
+verbose = 0
+
+# Source file for regression persistence (when enabled)
+# Not used when failure_persistence = "off"
+source_file = "proptest-regressions"

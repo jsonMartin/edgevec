@@ -21,3 +21,8 @@ panic = "abort"        # Smaller, faster panic handling
 # Inherit from release and add specific bench opts
 inherits = "release"
 debug = 1              # Minimal debug info for profiling
+
+# W18.2: xtask alias for CI simulation
+# Allows using `cargo xtask` instead of `cargo run -p xtask --`
+[alias]
+xtask = "run --package xtask --"

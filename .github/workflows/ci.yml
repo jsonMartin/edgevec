@@ -1,3 +1,21 @@
+# EdgeVec CI Configuration
+# ========================
+# W18.2: CI Hardening — Documented timeouts and environment variables
+#
+# Local Simulation:
+#   cargo xtask ci-check
+#
+# Environment Variables (see below):
+#   RUSTFLAGS:      Prevents SIGILL on CI runners (x86-64-v2 baseline)
+#   PROPTEST_CASES: Reduced to 32 for faster CI (256 locally)
+#   NUM_VECTORS:    Reduced to 1000 for faster integration tests
+#
+# Job Timeouts:
+#   test:       15 minutes (cargo test --verbose)
+#   lint:       5 minutes  (cargo fmt + clippy)
+#   wasm-check: 5 minutes  (cargo check --target wasm32-unknown-unknown)
+#   fuzz-check: 5 minutes  (cargo +nightly check)
+
 name: EdgeVec CI
 
 on:
@@ -9,10 +27,13 @@ on:
 env:
   CARGO_TERM_COLOR: always
   # Override .cargo/config.toml's target-cpu=native to prevent SIGILL on CI runners
+  # See: docs/RELEASE_CHECKLIST.md Phase 2 for rationale
   RUSTFLAGS: "-C target-cpu=x86-64-v2"
   # Reduce proptest cases in CI (full coverage runs locally)
+  # Default: 256, CI: 32 — configured in proptest.toml
   PROPTEST_CASES: "32"
   # Reduce vector count for slow integration tests
+  # Default: 10000, CI: 1000 — prevents timeout on large-scale tests
   NUM_VECTORS: "1000"
 
 jobs:

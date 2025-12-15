@@ -4,6 +4,10 @@
 # Planning: Week 1 Day 1 — Repository Initialization
 #
 # IMPLEMENTED: W1.D1 — Basic dependencies for testing infrastructure
+# IMPLEMENTED: W18.2 — Added workspace for xtask
+
+[workspace]
+members = [".", "xtask"]
 
 [package]
 name = "edgevec"
