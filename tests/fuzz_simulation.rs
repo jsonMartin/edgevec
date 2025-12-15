@@ -98,8 +98,8 @@ fn fuzz_simulation_graph_ops() {
             }
             Op::Delete { id } => {
                 let vid = VectorId(id);
-                // This used to panic if id was OOB. Now it should return false.
-                let _ = index.delete(vid, &mut storage);
+                // RFC-001: soft_delete returns Result<bool>, never panics on invalid ID
+                let _ = index.soft_delete(vid);
             }
             Op::Search { mut vector, k } => {
                 for v in &mut vector {

@@ -7,6 +7,7 @@ use crate::persistence::{PersistenceError, StorageBackend};
 use crate::storage::VectorStorage;
 use bitvec::prelude::*;
 use bytemuck::try_cast_slice;
+use log::{info, warn};
 use std::mem::size_of;
 
 /// Standard chunk size for snapshot streaming (1MB).
@@ -126,12 +127,6 @@ pub fn read_snapshot(
     storage.data_f32.extend_from_slice(floats);
 
     // Reconstruct 'deleted' bitvec
-    #[cfg(test)]
-    println!(
-        "DEBUG: read_snapshot: metadata_offset in header = {}",
-        header.metadata_offset
-    );
-
     if header.metadata_offset > 0 {
         // SAFETY: On 32-bit targets, offsets > 2^32 would exceed addressable memory.
         #[allow(clippy::cast_possible_truncation)]
@@ -155,9 +150,8 @@ pub fn read_snapshot(
         } else {
             // Offset beyond data length -> Corruption or Truncation.
             // Fallback to all active.
-            #[cfg(test)]
-            println!(
-                "DEBUG: read_snapshot: meta_offset {} > data.len() {}. Fallback.",
+            warn!(
+                "Metadata offset {} exceeds data length {}. Treating all vectors as active.",
                 meta_offset,
                 data.len()
             );
@@ -167,21 +161,10 @@ pub fn read_snapshot(
         }
     } else {
         // Legacy/Fallback: assume all active
-        #[cfg(test)]
-        println!(
-            "DEBUG: read_snapshot: Fallback path, vec_count={}",
-            vec_count
-        );
         for _ in 0..vec_count {
             storage.deleted.push(false);
         }
     }
-
-    #[cfg(test)]
-    println!(
-        "DEBUG: read_snapshot: storage.deleted.len() after reconstruction = {}",
-        storage.deleted.len()
-    );
 
     storage.next_id = (vec_count as u64) + 1;
 
@@ -268,6 +251,33 @@ pub fn read_snapshot(
 
     index.max_layer = max_layer;
     index.entry_point = entry_point;
+
+    // v0.3: Restore deleted_count from header or recalculate for older formats
+    if header.supports_soft_delete() {
+        // Trust header value for v0.3+
+        index.deleted_count = header.deleted_count as usize;
+
+        // Verify consistency: count actual deleted nodes
+        let actual_deleted = index.nodes.iter().filter(|n| n.deleted != 0).count();
+        if actual_deleted != index.deleted_count {
+            // Mismatch detected — use actual count for safety
+            // This can happen if the snapshot was corrupted or manually edited
+            warn!(
+                "Snapshot deleted_count mismatch (header={}, actual={}). Using actual count.",
+                index.deleted_count, actual_deleted
+            );
+            index.deleted_count = actual_deleted;
+        }
+    } else if header.needs_migration() {
+        // Migration from v0.1/v0.2: node.pad was always 0, now interpreted as deleted=0
+        // All nodes are live in old format, deleted_count = 0
+        index.deleted_count = 0;
+
+        info!(
+            "Migrated snapshot from v0.{} to v0.3 format (soft delete enabled)",
+            header.version_minor
+        );
+    }
 
     Ok((index, storage))
 }

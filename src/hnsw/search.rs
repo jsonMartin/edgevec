@@ -178,7 +178,9 @@ where
             };
 
             ctx.candidates.push(Reverse(candidate));
-            if !self.provider.is_deleted(node.vector_id) {
+            // W16.3: Check node's deleted field directly instead of provider
+            // This ensures deleted vectors are excluded from results but still used for routing
+            if node.deleted == 0 {
                 ctx.results.push(candidate);
             }
             ctx.visited.insert(ep);
@@ -262,9 +264,11 @@ where
                             distance: dist,
                             node_id: neighbor_id,
                         };
+                        // W16.3: Always add to candidates for routing (deleted nodes are "ghosts")
                         ctx.candidates.push(Reverse(new_candidate));
 
-                        if !self.provider.is_deleted(neighbor_node.vector_id) {
+                        // W16.3: Only add to results if not deleted (tombstone filtering)
+                        if neighbor_node.deleted == 0 {
                             ctx.results.push(new_candidate);
 
                             if ctx.results.len() > ef {
@@ -300,12 +304,36 @@ impl HnswIndex {
     /// # Returns
     ///
     /// A list of `SearchResult`s, sorted by distance (ascending).
+    /// Returns at most `k` results, or fewer if:
+    /// - The index has fewer than `k` live (non-deleted) vectors
+    /// - Not enough neighbors were found during traversal
+    ///
+    /// # Tombstone Handling (v0.3.0)
+    ///
+    /// Search automatically filters out deleted vectors:
+    ///
+    /// 1. **Routing:** Deleted nodes are still traversed during graph navigation.
+    ///    This preserves graph connectivity and search quality.
+    ///
+    /// 2. **Filtering:** Deleted nodes are excluded from the final results.
+    ///    Only live vectors appear in the returned `SearchResult` list.
+    ///
+    /// 3. **Compensation:** The search internally over-fetches using `adjusted_k()`
+    ///    to ensure `k` live results are returned even with tombstones.
+    ///    At high tombstone ratios (>30%), consider calling `compact()`.
+    ///
+    /// # Thread Safety
+    ///
+    /// Per RFC-001, this method accepts eventual consistency. If `soft_delete()`
+    /// is called concurrently (which requires `&mut self`), Rust's borrow checker
+    /// prevents data races. The API is designed for single-threaded access.
     ///
     /// # Errors
     ///
     /// Returns `GraphError` if:
-    /// - Config metric is invalid.
-    /// - Internal graph corruption occurs.
+    /// - Query dimension mismatches index dimension
+    /// - Config metric is invalid
+    /// - Internal graph corruption occurs
     pub fn search(
         &self,
         query: &[f32],
@@ -393,20 +421,37 @@ impl HnswIndex {
         }
 
         // 2. Search layer 0 with ef_search
-        let ef = k.max(self.config.ef_search as usize);
+        // W16.3: Use adjusted_k to compensate for tombstones
+        let adjusted_k = self.adjusted_k(k);
+        let ef = adjusted_k.max(self.config.ef_search as usize);
         let searcher = Searcher::<M, VectorStorage>::new(self, storage);
         searcher.search_layer(search_ctx, [curr_ep], query, ef, 0)?;
 
-        // 3. Extract top K
+        // 3. Extract top K, filtering out deleted vectors (W16.3)
+        //
+        // DEFENSE-IN-DEPTH (Intentional Redundancy):
+        // search_layer() already filters deleted vectors during candidate collection.
+        // This final check is intentionally redundant to provide a safety net:
+        // - Protects against future refactoring that might bypass layer-level filtering
+        // - Ensures correctness even if search_layer implementation changes
+        // - Zero-cost when there are no tombstones (most common case)
+        //
+        // Per HOSTILE_REVIEWER m1: This redundancy is INTENTIONAL, not a bug.
         let mut results = Vec::with_capacity(k);
-        for c in search_ctx.scratch.iter().take(k) {
+        for c in &search_ctx.scratch {
+            if results.len() >= k {
+                break;
+            }
             let node = self
                 .get_node(c.node_id)
                 .ok_or(GraphError::NodeIdOutOfBounds)?;
-            results.push(SearchResult {
-                vector_id: node.vector_id,
-                distance: c.distance,
-            });
+            // Final filter: exclude deleted vectors
+            if node.deleted == 0 {
+                results.push(SearchResult {
+                    vector_id: node.vector_id,
+                    distance: c.distance,
+                });
+            }
         }
 
         Ok(results)

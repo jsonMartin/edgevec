@@ -1,4 +1,4 @@
-import { IndexedDbBackend } from './snippets/edgevec-3900ce8b80cc807b/src/js/storage.js';
+import { IndexedDbBackend } from './snippets/edgevec-457ad9d818f0da2b/src/js/storage.js';
 
 let wasm;
 
@@ -211,12 +211,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_270(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_270(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_301(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_301(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_470(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_470(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_496(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_496(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -238,6 +238,10 @@ const EdgeVecConfigFinalization = (typeof FinalizationRegistry === 'undefined')
 const PersistenceIteratorFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_persistenceiterator_free(ptr >>> 0, 1));
+
+const WasmCompactionResultFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_wasmcompactionresult_free(ptr >>> 0, 1));
 
 /**
  * Configuration options for batch insert operations (WASM).
@@ -423,6 +427,51 @@ export class EdgeVec {
         return takeObject(ret);
     }
     /**
+     * Check if a vector is deleted (tombstoned).
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector to check.
+     *
+     * # Returns
+     *
+     * * `true` if the vector is deleted
+     * * `false` if the vector is live
+     *
+     * # Errors
+     *
+     * Returns an error if the vector ID doesn't exist.
+     * @param {number} vector_id
+     * @returns {boolean}
+     */
+    isDeleted(vector_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_isDeleted(retptr, this.__wbg_ptr, vector_id);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 !== 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Get the count of live (non-deleted) vectors.
+     *
+     * # Returns
+     *
+     * The number of vectors that are currently searchable.
+     * @returns {number}
+     */
+    liveCount() {
+        const ret = wasm.edgevec_liveCount(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * Creates an iterator to save the database in chunks.
      *
      * # Arguments
@@ -445,6 +494,63 @@ export class EdgeVec {
         return PersistenceIterator.__wrap(ret);
     }
     /**
+     * Soft delete a vector by marking it as a tombstone.
+     *
+     * The vector remains in the index but is excluded from search results.
+     * Space is reclaimed via `compact()` when tombstone ratio exceeds threshold.
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector to delete (returned from `insert`).
+     *
+     * # Returns
+     *
+     * * `true` if the vector was deleted
+     * * `false` if the vector was already deleted (idempotent)
+     *
+     * # Errors
+     *
+     * Returns an error if the vector ID doesn't exist.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const id = index.insert(new Float32Array(128).fill(1.0));
+     * const wasDeleted = index.softDelete(id);
+     * console.log(`Deleted: ${wasDeleted}`); // true
+     * console.log(`Is deleted: ${index.isDeleted(id)}`); // true
+     * ```
+     * @param {number} vector_id
+     * @returns {boolean}
+     */
+    softDelete(vector_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_softDelete(retptr, this.__wbg_ptr, vector_id);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 !== 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Get the count of deleted (tombstoned) vectors.
+     *
+     * # Returns
+     *
+     * The number of vectors that have been soft-deleted but not yet compacted.
+     * @returns {number}
+     */
+    deletedCount() {
+        const ret = wasm.edgevec_deletedCount(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * Inserts multiple vectors using the new batch API (W12.3).
      *
      * This method follows the API design from `WASM_BATCH_API.md`:
@@ -463,6 +569,18 @@ export class EdgeVec {
      * - `inserted`: Number of vectors successfully inserted
      * - `total`: Total vectors attempted (input array length)
      * - `ids`: Array of IDs for inserted vectors
+     *
+     * # Performance Note
+     *
+     * Batch insert optimizes **JavaScript↔WASM boundary overhead**, not HNSW graph
+     * construction. At smaller batch sizes (100-1K vectors), expect 1.2-1.5x speedup
+     * vs sequential insertion due to reduced FFI calls. At larger scales (5K+), both
+     * methods converge as HNSW graph construction becomes the dominant cost.
+     *
+     * The batch API still provides value at all scales through:
+     * - Simpler API (single call vs loop)
+     * - Atomic operation semantics
+     * - Progress callback support (via `insertBatchWithProgress`)
      *
      * # Errors
      *
@@ -498,6 +616,35 @@ export class EdgeVec {
         }
     }
     /**
+     * Get the ratio of deleted to total vectors.
+     *
+     * # Returns
+     *
+     * A value between 0.0 and 1.0 representing the tombstone ratio.
+     * 0.0 means no deletions, 1.0 means all vectors deleted.
+     * @returns {number}
+     */
+    tombstoneRatio() {
+        const ret = wasm.edgevec_tombstoneRatio(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Check if compaction is recommended.
+     *
+     * Returns `true` when `tombstoneRatio()` exceeds the compaction threshold
+     * (default: 30%). Use `compact()` to reclaim space from deleted vectors.
+     *
+     * # Returns
+     *
+     * * `true` if compaction is recommended
+     * * `false` if tombstone ratio is below threshold
+     * @returns {boolean}
+     */
+    needsCompaction() {
+        const ret = wasm.edgevec_needsCompaction(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
      * Inserts a batch of vectors into the index (flat array format).
      *
      * **Note:** This is the legacy API. For the new API, use `insertBatch` which
@@ -530,6 +677,127 @@ export class EdgeVec {
                 throw takeObject(r1);
             }
             return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Get a warning message if compaction is recommended.
+     *
+     * # Returns
+     *
+     * * A warning string if `needsCompaction()` is true
+     * * `null` if compaction is not needed
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const warning = index.compactionWarning();
+     * if (warning) {
+     *     console.warn(warning);
+     *     index.compact();
+     * }
+     * ```
+     * @returns {string | undefined}
+     */
+    compactionWarning() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_compactionWarning(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            let v1;
+            if (r0 !== 0) {
+                v1 = getStringFromWasm0(r0, r1).slice();
+                wasm.__wbindgen_export2(r0, r1 * 1, 1);
+            }
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Get the current compaction threshold.
+     *
+     * # Returns
+     *
+     * The threshold ratio (0.0 to 1.0) above which `needsCompaction()` returns true.
+     * Default is 0.3 (30%).
+     * @returns {number}
+     */
+    compactionThreshold() {
+        const ret = wasm.edgevec_compactionThreshold(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Set the compaction threshold.
+     *
+     * # Arguments
+     *
+     * * `ratio` - The new threshold (clamped to 0.01 - 0.99).
+     * @param {number} ratio
+     */
+    setCompactionThreshold(ratio) {
+        wasm.edgevec_setCompactionThreshold(this.__wbg_ptr, ratio);
+    }
+    /**
+     * Batch insert with progress callback (W14.1).
+     *
+     * Inserts multiple vectors while reporting progress to a JavaScript callback.
+     * The callback is invoked at the **start (0%)** and **end (100%)** of the batch
+     * insertion. Intermediate progress during insertion is not currently reported.
+     *
+     * # Arguments
+     *
+     * * `vectors` - JS Array of Float32Array vectors to insert
+     * * `on_progress` - JS function called with (inserted: number, total: number)
+     *
+     * # Returns
+     *
+     * `BatchInsertResult` containing inserted count, total, and IDs.
+     *
+     * # Performance Note
+     *
+     * See [`Self::insert_batch_v2`] for performance characteristics. Batch insert optimizes
+     * JS↔WASM boundary overhead (1.2-1.5x at small scales), but converges with
+     * sequential insertion at larger scales as HNSW graph construction dominates.
+     *
+     * # Callback Behavior
+     *
+     * - The callback is called exactly **twice**: once with `(0, total)` before
+     *   insertion begins, and once with `(total, total)` after completion.
+     * - **Errors in the callback are intentionally ignored** — the batch insert
+     *   will succeed even if the progress callback throws an exception. This
+     *   ensures that UI errors don't break data operations.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const result = index.insertBatchWithProgress(vectors, (done, total) => {
+     *     console.log(`Progress: ${Math.round(done/total*100)}%`);
+     * });
+     * console.log(`Inserted ${result.inserted} vectors`);
+     * ```
+     *
+     * # Errors
+     *
+     * Returns a JS error object with `code` property on failure.
+     * Note: Callback exceptions do NOT cause this function to return an error.
+     * @param {Array<any>} vectors
+     * @param {Function} on_progress
+     * @returns {BatchInsertResult}
+     */
+    insertBatchWithProgress(vectors, on_progress) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_insertBatchWithProgress(retptr, this.__wbg_ptr, addHeapObject(vectors), addHeapObject(on_progress));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return BatchInsertResult.__wrap(r0);
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
@@ -622,6 +890,55 @@ export class EdgeVec {
                 throw takeObject(r1);
             }
             return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Compact the index by rebuilding without tombstones.
+     *
+     * This operation:
+     * 1. Creates a new index with only live vectors
+     * 2. Re-inserts vectors preserving IDs
+     * 3. Replaces the current index
+     *
+     * **WARNING:** This is a blocking operation. For indices with >10k vectors,
+     * consider running during idle time or warning the user about potential delays.
+     *
+     * # Returns
+     *
+     * A `CompactionResult` object containing:
+     * * `tombstonesRemoved` - Number of deleted vectors removed
+     * * `newSize` - Size of the index after compaction
+     * * `durationMs` - Time taken in milliseconds
+     *
+     * # Errors
+     *
+     * Returns an error if compaction fails (e.g., memory allocation error).
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * if (index.needsCompaction()) {
+     *     const result = index.compact();
+     *     console.log(`Removed ${result.tombstonesRemoved} tombstones`);
+     *     console.log(`New size: ${result.newSize}`);
+     *     console.log(`Took ${result.durationMs}ms`);
+     * }
+     * ```
+     * @returns {WasmCompactionResult}
+     */
+    compact() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_compact(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return WasmCompactionResult.__wrap(r0);
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
@@ -761,6 +1078,56 @@ export class PersistenceIterator {
 if (Symbol.dispose) PersistenceIterator.prototype[Symbol.dispose] = PersistenceIterator.prototype.free;
 
 /**
+ * Result of a compaction operation (v0.3.0).
+ *
+ * Returned by `EdgeVec.compact()` to provide metrics about the operation.
+ */
+export class WasmCompactionResult {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(WasmCompactionResult.prototype);
+        obj.__wbg_ptr = ptr;
+        WasmCompactionResultFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        WasmCompactionResultFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_wasmcompactionresult_free(ptr, 0);
+    }
+    /**
+     * Number of tombstones (deleted vectors) removed during compaction.
+     * @returns {number}
+     */
+    get tombstones_removed() {
+        const ret = wasm.__wbg_get_wasmcompactionresult_tombstones_removed(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * New index size after compaction (live vectors only).
+     * @returns {number}
+     */
+    get new_size() {
+        const ret = wasm.__wbg_get_wasmcompactionresult_new_size(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Time taken for the compaction operation in milliseconds.
+     * @returns {number}
+     */
+    get duration_ms() {
+        const ret = wasm.__wbg_get_wasmcompactionresult_duration_ms(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+}
+if (Symbol.dispose) WasmCompactionResult.prototype[Symbol.dispose] = WasmCompactionResult.prototype.free;
+
+/**
  * Initialize logging hooks.
  */
 export function init_logging() {
@@ -822,6 +1189,10 @@ function __wbg_get_imports() {
     }, arguments) };
     imports.wbg.__wbg_call_abb4ff46ce38be40 = function() { return handleError(function (arg0, arg1) {
         const ret = getObject(arg0).call(getObject(arg1));
+        return addHeapObject(ret);
+    }, arguments) };
+    imports.wbg.__wbg_call_c8baa5c5e72d274e = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+        const ret = getObject(arg0).call(getObject(arg1), getObject(arg2), getObject(arg3));
         return addHeapObject(ret);
     }, arguments) };
     imports.wbg.__wbg_debug_9d0c87ddda3dc485 = function(arg0) {
@@ -886,7 +1257,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_470(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_496(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -926,7 +1297,7 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_queueMicrotask_fca69f5bfad613a5 = function(arg0) {
         queueMicrotask(getObject(arg0));
     };
-    imports.wbg.__wbg_read_4016394bb14db0bb = function() { return handleError(function (arg0, arg1) {
+    imports.wbg.__wbg_read_1fbcd60955a83a1d = function() { return handleError(function (arg0, arg1) {
         const ret = IndexedDbBackend.read(getStringFromWasm0(arg0, arg1));
         return addHeapObject(ret);
     }, arguments) };
@@ -975,7 +1346,7 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_warn_6e567d0d926ff881 = function(arg0) {
         console.warn(getObject(arg0));
     };
-    imports.wbg.__wbg_write_5dbdffa9542cb272 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+    imports.wbg.__wbg_write_0e9131050e80458b = function() { return handleError(function (arg0, arg1, arg2, arg3) {
         const ret = IndexedDbBackend.write(getStringFromWasm0(arg0, arg1), getArrayU8FromWasm0(arg2, arg3));
         return addHeapObject(ret);
     }, arguments) };
@@ -984,14 +1355,14 @@ function __wbg_get_imports() {
         const ret = getStringFromWasm0(arg0, arg1);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_cast_8eb6fd44e7238d11 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 62, function: Function { arguments: [Externref], shim_idx: 63, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_263, __wasm_bindgen_func_elem_270);
-        return addHeapObject(ret);
-    };
     imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {
         // Cast intrinsic for `F64 -> Externref`.
         const ret = arg0;
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_cast_f48321c4a1f59c82 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 63, function: Function { arguments: [Externref], shim_idx: 64, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_294, __wasm_bindgen_func_elem_301);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_object_clone_ref = function(arg0) {

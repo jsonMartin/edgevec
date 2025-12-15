@@ -194,8 +194,9 @@ mod tests {
         let vectors = vec![&[5.0, 5.0][..]];
         let q = ScalarQuantizer::train(&vectors);
 
-        assert_eq!(q.config.min, 5.0);
-        assert_eq!(q.config.max, 5.0);
+        // Use approximate comparison for floats
+        assert!((q.config.min - 5.0).abs() < f32::EPSILON);
+        assert!((q.config.max - 5.0).abs() < f32::EPSILON);
 
         let input = vec![5.0, 10.0];
         let encoded = q.quantize(&input);
@@ -203,6 +204,7 @@ mod tests {
         assert_eq!(encoded, vec![0, 0]);
 
         let decoded = q.dequantize(&encoded);
-        assert_eq!(decoded, vec![5.0, 5.0]);
+        assert!((decoded[0] - 5.0).abs() < f32::EPSILON);
+        assert!((decoded[1] - 5.0).abs() < f32::EPSILON);
     }
 }

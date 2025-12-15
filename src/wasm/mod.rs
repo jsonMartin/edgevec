@@ -4,7 +4,7 @@ use crate::error::EdgeVecError;
 use crate::hnsw::{GraphError, HnswConfig, HnswIndex};
 use crate::persistence::{chunking::ChunkIter, ChunkedWriter, PersistenceError};
 use crate::storage::VectorStorage;
-use js_sys::{Array, Float32Array, Object, Reflect, Uint32Array, Uint8Array};
+use js_sys::{Array, Float32Array, Function, Object, Reflect, Uint32Array, Uint8Array};
 use serde::{Deserialize, Serialize};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -329,6 +329,18 @@ impl EdgeVec {
     /// - `total`: Total vectors attempted (input array length)
     /// - `ids`: Array of IDs for inserted vectors
     ///
+    /// # Performance Note
+    ///
+    /// Batch insert optimizes **JavaScript↔WASM boundary overhead**, not HNSW graph
+    /// construction. At smaller batch sizes (100-1K vectors), expect 1.2-1.5x speedup
+    /// vs sequential insertion due to reduced FFI calls. At larger scales (5K+), both
+    /// methods converge as HNSW graph construction becomes the dominant cost.
+    ///
+    /// The batch API still provides value at all scales through:
+    /// - Simpler API (single call vs loop)
+    /// - Atomic operation semantics
+    /// - Progress callback support (via `insertBatchWithProgress`)
+    ///
     /// # Errors
     ///
     /// Returns a JS error object with `code` property:
@@ -345,6 +357,74 @@ impl EdgeVec {
         config: Option<batch::BatchInsertConfig>,
     ) -> Result<batch::BatchInsertResult, JsValue> {
         batch::insert_batch_impl(self, vectors, config)
+    }
+
+    /// Batch insert with progress callback (W14.1).
+    ///
+    /// Inserts multiple vectors while reporting progress to a JavaScript callback.
+    /// The callback is invoked at the **start (0%)** and **end (100%)** of the batch
+    /// insertion. Intermediate progress during insertion is not currently reported.
+    ///
+    /// # Arguments
+    ///
+    /// * `vectors` - JS Array of Float32Array vectors to insert
+    /// * `on_progress` - JS function called with (inserted: number, total: number)
+    ///
+    /// # Returns
+    ///
+    /// `BatchInsertResult` containing inserted count, total, and IDs.
+    ///
+    /// # Performance Note
+    ///
+    /// See [`Self::insert_batch_v2`] for performance characteristics. Batch insert optimizes
+    /// JS↔WASM boundary overhead (1.2-1.5x at small scales), but converges with
+    /// sequential insertion at larger scales as HNSW graph construction dominates.
+    ///
+    /// # Callback Behavior
+    ///
+    /// - The callback is called exactly **twice**: once with `(0, total)` before
+    ///   insertion begins, and once with `(total, total)` after completion.
+    /// - **Errors in the callback are intentionally ignored** — the batch insert
+    ///   will succeed even if the progress callback throws an exception. This
+    ///   ensures that UI errors don't break data operations.
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const result = index.insertBatchWithProgress(vectors, (done, total) => {
+    ///     console.log(`Progress: ${Math.round(done/total*100)}%`);
+    /// });
+    /// console.log(`Inserted ${result.inserted} vectors`);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns a JS error object with `code` property on failure.
+    /// Note: Callback exceptions do NOT cause this function to return an error.
+    #[wasm_bindgen(js_name = insertBatchWithProgress)]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn insert_batch_with_progress(
+        &mut self,
+        vectors: Array,
+        on_progress: Function,
+    ) -> Result<batch::BatchInsertResult, JsValue> {
+        let this = JsValue::NULL;
+        let total = vectors.length();
+
+        // Report initial progress (0%)
+        // INTENTIONAL: Callback errors are silently ignored to ensure batch insert
+        // succeeds even if the UI callback fails. This is a deliberate design choice.
+        let _ = on_progress.call2(&this, &JsValue::from(0u32), &JsValue::from(total));
+
+        // Perform the batch insert using existing implementation
+        let config = batch::BatchInsertConfig::new();
+        let result = batch::insert_batch_impl(self, vectors, Some(config))?;
+
+        // Report final progress (100%)
+        // INTENTIONAL: Same rationale as above — UI failures shouldn't break data ops.
+        let _ = on_progress.call2(&this, &JsValue::from(total), &JsValue::from(total));
+
+        Ok(result)
     }
 
     /// Searches for nearest neighbors.
@@ -496,4 +576,230 @@ impl EdgeVec {
 
         Ok(edge_vec)
     }
+
+    // =========================================================================
+    // SOFT DELETE API (v0.3.0 — RFC-001)
+    // =========================================================================
+
+    /// Soft delete a vector by marking it as a tombstone.
+    ///
+    /// The vector remains in the index but is excluded from search results.
+    /// Space is reclaimed via `compact()` when tombstone ratio exceeds threshold.
+    ///
+    /// # Arguments
+    ///
+    /// * `vector_id` - The ID of the vector to delete (returned from `insert`).
+    ///
+    /// # Returns
+    ///
+    /// * `true` if the vector was deleted
+    /// * `false` if the vector was already deleted (idempotent)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the vector ID doesn't exist.
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const id = index.insert(new Float32Array(128).fill(1.0));
+    /// const wasDeleted = index.softDelete(id);
+    /// console.log(`Deleted: ${wasDeleted}`); // true
+    /// console.log(`Is deleted: ${index.isDeleted(id)}`); // true
+    /// ```
+    #[wasm_bindgen(js_name = softDelete)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn soft_delete(&mut self, vector_id: u32) -> Result<bool, JsValue> {
+        let id = crate::hnsw::VectorId(u64::from(vector_id));
+        self.inner
+            .soft_delete(id)
+            .map_err(|e| JsValue::from_str(&format!("soft_delete failed: {e}")))
+    }
+
+    /// Check if a vector is deleted (tombstoned).
+    ///
+    /// # Arguments
+    ///
+    /// * `vector_id` - The ID of the vector to check.
+    ///
+    /// # Returns
+    ///
+    /// * `true` if the vector is deleted
+    /// * `false` if the vector is live
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the vector ID doesn't exist.
+    #[wasm_bindgen(js_name = isDeleted)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn is_deleted(&self, vector_id: u32) -> Result<bool, JsValue> {
+        let id = crate::hnsw::VectorId(u64::from(vector_id));
+        self.inner
+            .is_deleted(id)
+            .map_err(|e| JsValue::from_str(&format!("is_deleted failed: {e}")))
+    }
+
+    /// Get the count of deleted (tombstoned) vectors.
+    ///
+    /// # Returns
+    ///
+    /// The number of vectors that have been soft-deleted but not yet compacted.
+    #[wasm_bindgen(js_name = deletedCount)]
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn deleted_count(&self) -> u32 {
+        self.inner.deleted_count() as u32
+    }
+
+    /// Get the count of live (non-deleted) vectors.
+    ///
+    /// # Returns
+    ///
+    /// The number of vectors that are currently searchable.
+    #[wasm_bindgen(js_name = liveCount)]
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn live_count(&self) -> u32 {
+        self.inner.live_count() as u32
+    }
+
+    /// Get the ratio of deleted to total vectors.
+    ///
+    /// # Returns
+    ///
+    /// A value between 0.0 and 1.0 representing the tombstone ratio.
+    /// 0.0 means no deletions, 1.0 means all vectors deleted.
+    #[wasm_bindgen(js_name = tombstoneRatio)]
+    #[must_use]
+    pub fn tombstone_ratio(&self) -> f64 {
+        self.inner.tombstone_ratio()
+    }
+
+    /// Check if compaction is recommended.
+    ///
+    /// Returns `true` when `tombstoneRatio()` exceeds the compaction threshold
+    /// (default: 30%). Use `compact()` to reclaim space from deleted vectors.
+    ///
+    /// # Returns
+    ///
+    /// * `true` if compaction is recommended
+    /// * `false` if tombstone ratio is below threshold
+    #[wasm_bindgen(js_name = needsCompaction)]
+    #[must_use]
+    pub fn needs_compaction(&self) -> bool {
+        self.inner.needs_compaction()
+    }
+
+    /// Get the current compaction threshold.
+    ///
+    /// # Returns
+    ///
+    /// The threshold ratio (0.0 to 1.0) above which `needsCompaction()` returns true.
+    /// Default is 0.3 (30%).
+    #[wasm_bindgen(js_name = compactionThreshold)]
+    #[must_use]
+    pub fn compaction_threshold(&self) -> f64 {
+        self.inner.compaction_threshold()
+    }
+
+    /// Set the compaction threshold.
+    ///
+    /// # Arguments
+    ///
+    /// * `ratio` - The new threshold (clamped to 0.01 - 0.99).
+    #[wasm_bindgen(js_name = setCompactionThreshold)]
+    pub fn set_compaction_threshold(&mut self, ratio: f64) {
+        self.inner.set_compaction_threshold(ratio);
+    }
+
+    /// Get a warning message if compaction is recommended.
+    ///
+    /// # Returns
+    ///
+    /// * A warning string if `needsCompaction()` is true
+    /// * `null` if compaction is not needed
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const warning = index.compactionWarning();
+    /// if (warning) {
+    ///     console.warn(warning);
+    ///     index.compact();
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = compactionWarning)]
+    #[must_use]
+    pub fn compaction_warning(&self) -> Option<String> {
+        self.inner.compaction_warning()
+    }
+
+    /// Compact the index by rebuilding without tombstones.
+    ///
+    /// This operation:
+    /// 1. Creates a new index with only live vectors
+    /// 2. Re-inserts vectors preserving IDs
+    /// 3. Replaces the current index
+    ///
+    /// **WARNING:** This is a blocking operation. For indices with >10k vectors,
+    /// consider running during idle time or warning the user about potential delays.
+    ///
+    /// # Returns
+    ///
+    /// A `CompactionResult` object containing:
+    /// * `tombstonesRemoved` - Number of deleted vectors removed
+    /// * `newSize` - Size of the index after compaction
+    /// * `durationMs` - Time taken in milliseconds
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if compaction fails (e.g., memory allocation error).
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// if (index.needsCompaction()) {
+    ///     const result = index.compact();
+    ///     console.log(`Removed ${result.tombstonesRemoved} tombstones`);
+    ///     console.log(`New size: ${result.newSize}`);
+    ///     console.log(`Took ${result.durationMs}ms`);
+    /// }
+    /// ```
+    #[wasm_bindgen]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn compact(&mut self) -> Result<WasmCompactionResult, JsValue> {
+        let (new_index, new_storage, result) = self
+            .inner
+            .compact(&self.storage)
+            .map_err(|e| JsValue::from_str(&format!("compact failed: {e}")))?;
+
+        // Replace internal state with compacted versions
+        self.inner = new_index;
+        self.storage = new_storage;
+
+        Ok(WasmCompactionResult {
+            tombstones_removed: result.tombstones_removed as u32,
+            new_size: result.new_size as u32,
+            duration_ms: result.duration_ms as u32,
+        })
+    }
+}
+
+/// Result of a compaction operation (v0.3.0).
+///
+/// Returned by `EdgeVec.compact()` to provide metrics about the operation.
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct WasmCompactionResult {
+    /// Number of tombstones (deleted vectors) removed during compaction.
+    #[wasm_bindgen(readonly)]
+    pub tombstones_removed: u32,
+
+    /// New index size after compaction (live vectors only).
+    #[wasm_bindgen(readonly)]
+    pub new_size: u32,
+
+    /// Time taken for the compaction operation in milliseconds.
+    #[wasm_bindgen(readonly)]
+    pub duration_ms: u32,
 }

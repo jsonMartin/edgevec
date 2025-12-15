@@ -7,7 +7,7 @@
 
 [package]
 name = "edgevec"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.70"
 description = "High-performance embedded vector database for Browser, Node, and Edge"
@@ -15,6 +15,7 @@ license = "MIT"
 repository = "https://github.com/matte1782/edgevec"
 keywords = ["vector", "database", "wasm", "hnsw", "similarity-search"]
 categories = ["database", "wasm", "algorithms"]
+autobenches = false  # Disable auto-detection of bench targets (recall_bench is a [[bin]])
 
 [lib]
 name = "edgevec"
@@ -127,8 +128,18 @@ harness = false
 name = "batch_vs_sequential"
 harness = false
 
+[[bench]]
+name = "tombstone_bench"
+harness = false
+
 [[example]]
 name = "batch_insert"
+
+# [[bin]]
+# name = "recall_bench"
+# path = "benches/recall_bench.rs"
+# Note: autobenches = false in [package] prevents dual target registration
+# TEMPORARILY DISABLED: Linker error with cdylib target - needs investigation
 
 # =============================================================================
 # FUTURE DEPENDENCIES (Not in Day 1 scope)

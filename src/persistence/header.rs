@@ -8,8 +8,11 @@ pub const MAGIC: [u8; 4] = *b"EVEC";
 /// Current major version
 pub const VERSION_MAJOR: u8 = 0;
 
-/// Current minor version
-pub const VERSION_MINOR: u8 = 1;
+/// Current minor version (bumped to 3 for soft-delete support)
+pub const VERSION_MINOR: u8 = 3;
+
+/// Minimum supported minor version for migration
+pub const VERSION_MINOR_MIN: u8 = 1;
 
 /// File header for .evec index files.
 ///
@@ -68,8 +71,11 @@ pub struct FileHeader {
     /// CRC32 of data payload
     pub data_crc: u32, // 56
 
-    /// Reserved for future use
-    pub reserved: u32, // 60
+    /// Count of deleted (tombstone) nodes in the index (v0.3+)
+    ///
+    /// For v0.1/v0.2 files, this field was `reserved` and always 0.
+    /// During migration, we recalculate from node data.
+    pub deleted_count: u32, // 60
 }
 
 // Static assertions for size and alignment
@@ -130,7 +136,7 @@ impl FileHeader {
             hnsw_m: 16,
             hnsw_m0: 32,
             data_crc: 0,
-            reserved: 0,
+            deleted_count: 0,
         };
         header.update_checksum();
         header
@@ -175,7 +181,16 @@ impl FileHeader {
             return Err(HeaderError::InvalidMagic(header.magic));
         }
 
+        // Version check: major must match, minor must be >= minimum
         if header.version_major != VERSION_MAJOR {
+            return Err(HeaderError::UnsupportedVersion(
+                header.version_major,
+                header.version_minor,
+            ));
+        }
+
+        // Support migration from older minor versions (v0.1, v0.2 → v0.3)
+        if header.version_minor < VERSION_MINOR_MIN {
             return Err(HeaderError::UnsupportedVersion(
                 header.version_major,
                 header.version_minor,
@@ -201,6 +216,28 @@ impl FileHeader {
     pub fn update_checksum(&mut self) {
         self.header_crc = 0;
         self.header_crc = crc32fast::hash(self.as_bytes());
+    }
+
+    /// Returns true if this header is from an older format that needs migration.
+    ///
+    /// Older formats (v0.1, v0.2) had `reserved` instead of `deleted_count`,
+    /// and the `HnswNode.pad` field instead of `deleted`.
+    ///
+    /// Migration consists of:
+    /// 1. Interpreting `reserved` (always 0 in old files) as `deleted_count`
+    /// 2. Node `pad` byte (always 0) becomes `deleted` (0 = not deleted)
+    ///
+    /// Since old files had all zeros in these fields, migration is automatic
+    /// and no data transformation is needed.
+    #[must_use]
+    pub fn needs_migration(&self) -> bool {
+        self.version_minor < VERSION_MINOR
+    }
+
+    /// Returns true if this header supports soft-delete (v0.3+).
+    #[must_use]
+    pub fn supports_soft_delete(&self) -> bool {
+        self.version_minor >= 3
     }
 }
 

@@ -166,7 +166,8 @@ pub fn read_file_header(data: &[u8]) -> Result<FileHeader, PersistenceError> {
             actual: data.len(),
         }
     })?);
-    let reserved = u32::from_le_bytes(data[60..64].try_into().map_err(|_| {
+    // v0.3: deleted_count (was 'reserved' in v0.1/v0.2, always 0)
+    let deleted_count = u32::from_le_bytes(data[60..64].try_into().map_err(|_| {
         PersistenceError::BufferTooSmall {
             expected: 64,
             actual: data.len(),
@@ -187,7 +188,7 @@ pub fn read_file_header(data: &[u8]) -> Result<FileHeader, PersistenceError> {
         hnsw_m,
         hnsw_m0,
         data_crc,
-        reserved,
+        deleted_count,
     })
 }
 

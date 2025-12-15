@@ -1,8 +1,44 @@
 # 🚀 `EdgeVec`
 
+[![CI](https://github.com/matte1782/edgevec/actions/workflows/ci.yml/badge.svg)](https://github.com/matte1782/edgevec/actions/workflows/ci.yml)
+[![Performance](https://github.com/matte1782/edgevec/actions/workflows/benchmark.yml/badge.svg)](https://github.com/matte1782/edgevec/actions/workflows/benchmark.yml)
+[![Crates.io](https://img.shields.io/crates/v/edgevec.svg)](https://crates.io/crates/edgevec)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/matte1782/edgevec/blob/main/LICENSE)
+
 **High-performance vector search for Browser, Node, and Edge**
 
 > ✅ **STATUS: Alpha Release Ready** — All performance targets exceeded.
+
+---
+
+## What's New in v0.3.0
+
+### Soft Delete API (RFC-001)
+- **`soft_delete(id)`** — O(1) tombstone-based deletion
+- **`is_deleted(id)`** — Check deletion status
+- **`deleted_count()` / `live_count()`** — Vector statistics
+- **`tombstone_ratio()`** — Monitor index health
+
+### Compaction API
+- **`compact()`** — Rebuild index removing all tombstones
+- **`needs_compaction()`** — Check if compaction recommended
+- **`compaction_warning()`** — Get actionable warning message
+- Configurable threshold (default: 30% tombstones)
+
+### WASM Bindings
+- Full soft delete API exposed to JavaScript/TypeScript
+- `softDelete()`, `isDeleted()`, `deletedCount()`, `liveCount()`
+- `compact()`, `needsCompaction()`, `compactionWarning()`
+- Interactive browser demo at `/wasm/examples/soft_delete.html`
+
+### Persistence Format v0.3
+- Automatic migration from v0.2 snapshots
+- Tombstone state preserved across save/load cycles
+
+### Previous (v0.2.1)
+- Safety hardening with `bytemuck` for alignment-verified operations
+- Batch insert API with progress callback
+- 24x faster search than voy (fastest pure-WASM competitor)
 
 ---
 
@@ -18,7 +54,7 @@
 - **WASM-First** — Native browser support via WebAssembly
 - **Persistent Storage** — `IndexedDB` in browser, file system elsewhere
 - **Minimal Dependencies** — No C compiler required, WASM-ready
-- **Tiny Bundle** — 148 KB gzipped (70% under 500KB target)
+- **Tiny Bundle** — 213 KB gzipped (57% under 500KB target)
 
 ---
 
@@ -143,6 +179,80 @@ fn main() -> Result<(), BatchError> {
 
 **Features:** Progress tracking, best-effort semantics, and unified error handling.
 
+### Soft Delete (Rust)
+
+Delete vectors without rebuilding the index (v0.3.0+):
+
+```rust,no_run
+use edgevec::{HnswConfig, HnswIndex, VectorStorage};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = HnswConfig::new(128);
+    let mut storage = VectorStorage::new(&config, None);
+    let mut index = HnswIndex::new(config, &storage)?;
+
+    // Insert a vector
+    let vector = vec![1.0; 128];
+    let id = index.insert(&vector, &mut storage)?;
+
+    // Soft delete (O(1) operation)
+    let was_deleted = index.soft_delete(id)?;
+    println!("Deleted: {}", was_deleted);
+
+    // Check deletion status
+    println!("Is deleted: {}", index.is_deleted(id)?);
+
+    // Get statistics
+    println!("Live: {}, Deleted: {}", index.live_count(), index.deleted_count());
+    println!("Tombstone ratio: {:.1}%", index.tombstone_ratio() * 100.0);
+
+    // Compact when tombstones accumulate (rebuilds index)
+    if index.needs_compaction() {
+        let (new_index, new_storage, result) = index.compact(&mut storage)?;
+        println!("Removed {} tombstones", result.tombstones_removed);
+        // Use new_index and new_storage for future operations
+    }
+
+    Ok(())
+}
+```
+
+### Soft Delete (JavaScript)
+
+```javascript
+import init, { EdgeVec, EdgeVecConfig } from 'edgevec';
+
+await init();
+const config = new EdgeVecConfig(128);
+const index = new EdgeVec(config);
+
+// Insert vectors
+const vector = new Float32Array(128).fill(0.5);
+const id = index.insert(vector);
+
+// Soft delete
+const wasDeleted = index.softDelete(id);
+console.log('Deleted:', wasDeleted);
+
+// Statistics
+console.log('Live:', index.liveCount());
+console.log('Deleted:', index.deletedCount());
+console.log('Tombstone ratio:', index.tombstoneRatio());
+
+// Compact when needed
+if (index.needsCompaction()) {
+    const result = index.compact();
+    console.log(`Removed ${result.tombstones_removed} tombstones`);
+}
+```
+
+| Operation | Time Complexity | Notes |
+|:----------|:----------------|:------|
+| `soft_delete()` | O(1) | Set tombstone byte |
+| `is_deleted()` | O(1) | Read tombstone byte |
+| `search()` | O(log n) | Automatically excludes tombstones |
+| `compact()` | O(n log n) | Full index rebuild |
+
 ---
 
 ## Development Status
@@ -155,7 +265,7 @@ fn main() -> Result<(), BatchError> {
 - ✅ **Search Mean:** 0.23ms (4.3x under 1ms target)
 - ✅ **Search P99 (estimated):** <600µs (based on Mean + 2σ)
 - ✅ **Memory:** 832 MB for 1M vectors (17% under 1GB target)
-- ✅ **Bundle Size:** 148 KB (70% under 500KB target)
+- ✅ **Bundle Size:** 213 KB (57% under 500KB target)
 
 **What Works Now:**
 - ✅ **HNSW Indexing** — Sub-millisecond search at 100k scale
@@ -164,7 +274,7 @@ fn main() -> Result<(), BatchError> {
 - ✅ **Crash Recovery (WAL)** — Log-based replay
 - ✅ **Atomic Snapshots** — Safe background saving
 - ✅ **Browser Integration** — WASM Bindings + IndexedDB
-- ✅ **npm Package** — `edgevec@0.2.0-alpha.2` published
+- ✅ **npm Package** — `edgevec@0.3.0` published
 
 **Development Progress:**
 - Phase 0: Environment Setup — ✅ COMPLETE
@@ -174,13 +284,12 @@ fn main() -> Result<(), BatchError> {
 - Phase 4: WASM Integration — ✅ COMPLETE
 - Phase 5: Alpha Release — ✅ **READY**
 
-### What's Next (v0.3.0)
+### What's Next (v0.4.0)
 
-1. **P99 Tracking** — Latency distribution metrics in CI
-2. **SIMD Detection** — Runtime detection and warnings
-3. **Cross-Platform** — ARM/NEON optimization verification
-4. **Performance Monitoring** — Telemetry for real-world usage
-5. **WASM Batch Insert** — Browser bindings for batch API
+1. **Multi-vector Delete** — Batch delete API
+2. **P99 Tracking** — Latency distribution metrics in CI
+3. **ARM/NEON Optimization** — Cross-platform SIMD verification
+4. **Mobile Support** — iOS Safari and Android Chrome formalized
 
 ---
 
@@ -210,15 +319,29 @@ Measured using `index.memory_usage() + storage.memory_usage()` after building 10
 
 | Package | Size (Gzipped) | Target | Status |
 |:--------|:---------------|:-------|:-------|
-| `edgevec@0.2.0-alpha.2` | **148 KB** | <500 KB | ✅ **70% under** |
+| `edgevec@0.3.0` | **213 KB** | <500 KB | ✅ **57% under** |
+
+### Competitive Comparison (10k vectors, 128 dimensions)
+
+| Library | Search P50 | Insert P50 | Type | Notes |
+|:--------|:-----------|:-----------|:-----|:------|
+| **EdgeVec** | **0.20ms** | 0.83ms | WASM | Fastest WASM solution |
+| hnswlib-node | 0.05ms | 1.56ms | Native C++ | Requires compilation |
+| voy | 4.78ms | 0.03ms | WASM | KD-tree, batch-only |
+
+**EdgeVec is 24x faster than voy** for search while both are pure WASM.
+Native bindings (hnswlib-node) are faster but require C++ compilation and don't work in browsers.
+
+[Full competitive analysis →](docs/benchmarks/competitive_analysis.md)
 
 ### Key Advantages
 
 - ✅ **Sub-millisecond search** at 100k scale
-- ✅ **Only WASM solution** with <1ms search at 100k vectors
+- ✅ **Fastest pure-WASM solution** — 24x faster than voy
 - ✅ **Zero network latency** — runs 100% locally (browser, Node, edge)
 - ✅ **Privacy-preserving** — no data leaves the device
-- ✅ **Tiny bundle** — 148 KB gzipped
+- ✅ **Tiny bundle** — 213 KB gzipped
+- ✅ **No compilation required** — unlike native bindings
 
 ### Test Environment
 

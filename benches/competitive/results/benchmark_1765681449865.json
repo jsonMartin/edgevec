@@ -1,0 +1,110 @@
+[
+  {
+    "library": "edgevec",
+    "timestamp": "2025-12-14T03:04:04.465Z",
+    "config": {
+      "dimensions": 128,
+      "vectorCount": 1000,
+      "queryCount": 100,
+      "k": 10,
+      "warmupRuns": 3,
+      "measurementRuns": 5,
+      "hnsw": {
+        "m": 16,
+        "efConstruction": 200,
+        "efSearch": 50
+      }
+    },
+    "insert": {
+      "mean_ms": "0.3723",
+      "p50_ms": "0.4229",
+      "p99_ms": "0.4424",
+      "total_count": 5
+    },
+    "search": {
+      "mean_ms": "0.1234",
+      "p50_ms": "0.1055",
+      "p99_ms": "0.1917",
+      "total_count": 5
+    },
+    "memory": {
+      "used_mb": "0.17"
+    },
+    "recall": {
+      "at_k": 10,
+      "percentage": "0.00"
+    }
+  },
+  {
+    "library": "hnswlib-node",
+    "timestamp": "2025-12-14T03:04:06.428Z",
+    "config": {
+      "dimensions": 128,
+      "vectorCount": 1000,
+      "queryCount": 100,
+      "k": 10,
+      "warmupRuns": 3,
+      "measurementRuns": 5,
+      "hnsw": {
+        "m": 16,
+        "efConstruction": 200,
+        "efSearch": 50
+      }
+    },
+    "insert": {
+      "mean_ms": "0.6217",
+      "p50_ms": "0.7604",
+      "p99_ms": "0.7707",
+      "total_count": 5
+    },
+    "search": {
+      "mean_ms": "0.0327",
+      "p50_ms": "0.0332",
+      "p99_ms": "0.0350",
+      "total_count": 5
+    },
+    "memory": {
+      "used_mb": "-0.65"
+    },
+    "recall": {
+      "at_k": 10,
+      "percentage": "0.00"
+    }
+  },
+  {
+    "library": "voy",
+    "timestamp": "2025-12-14T03:04:09.582Z",
+    "config": {
+      "dimensions": 128,
+      "vectorCount": 1000,
+      "queryCount": 100,
+      "k": 10,
+      "warmupRuns": 3,
+      "measurementRuns": 5,
+      "hnsw": {
+        "m": 16,
+        "efConstruction": 200,
+        "efSearch": 50
+      }
+    },
+    "insert": {
+      "mean_ms": "0.0512",
+      "p50_ms": "0.0517",
+      "p99_ms": "0.0532",
+      "total_count": 5
+    },
+    "search": {
+      "mean_ms": "0.0028",
+      "p50_ms": "0.0002",
+      "p99_ms": "0.0122",
+      "total_count": 5
+    },
+    "memory": {
+      "used_mb": "10.26"
+    },
+    "recall": {
+      "at_k": 10,
+      "percentage": "0.00"
+    }
+  }
+]

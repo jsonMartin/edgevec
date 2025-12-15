@@ -1,6 +1,7 @@
 // wasm/__tests__/EdgeVecClient.test.ts
 
-import { EdgeVecClient, EdgeVecConfigBuilder } from '../index';
+import { EdgeVecClient } from '../EdgeVecClient';
+import { EdgeVecConfigBuilder } from '../EdgeVecConfig';
 
 describe('EdgeVecClient', () => {
   describe('create', () => {

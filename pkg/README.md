@@ -1,8 +1,36 @@
 # 🚀 `EdgeVec`
 
+[![CI](https://github.com/matte1782/edgevec/actions/workflows/ci.yml/badge.svg)](https://github.com/matte1782/edgevec/actions/workflows/ci.yml)
+[![Performance](https://github.com/matte1782/edgevec/actions/workflows/benchmark.yml/badge.svg)](https://github.com/matte1782/edgevec/actions/workflows/benchmark.yml)
+[![Crates.io](https://img.shields.io/crates/v/edgevec.svg)](https://crates.io/crates/edgevec)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/matte1782/edgevec/blob/main/LICENSE)
+
 **High-performance vector search for Browser, Node, and Edge**
 
 > ✅ **STATUS: Alpha Release Ready** — All performance targets exceeded.
+
+---
+
+## What's New in v0.3.0
+
+### Soft Delete API (RFC-001)
+- **`softDelete(id)`** — O(1) tombstone-based deletion
+- **`isDeleted(id)`** — Check deletion status
+- **`deletedCount()` / `liveCount()`** — Vector statistics
+- **`tombstoneRatio()`** — Monitor index health
+
+### Compaction API
+- **`compact()`** — Rebuild index removing all tombstones
+- **`needsCompaction()`** — Check if compaction recommended
+- **`compactionWarning()`** — Get actionable warning message
+
+### Persistence Format v0.3
+- Automatic migration from v0.2 snapshots
+- Tombstone state preserved across save/load cycles
+
+### Previous (v0.2.1)
+- Safety hardening with `bytemuck` for alignment-verified operations
+- Batch insert API with progress callback
 
 ---
 
@@ -18,7 +46,7 @@
 - **WASM-First** — Native browser support via WebAssembly
 - **Persistent Storage** — `IndexedDB` in browser, file system elsewhere
 - **Minimal Dependencies** — No C compiler required, WASM-ready
-- **Tiny Bundle** — 148 KB gzipped (70% under 500KB target)
+- **Tiny Bundle** — 213 KB gzipped (57% under 500KB target)
 
 ---
 
@@ -155,7 +183,7 @@ fn main() -> Result<(), BatchError> {
 - ✅ **Search Mean:** 0.23ms (4.3x under 1ms target)
 - ✅ **Search P99 (estimated):** <600µs (based on Mean + 2σ)
 - ✅ **Memory:** 832 MB for 1M vectors (17% under 1GB target)
-- ✅ **Bundle Size:** 148 KB (70% under 500KB target)
+- ✅ **Bundle Size:** 213 KB (57% under 500KB target)
 
 **What Works Now:**
 - ✅ **HNSW Indexing** — Sub-millisecond search at 100k scale
@@ -164,7 +192,7 @@ fn main() -> Result<(), BatchError> {
 - ✅ **Crash Recovery (WAL)** — Log-based replay
 - ✅ **Atomic Snapshots** — Safe background saving
 - ✅ **Browser Integration** — WASM Bindings + IndexedDB
-- ✅ **npm Package** — `edgevec@0.2.0-alpha.2` published
+- ✅ **npm Package** — `edgevec@0.3.0` published
 
 **Development Progress:**
 - Phase 0: Environment Setup — ✅ COMPLETE
@@ -174,13 +202,12 @@ fn main() -> Result<(), BatchError> {
 - Phase 4: WASM Integration — ✅ COMPLETE
 - Phase 5: Alpha Release — ✅ **READY**
 
-### What's Next (v0.3.0)
+### What's Next (v0.4.0)
 
-1. **P99 Tracking** — Latency distribution metrics in CI
-2. **SIMD Detection** — Runtime detection and warnings
-3. **Cross-Platform** — ARM/NEON optimization verification
-4. **Performance Monitoring** — Telemetry for real-world usage
-5. **WASM Batch Insert** — Browser bindings for batch API
+1. **Multi-vector Delete** — Batch delete API
+2. **P99 Tracking** — Latency distribution metrics in CI
+3. **ARM/NEON Optimization** — Cross-platform SIMD verification
+4. **Mobile Support** — iOS Safari and Android Chrome formalized
 
 ---
 
@@ -210,15 +237,29 @@ Measured using `index.memory_usage() + storage.memory_usage()` after building 10
 
 | Package | Size (Gzipped) | Target | Status |
 |:--------|:---------------|:-------|:-------|
-| `edgevec@0.2.0-alpha.2` | **148 KB** | <500 KB | ✅ **70% under** |
+| `edgevec@0.3.0` | **213 KB** | <500 KB | ✅ **57% under** |
+
+### Competitive Comparison (10k vectors, 128 dimensions)
+
+| Library | Search P50 | Insert P50 | Type | Notes |
+|:--------|:-----------|:-----------|:-----|:------|
+| **EdgeVec** | **0.20ms** | 0.83ms | WASM | Fastest WASM solution |
+| hnswlib-node | 0.05ms | 1.56ms | Native C++ | Requires compilation |
+| voy | 4.78ms | 0.03ms | WASM | KD-tree, batch-only |
+
+**EdgeVec is 24x faster than voy** for search while both are pure WASM.
+Native bindings (hnswlib-node) are faster but require C++ compilation and don't work in browsers.
+
+[Full competitive analysis →](docs/benchmarks/competitive_analysis.md)
 
 ### Key Advantages
 
 - ✅ **Sub-millisecond search** at 100k scale
-- ✅ **Only WASM solution** with <1ms search at 100k vectors
+- ✅ **Fastest pure-WASM solution** — 24x faster than voy
 - ✅ **Zero network latency** — runs 100% locally (browser, Node, edge)
 - ✅ **Privacy-preserving** — no data leaves the device
-- ✅ **Tiny bundle** — 148 KB gzipped
+- ✅ **Tiny bundle** — 213 KB gzipped
+- ✅ **No compilation required** — unlike native bindings
 
 ### Test Environment
 
@@ -261,6 +302,13 @@ Measured using `index.memory_usage() + storage.memory_usage()` after building 10
 - WASM-native architecture
 - `IndexedDB` persistence
 - Everything else
+
+---
+
+## Acknowledgments
+
+- Thanks to the **Reddit community** for identifying a potential alignment issue in the persistence layer, which led to improved safety via `bytemuck` in v0.2.1.
+- Thanks to the **Hacker News community** for feedback on competitive positioning and benchmarking.
 
 ---
 

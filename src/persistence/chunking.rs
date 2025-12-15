@@ -82,6 +82,15 @@ impl<'a> ChunkedWriter for (&'a VectorStorage, &'a HnswIndex) {
         header.hnsw_m = index.config.m;
         header.hnsw_m0 = index.config.m0;
 
+        // v0.3: Persist deleted_count from index (W16.5)
+        // SAFETY: deleted_count is usize, header field is u32.
+        // For indices with > 4B deleted nodes, we'd truncate, but that's
+        // practically impossible (memory limits would be hit first).
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            header.deleted_count = index.deleted_count as u32;
+        }
+
         // TODO: RNG seed persistence if needed (index.rng is private or needs exposure?
         // For now we skip RNG state persistence as it is transient/reseeded).
 

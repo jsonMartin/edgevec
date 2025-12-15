@@ -18,7 +18,14 @@
       "Bash(cargo build:*)",
       "Bash(cargo check:*)",
       "Bash(rustup run nightly cargo miri test:*)",
-      "Bash(rustup component add:*)"
+      "Bash(rustup component add:*)",
+      "Bash(node harness.js:*)",
+      "Bash(node -e:*)",
+      "Bash(wasm-pack build:*)",
+      "Bash(cargo run:*)",
+      "Bash(cargo bench:*)",
+      "Bash(cargo clean:*)",
+      "Bash(npm test)"
     ]
   }
 }

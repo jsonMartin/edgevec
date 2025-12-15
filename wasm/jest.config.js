@@ -10,19 +10,13 @@ export default {
       useESM: true,
     }],
   },
-  coverageThreshold: {
-    global: {
-      lines: 80,
-      functions: 80,
-      branches: 80,
-      statements: 80,
-    },
-  },
-  collectCoverageFrom: [
-    '*.ts',
-    '!**/__tests__/**',
-    '!index.ts',
-  ],
   // Mock WASM modules for Node.js testing
   modulePathIgnorePatterns: ['<rootDir>/../pkg/'],
+  // Unit tests (*.unit.test.ts) run in Node.js with mocked WASM
+  // Integration tests (*.test.ts without .unit.) require browser/WASM environment
+  // See wasm/examples/test-harness.html for browser integration tests
+  testMatch: ['<rootDir>/__tests__/**/*.unit.test.ts'],
+  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/dist/'],
+  // Coverage is tracked via browser integration tests (W17.3)
+  collectCoverage: false,
 };

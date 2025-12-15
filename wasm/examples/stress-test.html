@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EdgeVec IndexedDB Stress Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+        }
+        #log {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        .pass { color: #28a745; }
+        .fail { color: #dc3545; }
+        .info { color: #007bff; }
+        .warn { color: #ffc107; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px 10px 0;
+        }
+        #status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .running { background: #fff3cd; }
+        .complete { background: #d4edda; }
+        .error { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>EdgeVec IndexedDB Stress Test</h1>
+    <p>Tests WASM module loading, batch insert, and IndexedDB persistence at scale.</p>
+
+    <div>
+        <button onclick="runQuickTest()">Quick Test (1k vectors)</button>
+        <button onclick="runMediumTest()">Medium Test (10k vectors)</button>
+        <button onclick="runStressTest()">Full Stress Test (50k vectors)</button>
+    </div>
+
+    <div id="status"></div>
+    <div id="log"></div>
+
+    <script type="module">
+        // Import from pkg directory (relative to wasm/examples)
+        import init, { WasmHnswIndex, WasmHnswConfig } from '../../pkg/edgevec.js';
+
+        let initialized = false;
+
+        function setStatus(text, className) {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            status.className = className;
+        }
+
+        function log(msg, className = '') {
+            const logDiv = document.getElementById('log');
+            const span = document.createElement('span');
+            span.className = className;
+            span.textContent = msg + '\n';
+            logDiv.appendChild(span);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(msg);
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        async function ensureInit() {
+            if (!initialized) {
+                await init();
+                initialized = true;
+                log('WASM initialized', 'pass');
+            }
+        }
+
+        async function runTest(sizes) {
+            clearLog();
+            setStatus('Running...', 'running');
+
+            try {
+                await ensureInit();
+
+                const config = new WasmHnswConfig();
+                config.dimensions = 128;
+                config.m = 16;
+                config.ef_construction = 200;
+
+                for (const size of sizes) {
+                    log(`\n=== Testing ${size.toLocaleString()} vectors ===`, 'info');
+
+                    // Create fresh index for each size
+                    const index = new WasmHnswIndex(config);
+                    log(`Index created (dimensions: ${config.dimensions})`);
+
+                    // Generate vectors
+                    log(`Generating ${size.toLocaleString()} random vectors...`);
+                    const vectors = [];
+                    for (let i = 0; i < size; i++) {
+                        const vec = new Float32Array(128);
+                        for (let j = 0; j < 128; j++) {
+                            vec[j] = Math.random() * 2 - 1;
+                        }
+                        vectors.push([BigInt(i + 1), vec]);
+                    }
+
+                    // Insert with timing
+                    log(`Inserting vectors...`);
+                    const insertStart = performance.now();
+                    let lastProgress = 0;
+
+                    try {
+                        const result = index.batch_insert_with_progress(
+                            vectors,
+                            (done, total) => {
+                                const pct = Math.floor((done / total) * 100);
+                                if (pct >= lastProgress + 10) {
+                                    log(`  Progress: ${pct}%`);
+                                    lastProgress = pct;
+                                }
+                            }
+                        );
+
+                        const insertTime = (performance.now() - insertStart).toFixed(0);
+                        log(`  Insert complete: ${insertTime}ms (${result.inserted_count} inserted)`, 'pass');
+
+                        // Memory estimate
+                        const memEstimate = (size * 128 * 4 / 1024 / 1024).toFixed(1);
+                        log(`  Estimated memory: ~${memEstimate}MB vectors + index overhead`);
+
+                    } catch (insertErr) {
+                        log(`  Insert FAILED: ${insertErr.message}`, 'fail');
+                        continue;
+                    }
+
+                    // Search test
+                    log(`Running search test (k=10)...`);
+                    const query = new Float32Array(128);
+                    for (let j = 0; j < 128; j++) {
+                        query[j] = Math.random() * 2 - 1;
+                    }
+
+                    const searchStart = performance.now();
+                    const searchResults = index.search(query, 10, 100);
+                    const searchTime = (performance.now() - searchStart).toFixed(2);
+                    log(`  Search complete: ${searchTime}ms (${searchResults.length} results)`, 'pass');
+
+                    // IndexedDB save test
+                    log(`Saving to IndexedDB...`);
+                    const dbName = `stress-test-${size}`;
+                    const saveStart = performance.now();
+
+                    try {
+                        await index.save_to_indexeddb(dbName);
+                        const saveTime = (performance.now() - saveStart).toFixed(0);
+                        log(`  Save complete: ${saveTime}ms`, 'pass');
+                    } catch (saveErr) {
+                        log(`  Save FAILED: ${saveErr.message}`, 'fail');
+                        log(`  (This may be due to Safari transaction timeout or quota limits)`, 'warn');
+                    }
+
+                    // IndexedDB load test
+                    log(`Loading from IndexedDB...`);
+                    const loadStart = performance.now();
+
+                    try {
+                        const loadedIndex = await WasmHnswIndex.load_from_indexeddb(dbName);
+                        const loadTime = (performance.now() - loadStart).toFixed(0);
+                        const loadedCount = loadedIndex.vector_count();
+                        log(`  Load complete: ${loadTime}ms (${loadedCount} vectors)`, 'pass');
+
+                        // Verify loaded index works
+                        const verifyResults = loadedIndex.search(query, 10, 100);
+                        log(`  Verification search: ${verifyResults.length} results`, 'pass');
+
+                        // Cleanup
+                        loadedIndex.free();
+                    } catch (loadErr) {
+                        log(`  Load FAILED: ${loadErr.message}`, 'fail');
+                    }
+
+                    // Cleanup IndexedDB
+                    try {
+                        const deleteReq = indexedDB.deleteDatabase(dbName);
+                        await new Promise((resolve, reject) => {
+                            deleteReq.onsuccess = resolve;
+                            deleteReq.onerror = reject;
+                        });
+                        log(`  Cleaned up IndexedDB: ${dbName}`);
+                    } catch (e) {
+                        // Ignore cleanup errors
+                    }
+
+                    // Free index memory
+                    index.free();
+                }
+
+                log(`\n=== Stress Test Complete ===`, 'pass');
+                setStatus('Complete!', 'complete');
+
+            } catch (e) {
+                log(`\nFATAL ERROR: ${e.message}`, 'fail');
+                log(e.stack || '', 'fail');
+                setStatus('Error!', 'error');
+            }
+        }
+
+        // Expose functions globally for button onclick
+        window.runQuickTest = () => runTest([1000]);
+        window.runMediumTest = () => runTest([1000, 10000]);
+        window.runStressTest = () => runTest([1000, 10000, 50000]);
+
+        // Auto-init on page load
+        ensureInit().catch(e => {
+            log(`Init failed: ${e.message}`, 'fail');
+        });
+    </script>
+</body>
+</html>

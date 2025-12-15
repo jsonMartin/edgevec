@@ -1,6 +1,11 @@
 // wasm/EdgeVecClient.ts
 
-import init, { EdgeVec as WasmEdgeVec, EdgeVecConfig as WasmConfig } from '../pkg/edgevec.js';
+import init, {
+  EdgeVec as WasmEdgeVec,
+  EdgeVecConfig as WasmConfig,
+  WasmCompactionResult
+} from '../pkg/edgevec.js';
+import type { CompactionResult, SoftDeleteStats } from './types.js';
 
 export interface SearchResult {
   id: number;
@@ -217,5 +222,163 @@ export class EdgeVecClient {
         `Dimension mismatch: expected ${this.config.dimensions}, got ${vector.length}`
       );
     }
+  }
+
+  // =========================================================================
+  // SOFT DELETE API (v0.3.0 — RFC-001)
+  // =========================================================================
+
+  /**
+   * Soft delete a vector by marking it as a tombstone.
+   *
+   * The vector remains in the index but is excluded from search results.
+   * Space is reclaimed via `compact()` when tombstone ratio exceeds threshold.
+   *
+   * @param vectorId - The ID of the vector to delete (returned from `insert`)
+   * @returns `true` if the vector was deleted, `false` if already deleted (idempotent)
+   * @throws Error if the vector ID doesn't exist
+   *
+   * @example
+   * ```typescript
+   * const id = client.insert(vector);
+   * const wasDeleted = client.softDelete(id);
+   * console.log(client.isDeleted(id)); // true
+   * ```
+   */
+  softDelete(vectorId: number): boolean {
+    return this.inner.softDelete(vectorId);
+  }
+
+  /**
+   * Check if a vector is deleted (tombstoned).
+   *
+   * @param vectorId - The ID of the vector to check
+   * @returns `true` if the vector is deleted, `false` if live
+   * @throws Error if the vector ID doesn't exist
+   */
+  isDeleted(vectorId: number): boolean {
+    return this.inner.isDeleted(vectorId);
+  }
+
+  /**
+   * Get the count of deleted (tombstoned) vectors.
+   *
+   * @returns The number of vectors that have been soft-deleted but not yet compacted
+   */
+  get deletedCount(): number {
+    return this.inner.deletedCount();
+  }
+
+  /**
+   * Get the count of live (non-deleted) vectors.
+   *
+   * @returns The number of vectors that are currently searchable
+   */
+  get liveCount(): number {
+    return this.inner.liveCount();
+  }
+
+  /**
+   * Get the ratio of deleted to total vectors.
+   *
+   * @returns A value between 0.0 and 1.0 representing the tombstone ratio
+   */
+  get tombstoneRatio(): number {
+    return this.inner.tombstoneRatio();
+  }
+
+  /**
+   * Check if compaction is recommended.
+   *
+   * Returns `true` when `tombstoneRatio` exceeds the compaction threshold
+   * (default: 30%). Use `compact()` to reclaim space from deleted vectors.
+   *
+   * @returns `true` if compaction is recommended, `false` otherwise
+   */
+  get needsCompaction(): boolean {
+    return this.inner.needsCompaction();
+  }
+
+  /**
+   * Get the current compaction threshold.
+   *
+   * @returns The threshold ratio (0.0 to 1.0) above which `needsCompaction` returns true
+   */
+  get compactionThreshold(): number {
+    return this.inner.compactionThreshold();
+  }
+
+  /**
+   * Set the compaction threshold.
+   *
+   * @param ratio - The new threshold (clamped to 0.01 - 0.99)
+   */
+  set compactionThreshold(ratio: number) {
+    this.inner.setCompactionThreshold(ratio);
+  }
+
+  /**
+   * Get a warning message if compaction is recommended.
+   *
+   * @returns A warning string if `needsCompaction` is true, `null` otherwise
+   *
+   * @example
+   * ```typescript
+   * const warning = client.compactionWarning;
+   * if (warning) {
+   *   console.warn(warning);
+   *   client.compact();
+   * }
+   * ```
+   */
+  get compactionWarning(): string | null {
+    return this.inner.compactionWarning() ?? null;
+  }
+
+  /**
+   * Compact the index by rebuilding without tombstones.
+   *
+   * This operation:
+   * 1. Creates a new index with only live vectors
+   * 2. Re-inserts vectors preserving IDs
+   * 3. Replaces the current index
+   *
+   * **WARNING:** This is a blocking operation. For indices with >10k vectors,
+   * consider running during idle time or warning the user about potential delays.
+   *
+   * @returns CompactionResult containing metrics about the operation
+   * @throws Error if compaction fails (e.g., memory allocation error)
+   *
+   * @example
+   * ```typescript
+   * if (client.needsCompaction) {
+   *   const result = client.compact();
+   *   console.log(`Removed ${result.tombstonesRemoved} tombstones`);
+   *   console.log(`New size: ${result.newSize}`);
+   *   console.log(`Took ${result.durationMs}ms`);
+   * }
+   * ```
+   */
+  compact(): CompactionResult {
+    const wasmResult: WasmCompactionResult = this.inner.compact();
+    return {
+      tombstonesRemoved: wasmResult.tombstones_removed,
+      newSize: wasmResult.new_size,
+      durationMs: wasmResult.duration_ms
+    };
+  }
+
+  /**
+   * Get soft delete statistics for the index.
+   *
+   * @returns Object containing deletedCount, liveCount, tombstoneRatio, and needsCompaction
+   */
+  getSoftDeleteStats(): SoftDeleteStats {
+    return {
+      deletedCount: this.deletedCount,
+      liveCount: this.liveCount,
+      tombstoneRatio: this.tombstoneRatio,
+      needsCompaction: this.needsCompaction
+    };
   }
 }

@@ -110,6 +110,25 @@ pub enum GraphError {
     InvalidConfig(String),
 }
 
+/// Result of a compaction operation.
+///
+/// Returned by [`HnswIndex::compact()`] to provide metrics about the operation.
+///
+/// # Fields
+///
+/// * `tombstones_removed` - Number of deleted vectors removed
+/// * `new_size` - Size of the new index (live vectors only)
+/// * `duration_ms` - Time taken for the operation in milliseconds
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompactionResult {
+    /// Number of tombstones (deleted vectors) removed during compaction.
+    pub tombstones_removed: usize,
+    /// New index size after compaction (live vectors only).
+    pub new_size: usize,
+    /// Time taken for the compaction operation in milliseconds.
+    pub duration_ms: u64,
+}
+
 /// A node in the HNSW graph with its adjacency information.
 ///
 /// # Layout
@@ -123,7 +142,14 @@ pub enum GraphError {
 /// - `neighbor_offset`: 4 bytes
 /// - `neighbor_len`: 2 bytes
 /// - `max_layer`: 1 byte
-/// - `pad`: 1 byte (explicit padding, always zero-initialized)
+/// - `deleted`: 1 byte (soft delete flag, v0.3.0)
+///
+/// # Soft Delete (v0.3.0)
+///
+/// The `deleted` field enables O(1) soft delete. Deleted nodes remain in
+/// the graph for routing but are excluded from search results.
+/// - `deleted = 0`: Node is live (default)
+/// - `deleted = 1`: Node is deleted (tombstone)
 ///
 /// # Safety
 ///
@@ -145,8 +171,9 @@ pub struct HnswNode {
     /// The maximum layer this node appears in
     pub max_layer: u8,
 
-    /// Explicit padding byte (always zero-initialized for Pod safety)
-    pub pad: u8,
+    /// Soft delete flag: 0 = live, 1 = deleted (v0.3.0)
+    /// This field replaces the padding byte from v0.2.x.
+    pub deleted: u8,
 }
 
 /// The HNSW Graph structure managing layers and nodes.
@@ -155,6 +182,12 @@ pub struct HnswNode {
 ///
 /// Uses a flattened representation for cache efficiency.
 /// Nodes are stored in a contiguous vector.
+///
+/// # Soft Delete (v0.3.0)
+///
+/// Supports soft delete via tombstone marking. Deleted nodes remain
+/// in the graph for routing but are excluded from search results.
+/// Use `compact()` to reclaim space from deleted nodes.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HnswIndex {
     /// Algorithm configuration
@@ -177,6 +210,22 @@ pub struct HnswIndex {
 
     /// Deterministic RNG state
     rng: ChaCha8Rng,
+
+    /// Count of soft-deleted vectors (v0.3.0)
+    /// This tracks the number of nodes with `deleted = 1`.
+    #[serde(default)]
+    pub(crate) deleted_count: usize,
+
+    /// Compaction threshold ratio (v0.3.0)
+    /// When tombstone_ratio() exceeds this value, needs_compaction() returns true.
+    /// Default: 0.3 (30% tombstones triggers compaction recommendation)
+    #[serde(default = "default_compaction_threshold")]
+    compaction_threshold: f64,
+}
+
+/// Default compaction threshold (30%)
+fn default_compaction_threshold() -> f64 {
+    0.3
 }
 
 impl HnswIndex {
@@ -231,6 +280,8 @@ impl HnswIndex {
             max_layer: 0,
             level_mult,
             rng,
+            deleted_count: 0, // v0.3.0: No deleted nodes initially
+            compaction_threshold: default_compaction_threshold(), // v0.3.0: Default 30%
         })
     }
 
@@ -277,7 +328,7 @@ impl HnswIndex {
             neighbor_offset: 0,
             neighbor_len: 0,
             max_layer,
-            pad: 0,
+            deleted: 0, // Live node (v0.3.0)
         };
 
         #[allow(clippy::cast_possible_truncation)]
@@ -403,9 +454,229 @@ impl HnswIndex {
         self.max_layer
     }
 
-    /// Marks a vector as deleted in the storage.
+    // ============================================================================
+    // Soft Delete API (W16.2 - RFC-001)
+    // ============================================================================
+
+    /// Get mutable reference to a node by VectorId.
     ///
-    /// The node remains in the graph for routing, but will be filtered from search results.
+    /// # Complexity
+    ///
+    /// * Time: O(n) linear scan
+    /// * Space: O(1)
+    fn get_node_mut(&mut self, vector_id: VectorId) -> Result<&mut HnswNode, GraphError> {
+        self.nodes
+            .iter_mut()
+            .find(|n| n.vector_id == vector_id)
+            .ok_or(GraphError::InvalidVectorId)
+    }
+
+    /// Get immutable reference to a node by VectorId.
+    ///
+    /// # Complexity
+    ///
+    /// * Time: O(n) linear scan
+    /// * Space: O(1)
+    fn get_node_by_vector_id(&self, vector_id: VectorId) -> Result<&HnswNode, GraphError> {
+        self.nodes
+            .iter()
+            .find(|n| n.vector_id == vector_id)
+            .ok_or(GraphError::InvalidVectorId)
+    }
+
+    /// Mark a vector as deleted (soft delete).
+    ///
+    /// The vector remains in the graph for routing but is excluded from
+    /// search results. Space is reclaimed via `compact()`.
+    ///
+    /// # Arguments
+    ///
+    /// * `vector_id` - The ID of the vector to delete
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(true)` - Vector was deleted
+    /// * `Ok(false)` - Vector was already deleted
+    /// * `Err(InvalidVectorId)` - Vector ID not found
+    ///
+    /// # Complexity
+    ///
+    /// * Time: **O(n)** for VectorId → Node lookup via linear scan,
+    ///   plus O(1) for setting the deleted byte
+    /// * Space: O(1)
+    ///
+    /// **Note:** The O(n) lookup is a known limitation in v0.3.0.
+    /// A HashMap<VectorId, NodeId> index could provide O(1) lookup
+    /// but is deferred to v0.4.0 to avoid scope creep.
+    ///
+    /// # Thread Safety (RFC-001 Design)
+    ///
+    /// This method requires `&mut self`, which means Rust's borrow checker
+    /// prevents concurrent access at compile time. This is intentional:
+    ///
+    /// * Search (`&self`) and delete (`&mut self`) cannot run concurrently
+    /// * No atomics or locks needed - safety is enforced by the type system
+    /// * See RFC-001 Section 6.4 "Design Decisions" for rationale
+    ///
+    /// # Persistence
+    ///
+    /// **IMPORTANT:** Delete operations are in-memory only until `save()` is called.
+    /// If the process crashes before `save()`, the delete will be lost.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let deleted = index.soft_delete(VectorId(42))?;
+    /// assert!(deleted);
+    /// assert!(index.is_deleted(VectorId(42))?);
+    /// ```
+    pub fn soft_delete(&mut self, vector_id: VectorId) -> Result<bool, GraphError> {
+        let node = self.get_node_mut(vector_id)?;
+
+        if node.deleted != 0 {
+            return Ok(false); // Already deleted
+        }
+
+        node.deleted = 1;
+        self.deleted_count += 1;
+        Ok(true)
+    }
+
+    /// Check if a vector is marked as deleted.
+    ///
+    /// # Arguments
+    ///
+    /// * `vector_id` - The ID of the vector to check
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(true)` - Vector is deleted
+    /// * `Ok(false)` - Vector is live
+    /// * `Err(InvalidVectorId)` - Vector ID not found
+    ///
+    /// # Complexity
+    ///
+    /// * Time: O(n) for lookup + O(1) for check
+    /// * Space: O(1)
+    pub fn is_deleted(&self, vector_id: VectorId) -> Result<bool, GraphError> {
+        let node = self.get_node_by_vector_id(vector_id)?;
+        Ok(node.deleted != 0)
+    }
+
+    /// Get the count of deleted (tombstoned) vectors.
+    ///
+    /// # Returns
+    ///
+    /// Number of vectors marked as deleted.
+    #[must_use]
+    pub fn deleted_count(&self) -> usize {
+        self.deleted_count
+    }
+
+    /// Get the ratio of deleted vectors to total vectors.
+    ///
+    /// # Returns
+    ///
+    /// A value between 0.0 and 1.0 representing the tombstone ratio.
+    /// Returns 0.0 if the index is empty.
+    #[must_use]
+    pub fn tombstone_ratio(&self) -> f64 {
+        let total = self.node_count();
+        if total == 0 {
+            return 0.0;
+        }
+        self.deleted_count as f64 / total as f64
+    }
+
+    /// Get count of live (non-deleted) vectors.
+    ///
+    /// # Returns
+    ///
+    /// Number of vectors that are not marked as deleted.
+    #[must_use]
+    pub fn live_count(&self) -> usize {
+        self.node_count().saturating_sub(self.deleted_count)
+    }
+
+    /// Maximum multiplier for adjusted_k to prevent excessive over-fetching.
+    ///
+    /// At 90%+ tombstones, we cap at 10x the original k to bound memory usage.
+    /// Beyond this ratio, compaction should be triggered.
+    pub const MAX_ADJUSTED_K_MULTIPLIER: usize = 10;
+
+    /// Calculate adjusted k to compensate for tombstones.
+    ///
+    /// When the index has deleted vectors, we over-fetch to ensure
+    /// we can return k live results after filtering. This method
+    /// calculates how many candidates to fetch internally so that
+    /// after filtering out deleted vectors, we likely have k results.
+    ///
+    /// # Formula
+    ///
+    /// `adjusted_k = k * total / live`
+    ///
+    /// This is equivalent to `k / (1 - tombstone_ratio)` but uses
+    /// integer arithmetic for precision.
+    ///
+    /// # Caps
+    ///
+    /// The result is capped at `k * MAX_ADJUSTED_K_MULTIPLIER` (default 10x)
+    /// to prevent excessive fetching at very high tombstone ratios.
+    ///
+    /// # Examples
+    ///
+    /// * 0% tombstones: k = k (no adjustment)
+    /// * 10% tombstones: k → ~1.11x
+    /// * 30% tombstones: k → ~1.43x
+    /// * 50% tombstones: k → 2x
+    /// * 90%+ tombstones: k → 10x (capped)
+    ///
+    /// # Thread Safety
+    ///
+    /// This method reads `deleted_count` and `node_count()` which may change
+    /// if the index is mutated. Per RFC-001, the API uses `&mut self` for
+    /// mutations, so concurrent read+write is prevented by Rust's borrow checker.
+    /// The design accepts eventual consistency for soft delete semantics.
+    ///
+    /// # Arguments
+    ///
+    /// * `k` - The requested number of results
+    ///
+    /// # Returns
+    ///
+    /// The adjusted k value to use for internal search operations.
+    /// This value is always >= k (unless capped by live_count).
+    #[must_use]
+    pub fn adjusted_k(&self, k: usize) -> usize {
+        // Fast path: no tombstones
+        if self.deleted_count == 0 {
+            return k;
+        }
+
+        let total = self.node_count();
+        let live = self.live_count();
+
+        // Edge case: all deleted
+        // This also prevents division by zero in the calculation below.
+        if live == 0 {
+            return k; // Will return empty results anyway
+        }
+
+        // Integer arithmetic: adjusted = k * total / live
+        // Use saturating ops to prevent overflow
+        let adjusted = k.saturating_mul(total) / live;
+
+        // Cap at MAX_ADJUSTED_K_MULTIPLIER to prevent excessive over-fetching
+        // Note: We don't cap at total because adjusted_k controls the internal
+        // search effort (ef parameter), not the final result count.
+        let max_by_multiplier = k.saturating_mul(Self::MAX_ADJUSTED_K_MULTIPLIER);
+        adjusted.min(max_by_multiplier)
+    }
+
+    /// Marks a vector as deleted in the storage (legacy API).
+    ///
+    /// **DEPRECATED:** Use `soft_delete()` instead for RFC-001 compliant soft delete.
+    /// This method delegates to storage and does not update `deleted_count`.
     ///
     /// # Arguments
     ///
@@ -416,7 +687,8 @@ impl HnswIndex {
     ///
     /// `true` if the vector was active and is now deleted.
     /// `false` if it was already deleted.
-    pub fn delete(&self, id: VectorId, storage: &mut VectorStorage) -> bool {
+    #[deprecated(since = "0.3.0", note = "Use soft_delete() instead")]
+    pub fn delete_in_storage(&self, id: VectorId, storage: &mut VectorStorage) -> bool {
         storage.mark_deleted(id)
     }
 
@@ -440,6 +712,271 @@ impl HnswIndex {
         let neighbors_size = self.neighbors.memory_usage();
 
         std::mem::size_of::<Self>() + nodes_size + neighbors_size
+    }
+
+    // ========================================================================
+    // Compaction API (W16.4 - RFC-001)
+    // ========================================================================
+
+    /// Check if compaction is recommended.
+    ///
+    /// Returns `true` if the tombstone ratio exceeds the configured threshold
+    /// (default 30%). When this returns true, calling `compact()` is
+    /// recommended to reclaim space and maintain search performance.
+    ///
+    /// # Thread Safety
+    ///
+    /// This method is **not thread-safe**. `HnswIndex` is `!Send` and must be
+    /// accessed from a single thread. For concurrent use, create separate index
+    /// instances (e.g., via Web Workers in WASM).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// if index.needs_compaction() {
+    ///     let (new_index, new_storage, result) = index.compact(&storage)?;
+    ///     index = new_index;
+    ///     storage = new_storage;
+    /// }
+    /// ```
+    #[must_use]
+    pub fn needs_compaction(&self) -> bool {
+        self.tombstone_ratio() > self.compaction_threshold
+    }
+
+    /// Set the compaction threshold.
+    ///
+    /// When `tombstone_ratio()` exceeds this value, `needs_compaction()`
+    /// returns true.
+    ///
+    /// # Arguments
+    ///
+    /// * `ratio` - Tombstone ratio threshold (0.01 to 0.99)
+    ///
+    /// # Default
+    ///
+    /// Default is 0.3 (30%). Lower values trigger compaction more often
+    /// but maintain better search performance.
+    ///
+    /// # Clamping
+    ///
+    /// Values outside [0.01, 0.99] are clamped to that range.
+    pub fn set_compaction_threshold(&mut self, ratio: f64) {
+        self.compaction_threshold = ratio.clamp(0.01, 0.99);
+    }
+
+    /// Get the current compaction threshold.
+    ///
+    /// # Returns
+    ///
+    /// The ratio at which `needs_compaction()` returns true.
+    #[must_use]
+    pub fn compaction_threshold(&self) -> f64 {
+        self.compaction_threshold
+    }
+
+    /// Get a compaction warning message if compaction is recommended.
+    ///
+    /// Returns `Some(message)` if the tombstone ratio exceeds the threshold,
+    /// or `None` if compaction is not needed.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// if let Some(warning) = index.compaction_warning() {
+    ///     log::warn!("{}", warning);
+    /// }
+    /// ```
+    #[must_use]
+    pub fn compaction_warning(&self) -> Option<String> {
+        if self.needs_compaction() {
+            Some(format!(
+                "Compaction recommended: tombstone ratio {:.1}% exceeds threshold {:.1}%. \
+                 Call compact() to rebuild index without tombstones.",
+                self.tombstone_ratio() * 100.0,
+                self.compaction_threshold * 100.0
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Compact the index by rebuilding without tombstones.
+    ///
+    /// This operation creates a NEW index and NEW storage containing only
+    /// live (non-deleted) vectors. The original index and storage are NOT
+    /// modified, allowing the caller to replace them atomically.
+    ///
+    /// # Important: Vector ID Remapping
+    ///
+    /// Due to storage design constraints, vector IDs are remapped during
+    /// compaction. New IDs are assigned sequentially starting from 1.
+    /// If you need to track the mapping, use the returned index to query
+    /// by position or content.
+    ///
+    /// # Returns
+    ///
+    /// Returns `(new_index, new_storage, result)` tuple. The caller MUST
+    /// replace BOTH their index and storage references:
+    ///
+    /// ```ignore
+    /// let (new_index, new_storage, result) = old_index.compact(&old_storage)?;
+    /// println!("Removed {} tombstones in {}ms", result.tombstones_removed, result.duration_ms);
+    /// // Now use new_index and new_storage, old ones will be dropped
+    /// index = new_index;
+    /// storage = new_storage;
+    /// ```
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Collect all live vectors (non-deleted)
+    /// 2. Create a new empty index and storage with the same config
+    /// 3. Re-insert all live vectors using regular insert()
+    /// 4. Return the new pair
+    ///
+    /// # Performance
+    ///
+    /// * Time: O(n log n) where n = live vector count
+    /// * Space: 2x index size during compaction (temporary)
+    ///
+    /// # Memory Safety
+    ///
+    /// * Returns new pair — no storage/index mismatch possible
+    /// * On failure, original index/storage unchanged (caller keeps refs)
+    /// * Old index/storage are NOT modified — caller drops when ready
+    ///
+    /// # Warning
+    ///
+    /// This is a blocking operation. For WASM, consider running
+    /// during idle time or on user action.
+    pub fn compact(
+        &self,
+        storage: &VectorStorage,
+    ) -> Result<(HnswIndex, VectorStorage, CompactionResult), GraphError> {
+        use std::time::Instant;
+        let start = Instant::now();
+
+        let original_deleted = self.deleted_count;
+        let original_total = self.node_count();
+
+        // Fast path: no tombstones — return copy
+        if original_deleted == 0 {
+            // Clone manually since VectorStorage doesn't implement Clone
+            let config = self.config.clone();
+            let mut new_storage = VectorStorage::new(&config, None);
+            let mut new_index = HnswIndex::new(config, &new_storage)?;
+            new_index.compaction_threshold = self.compaction_threshold;
+
+            // Re-insert all vectors (this is a rebuild, but preserves order)
+            for node in &self.nodes {
+                let vec = storage.get_vector(node.vector_id);
+                new_index.insert(&vec, &mut new_storage)?;
+            }
+
+            return Ok((
+                new_index,
+                new_storage,
+                CompactionResult {
+                    tombstones_removed: 0,
+                    new_size: original_total,
+                    duration_ms: 0,
+                },
+            ));
+        }
+
+        // Collect live vectors' data
+        let live_vectors: Vec<Vec<f32>> = self
+            .nodes
+            .iter()
+            .filter(|node| node.deleted == 0)
+            .map(|node| {
+                let vec = storage.get_vector(node.vector_id);
+                vec.into_owned()
+            })
+            .collect();
+
+        let new_size = live_vectors.len();
+
+        // Build new index AND new storage with same config
+        let config = self.config.clone();
+        let mut new_storage = VectorStorage::new(&config, None);
+        let mut new_index = HnswIndex::new(config, &new_storage)?;
+
+        // Copy compaction threshold from original
+        new_index.compaction_threshold = self.compaction_threshold;
+
+        // Re-insert all live vectors (IDs will be remapped)
+        for vector in live_vectors {
+            new_index.insert(&vector, &mut new_storage)?;
+        }
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        Ok((
+            new_index,
+            new_storage,
+            CompactionResult {
+                tombstones_removed: original_deleted,
+                new_size,
+                duration_ms,
+            },
+        ))
+    }
+
+    /// Insert a vector with a specific ID (validation only).
+    ///
+    /// This method validates that the specified ID doesn't conflict with
+    /// existing IDs, then delegates to the standard `insert()` method.
+    ///
+    /// **Important:** Due to storage design constraints where VectorIds must
+    /// match storage slot indices, the returned VectorId is the one assigned
+    /// by storage, NOT the requested ID. The `id` parameter is only used
+    /// for duplicate validation.
+    ///
+    /// For actual ID preservation during compaction, the storage would need
+    /// to support sparse ID assignment, which is not currently implemented.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The specific VectorId to validate (not actually used)
+    /// * `vector` - The vector data (must match configured dimensions)
+    /// * `storage` - Mutable reference to vector storage
+    ///
+    /// # Returns
+    ///
+    /// The VectorId assigned by storage (sequential).
+    ///
+    /// # Errors
+    ///
+    /// * `InvalidVectorId` - If ID already exists in index or is the sentinel value
+    /// * `DimensionMismatch` - If vector dimensions don't match config
+    /// * `Storage` - If storage operation fails
+    pub fn insert_with_id(
+        &mut self,
+        id: VectorId,
+        vector: &[f32],
+        storage: &mut VectorStorage,
+    ) -> Result<VectorId, GraphError> {
+        // Validate ID is not sentinel
+        if id == VectorId::INVALID {
+            return Err(GraphError::InvalidVectorId);
+        }
+
+        // Validate ID doesn't already exist
+        if self.nodes.iter().any(|n| n.vector_id == id) {
+            return Err(GraphError::InvalidVectorId);
+        }
+
+        // Validate dimensions
+        if vector.len() != self.config.dimensions as usize {
+            return Err(GraphError::DimensionMismatch {
+                expected: self.config.dimensions as usize,
+                actual: vector.len(),
+            });
+        }
+
+        // Delegate to regular insert (which handles all the graph connection logic)
+        self.insert(vector, storage)
     }
 }
 
@@ -1143,6 +1680,392 @@ mod tests {
             let result = HnswIndex::validate_vector(&vector);
             assert!(result.is_some());
             assert!(result.unwrap().contains("Infinity"));
+        }
+    }
+
+    // ============================================================
+    // SOFT DELETE TESTS (W16.2 - RFC-001)
+    // ============================================================
+
+    mod delete_tests {
+        use super::*;
+
+        fn create_test_index() -> (HnswIndex, VectorStorage) {
+            let config = HnswConfig::new(4);
+            let storage = VectorStorage::new(&config, None);
+            let index = HnswIndex::new(config, &storage).unwrap();
+            (index, storage)
+        }
+
+        #[test]
+        fn test_soft_delete_marks_node() {
+            let (mut index, mut storage) = create_test_index();
+            let vec = vec![1.0, 2.0, 3.0, 4.0];
+            let id = index.insert(&vec, &mut storage).unwrap();
+
+            assert!(!index.is_deleted(id).unwrap());
+            assert!(index.soft_delete(id).unwrap());
+            assert!(index.is_deleted(id).unwrap());
+        }
+
+        #[test]
+        fn test_soft_delete_idempotent() {
+            let (mut index, mut storage) = create_test_index();
+            let vec = vec![1.0, 2.0, 3.0, 4.0];
+            let id = index.insert(&vec, &mut storage).unwrap();
+
+            assert!(index.soft_delete(id).unwrap()); // First: true
+            assert!(!index.soft_delete(id).unwrap()); // Second: false
+            assert_eq!(index.deleted_count(), 1); // Still 1
+        }
+
+        #[test]
+        fn test_soft_delete_nonexistent_fails() {
+            let (mut index, _storage) = create_test_index();
+            let result = index.soft_delete(VectorId(999));
+            assert!(result.is_err());
+            assert!(matches!(result.unwrap_err(), GraphError::InvalidVectorId));
+        }
+
+        #[test]
+        fn test_deleted_count() {
+            let (mut index, mut storage) = create_test_index();
+
+            // Insert 3 vectors
+            let id1 = index.insert(&[1.0, 0.0, 0.0, 0.0], &mut storage).unwrap();
+            let id2 = index.insert(&[0.0, 1.0, 0.0, 0.0], &mut storage).unwrap();
+            let _id3 = index.insert(&[0.0, 0.0, 1.0, 0.0], &mut storage).unwrap();
+
+            assert_eq!(index.deleted_count(), 0);
+            assert_eq!(index.node_count(), 3);
+
+            // Delete 2
+            index.soft_delete(id1).unwrap();
+            index.soft_delete(id2).unwrap();
+
+            assert_eq!(index.deleted_count(), 2);
+            assert_eq!(index.live_count(), 1);
+        }
+
+        #[test]
+        fn test_tombstone_ratio() {
+            let (mut index, mut storage) = create_test_index();
+
+            // Empty index
+            assert_eq!(index.tombstone_ratio(), 0.0);
+
+            // Insert 4 vectors
+            let mut ids = Vec::new();
+            for i in 0..4 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            assert_eq!(index.tombstone_ratio(), 0.0);
+
+            // Delete 1 of 4 = 25%
+            index.soft_delete(ids[0]).unwrap();
+            assert!((index.tombstone_ratio() - 0.25).abs() < 0.01);
+
+            // Delete 2 of 4 = 50%
+            index.soft_delete(ids[1]).unwrap();
+            assert!((index.tombstone_ratio() - 0.50).abs() < 0.01);
+        }
+
+        #[test]
+        fn test_is_deleted_nonexistent_fails() {
+            let (index, _storage) = create_test_index();
+            let result = index.is_deleted(VectorId(999));
+            assert!(result.is_err());
+            assert!(matches!(result.unwrap_err(), GraphError::InvalidVectorId));
+        }
+
+        #[test]
+        fn test_live_count() {
+            let (mut index, mut storage) = create_test_index();
+
+            // Insert 5
+            let mut ids = Vec::new();
+            for i in 0..5 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete 2
+            index.soft_delete(ids[0]).unwrap();
+            index.soft_delete(ids[1]).unwrap();
+
+            assert_eq!(index.node_count(), 5);
+            assert_eq!(index.deleted_count(), 2);
+            assert_eq!(index.live_count(), 3);
+        }
+
+        #[test]
+        fn test_get_node_by_vector_id_helper() {
+            let (mut index, mut storage) = create_test_index();
+            let id = index.insert(&[1.0, 2.0, 3.0, 4.0], &mut storage).unwrap();
+
+            // Should find existing node
+            let node = index.get_node_by_vector_id(id);
+            assert!(node.is_ok());
+            assert_eq!(node.unwrap().vector_id, id);
+
+            // Should fail for non-existent
+            let bad = index.get_node_by_vector_id(VectorId(999));
+            assert!(bad.is_err());
+        }
+
+        #[test]
+        fn test_deleted_field_is_zero_by_default() {
+            let (mut index, mut storage) = create_test_index();
+            let id = index.insert(&[1.0, 2.0, 3.0, 4.0], &mut storage).unwrap();
+
+            let node = index.get_node_by_vector_id(id).unwrap();
+            assert_eq!(node.deleted, 0);
+        }
+
+        #[test]
+        fn test_deleted_field_set_to_one_after_delete() {
+            let (mut index, mut storage) = create_test_index();
+            let id = index.insert(&[1.0, 2.0, 3.0, 4.0], &mut storage).unwrap();
+
+            index.soft_delete(id).unwrap();
+
+            let node = index.get_node_by_vector_id(id).unwrap();
+            assert_eq!(node.deleted, 1);
+        }
+
+        #[test]
+        fn test_delete_invalid_vector_id_zero() {
+            let (mut index, _storage) = create_test_index();
+            // VectorId(0) is INVALID sentinel
+            let result = index.soft_delete(VectorId(0));
+            assert!(result.is_err());
+        }
+
+        // ============================================================
+        // ADJUSTED K TESTS (W16.3)
+        // ============================================================
+
+        #[test]
+        fn test_adjusted_k_no_tombstones() {
+            let (index, _storage) = create_test_index();
+            // No deletions -> k unchanged
+            assert_eq!(index.adjusted_k(10), 10);
+            assert_eq!(index.adjusted_k(1), 1);
+            assert_eq!(index.adjusted_k(100), 100);
+        }
+
+        #[test]
+        fn test_adjusted_k_with_tombstones() {
+            let (mut index, mut storage) = create_test_index();
+
+            // Insert 10 vectors
+            let mut ids = Vec::new();
+            for i in 0..10 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete 5 of 10 = 50% tombstones
+            for i in 0..5 {
+                index.soft_delete(ids[i]).unwrap();
+            }
+
+            // 50% tombstones → 2x multiplier
+            // adjusted_k(10) = ceil(10 / 0.5) = 20
+            let adjusted = index.adjusted_k(10);
+            assert!(
+                adjusted >= 18 && adjusted <= 22,
+                "Expected ~20, got {adjusted}"
+            );
+        }
+
+        #[test]
+        fn test_adjusted_k_capped_at_10x() {
+            let (mut index, mut storage) = create_test_index();
+
+            // Insert 100 vectors
+            let mut ids = Vec::new();
+            for i in 0..100 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete 95 of 100 = 95% tombstones
+            for i in 0..95 {
+                index.soft_delete(ids[i]).unwrap();
+            }
+
+            // Should cap at 10x, not 20x
+            let adjusted = index.adjusted_k(10);
+            assert_eq!(adjusted, 100, "Should be capped at 10x (100)");
+        }
+
+        #[test]
+        fn test_adjusted_k_10_percent_tombstones() {
+            let (mut index, mut storage) = create_test_index();
+
+            // Insert 10 vectors
+            let mut ids = Vec::new();
+            for i in 0..10 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete 1 of 10 = 10% tombstones
+            index.soft_delete(ids[0]).unwrap();
+
+            // 10% tombstones → 1.11x multiplier
+            // adjusted_k(10) = ceil(10 / 0.9) = ceil(11.11) = 12
+            let adjusted = index.adjusted_k(10);
+            assert!(
+                adjusted >= 11 && adjusted <= 13,
+                "Expected ~12, got {adjusted}"
+            );
+        }
+
+        // ============================================================
+        // BOUNDARY VALUE TESTS (m3 fix)
+        // ============================================================
+
+        #[test]
+        fn test_adjusted_k_boundary_zero_tombstones() {
+            let (mut index, mut storage) = create_test_index();
+
+            // Insert vectors but delete none (0% tombstones)
+            for i in 0..10 {
+                index.insert(&[i as f32; 4], &mut storage).unwrap();
+            }
+
+            // 0% tombstones → no adjustment
+            assert_eq!(index.adjusted_k(5), 5);
+            assert_eq!(index.adjusted_k(10), 10);
+            assert_eq!(index.tombstone_ratio(), 0.0);
+        }
+
+        #[test]
+        fn test_adjusted_k_boundary_50_percent() {
+            let (mut index, mut storage) = create_test_index();
+
+            let mut ids = Vec::new();
+            for i in 0..10 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete exactly 5 of 10 = 50%
+            for i in 0..5 {
+                index.soft_delete(ids[i]).unwrap();
+            }
+
+            // 50% tombstones → 2x
+            // adjusted_k(10) = 10 * 10 / 5 = 20
+            let adjusted = index.adjusted_k(10);
+            assert_eq!(adjusted, 20, "50% tombstones should give 2x");
+            assert!((index.tombstone_ratio() - 0.5).abs() < 0.01);
+        }
+
+        #[test]
+        fn test_adjusted_k_boundary_90_percent() {
+            let (mut index, mut storage) = create_test_index();
+
+            let mut ids = Vec::new();
+            for i in 0..10 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete 9 of 10 = 90%
+            for i in 0..9 {
+                index.soft_delete(ids[i]).unwrap();
+            }
+
+            // 90% tombstones → 10x
+            // adjusted_k(10) = 10 * 10 / 1 = 100
+            // Capped at 10x multiplier = 100
+            let adjusted = index.adjusted_k(10);
+            assert_eq!(adjusted, 100, "90% tombstones should give 10x (capped)");
+            assert!((index.tombstone_ratio() - 0.9).abs() < 0.01);
+        }
+
+        #[test]
+        fn test_adjusted_k_boundary_all_deleted() {
+            let (mut index, mut storage) = create_test_index();
+
+            let mut ids = Vec::new();
+            for i in 0..5 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete all = 100% tombstones
+            for id in &ids {
+                index.soft_delete(*id).unwrap();
+            }
+
+            // All deleted → returns k (search will return empty anyway)
+            let adjusted = index.adjusted_k(10);
+            assert_eq!(adjusted, 10, "All deleted should return original k");
+            assert_eq!(index.live_count(), 0);
+            assert!((index.tombstone_ratio() - 1.0).abs() < 0.01);
+        }
+
+        #[test]
+        fn test_adjusted_k_large_k_small_index() {
+            let (mut index, mut storage) = create_test_index();
+
+            // Insert only 5 vectors
+            let mut ids = Vec::new();
+            for i in 0..5 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete 2 = 40% tombstones
+            index.soft_delete(ids[0]).unwrap();
+            index.soft_delete(ids[1]).unwrap();
+
+            // Request k=100, but only 5 vectors in index
+            // adjusted_k(100) = 100 * 5 / 3 ≈ 166
+            // Capped at 10x = 1000
+            // Note: adjusted_k controls internal effort, not final result count
+            let adjusted = index.adjusted_k(100);
+            assert!(
+                adjusted >= 166 && adjusted <= 168,
+                "Should compute ~166 for 40% tombstones, got {adjusted}"
+            );
+        }
+
+        #[test]
+        fn test_adjusted_k_uses_constant() {
+            // Verify MAX_ADJUSTED_K_MULTIPLIER is used
+            assert_eq!(HnswIndex::MAX_ADJUSTED_K_MULTIPLIER, 10);
+        }
+
+        #[test]
+        fn test_adjusted_k_integer_precision() {
+            // Test that integer arithmetic doesn't lose precision
+            let (mut index, mut storage) = create_test_index();
+
+            let mut ids = Vec::new();
+            for i in 0..100 {
+                let id = index.insert(&[i as f32; 4], &mut storage).unwrap();
+                ids.push(id);
+            }
+
+            // Delete 33 of 100 = 33%
+            for i in 0..33 {
+                index.soft_delete(ids[i]).unwrap();
+            }
+
+            // adjusted_k(10) = 10 * 100 / 67 = 14.925... → 14
+            let adjusted = index.adjusted_k(10);
+            // Should be close to 15 (1.49x)
+            assert!(
+                adjusted >= 14 && adjusted <= 16,
+                "33% tombstones: expected ~15, got {adjusted}"
+            );
         }
     }
 }

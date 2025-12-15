@@ -48,3 +48,31 @@ export interface EdgeVecStats {
   /** Memory usage in bytes (approximate) */
   memoryBytes: number;
 }
+
+/**
+ * Result of a compaction operation (v0.3.0).
+ *
+ * Returned by `compact()` to provide metrics about the operation.
+ */
+export interface CompactionResult {
+  /** Number of tombstones (deleted vectors) removed during compaction */
+  tombstonesRemoved: number;
+  /** New index size after compaction (live vectors only) */
+  newSize: number;
+  /** Time taken for the compaction operation in milliseconds */
+  durationMs: number;
+}
+
+/**
+ * Soft delete statistics for the index.
+ */
+export interface SoftDeleteStats {
+  /** Number of vectors that have been soft-deleted */
+  deletedCount: number;
+  /** Number of vectors that are currently searchable */
+  liveCount: number;
+  /** Ratio of deleted to total vectors (0.0 to 1.0) */
+  tombstoneRatio: number;
+  /** Whether compaction is recommended (ratio > threshold) */
+  needsCompaction: boolean;
+}

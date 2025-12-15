@@ -8,10 +8,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Delete/update operations with tombstone-based deletion
 - P99 latency tracking in CI
 - ARM/NEON optimization verification
-- WASM bindings for batch insert
+- Multi-vector delete API
+
+---
+
+## [0.3.0] - 2025-12-15 — Soft Delete Release
+
+**Focus:** RFC-001 Soft Delete implementation — non-destructive vector deletion with compaction.
+
+### Added
+
+#### Soft Delete API (RFC-001)
+- **`soft_delete(VectorId)`** — Mark vector as deleted in O(1) time
+  - Tombstone-based deletion (vector remains in index but excluded from search)
+  - Idempotent: returns `false` if already deleted
+  - Error on invalid vector ID
+
+- **`is_deleted(VectorId)`** — Check if vector is deleted
+  - Returns `true` for tombstoned vectors
+  - Error on invalid vector ID
+
+- **`deleted_count()`** — Count of tombstoned vectors
+- **`live_count()`** — Count of active (non-deleted) vectors
+- **`tombstone_ratio()`** — Ratio of deleted to total vectors (0.0 to 1.0)
+
+#### Compaction API
+- **`compact()`** — Rebuild index removing all tombstones
+  - Returns `CompactionResult` with statistics
+  - Creates new index with only live vectors
+  - Preserves vector IDs during rebuild
+  - Warning: blocking operation for large indices
+
+- **`needs_compaction()`** — Check if tombstone ratio exceeds threshold
+- **`compaction_warning()`** — Get warning message if compaction recommended
+- **`compaction_threshold()`** — Get current threshold (default: 0.3 / 30%)
+- **`set_compaction_threshold(ratio)`** — Configure threshold (0.01 to 0.99)
+
+- **`CompactionResult`** struct:
+  - `tombstones_removed: u32` — Number of deleted vectors removed
+  - `new_size: u32` — Index size after compaction
+  - `duration_ms: f64` — Time taken in milliseconds
+
+#### WASM Bindings (v0.3.0)
+- **`softDelete(vectorId)`** — JavaScript soft delete
+- **`isDeleted(vectorId)`** — Check deletion status
+- **`deletedCount()` / `liveCount()`** — Statistics methods
+- **`tombstoneRatio()`** — Get tombstone ratio
+- **`needsCompaction()`** — Check compaction recommendation
+- **`compactionWarning()`** — Get warning string or null
+- **`compact()`** — Execute compaction, returns `WasmCompactionResult`
+- **`compactionThreshold()` / `setCompactionThreshold()`** — Threshold management
+
+#### Persistence Format v0.3
+- `deleted_count` field in snapshot header (offset 60-63)
+- `deleted` field per `HnswNode` (1 byte, was padding — zero memory overhead)
+- Automatic migration from v0.2 snapshots on load
+- VERSION_MINOR bumped from 2 to 3
+
+#### Browser Examples
+- **`wasm/examples/soft_delete.html`** — Interactive cyberpunk-themed demo
+  - Particle effects for visual feedback
+  - Real-time statistics dashboard
+  - Vector grid visualization (live vs deleted)
+  - Warning banner for compaction recommendation
+  - Activity log with color-coded entries
+
+- **`wasm/examples/soft_delete.js`** — Reusable JavaScript module
+  - `SoftDeleteDemo` class with full API
+  - Event system for insert/delete/compact/search
+  - Benchmark functionality
+  - Accessibility: focus indicators, ARIA labels, keyboard navigation
+
+#### TypeScript Support
+- Updated `pkg/edgevec.d.ts` with soft delete types
+- `WasmCompactionResult` interface
+- Full JSDoc documentation
+
+### Changed
+- Search now automatically excludes tombstoned vectors
+- `HnswNode.pad` renamed to `HnswNode.deleted` (repurposed padding byte)
+- Internal `adjusted_k()` calculation compensates for tombstones during search
+- Snapshot version bumped to v0.3 (reads v0.2, writes v0.3)
+
+### Fixed
+- Memory leak prevention in browser demo particle system (MAX_PARTICLES cap)
+- Silent error swallowing replaced with proper logging
+
+### Migration Notes
+
+**From v0.2.x to v0.3.0:**
+1. v0.2 snapshots are automatically migrated to v0.3 on load
+2. v0.3 snapshots **cannot** be read by v0.2.x (forward-incompatible)
+3. Always backup your index files before upgrading
+4. New soft delete methods are additive — existing code continues to work
+
+**Breaking Changes:** None for existing API users.
 
 ---
 

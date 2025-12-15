@@ -13,6 +13,11 @@
 const fs = require('fs');
 const path = require('path');
 
+// Import adapters
+const { EdgeVecAdapter } = require('./adapters/edgevec.js');
+const { HnswlibAdapter } = require('./adapters/hnswlib.js');
+const { VoyAdapter } = require('./adapters/voy.js');
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -171,34 +176,7 @@ class LibraryAdapter {
     }
 }
 
-/**
- * EdgeVec WASM Adapter (to be implemented)
- */
-class EdgeVecAdapter extends LibraryAdapter {
-    constructor() {
-        super('edgevec');
-        this.instance = null;
-    }
-
-    async initialize(config) {
-        // TODO: Load EdgeVec WASM module
-        // const { EdgeVec } = await import('../../pkg/edgevec.js');
-        // this.instance = new EdgeVec(config.dimensions);
-        console.log(`[${this.name}] Initialize stub - WASM module to be loaded`);
-    }
-
-    async insert(vectors) {
-        // TODO: Implement batch insert
-        console.log(`[${this.name}] Insert stub - ${vectors.length} vectors`);
-        return vectors.map((_, i) => i + 1); // Placeholder IDs
-    }
-
-    async search(query, k) {
-        // TODO: Implement search
-        console.log(`[${this.name}] Search stub - k=${k}`);
-        return []; // Placeholder results
-    }
-}
+// Note: EdgeVecAdapter is imported from ./adapters/edgevec.js
 
 // ============================================================================
 // Benchmark Runner
@@ -292,6 +270,7 @@ async function main() {
     const args = process.argv.slice(2);
     const libraryArg = args.find(a => a.startsWith('--library='));
     const vectorsArg = args.find(a => a.startsWith('--vectors='));
+    const allFlag = args.includes('--all');
 
     if (vectorsArg) {
         CONFIG.vectorCount = parseInt(vectorsArg.split('=')[1]);
@@ -304,14 +283,20 @@ async function main() {
     // Select adapters to run
     const adapters = [];
 
-    if (!libraryArg || libraryArg.includes('edgevec')) {
+    if (allFlag) {
+        // Run all adapters
+        adapters.push(new EdgeVecAdapter());
+        adapters.push(new HnswlibAdapter());
+        adapters.push(new VoyAdapter());
+    } else if (libraryArg) {
+        const lib = libraryArg.split('=')[1];
+        if (lib === 'edgevec') adapters.push(new EdgeVecAdapter());
+        if (lib === 'hnswlib') adapters.push(new HnswlibAdapter());
+        if (lib === 'voy') adapters.push(new VoyAdapter());
+    } else {
+        // Default: EdgeVec only
         adapters.push(new EdgeVecAdapter());
     }
-
-    // TODO: Add other adapters when implemented
-    // if (!libraryArg || libraryArg.includes('hnswlib')) {
-    //     adapters.push(new HnswlibAdapter());
-    // }
 
     // Run benchmarks
     const results = [];
@@ -336,9 +321,17 @@ async function main() {
     }
 
     // Save results to file
-    const outputPath = path.join(__dirname, 'results', `benchmark_${Date.now()}.json`);
-    fs.writeFileSync(outputPath, JSON.stringify(results.map(r => r.toJSON()), null, 2));
+    const resultsDir = path.join(__dirname, 'results');
+    const timestamp = Date.now();
+    const outputPath = path.join(resultsDir, `benchmark_${timestamp}.json`);
+    const latestPath = path.join(resultsDir, 'latest.json');
+
+    const resultsJson = JSON.stringify(results.map(r => r.toJSON()), null, 2);
+    fs.writeFileSync(outputPath, resultsJson);
+    fs.writeFileSync(latestPath, resultsJson);
+
     console.log(`\nResults saved to: ${outputPath}`);
+    console.log(`Latest results: ${latestPath}`);
 }
 
 // Run if executed directly
@@ -346,4 +339,4 @@ if (require.main === module) {
     main().catch(console.error);
 }
 
-module.exports = { BenchmarkResult, LibraryAdapter, EdgeVecAdapter, CONFIG };
+module.exports = { BenchmarkResult, LibraryAdapter, EdgeVecAdapter, HnswlibAdapter, VoyAdapter, CONFIG };

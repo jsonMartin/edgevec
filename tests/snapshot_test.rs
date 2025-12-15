@@ -24,8 +24,8 @@ mod tests {
         index.set_neighbors(node1, &[node2]).unwrap();
         index.set_entry_point(node2);
 
-        // 3. Delete one vector
-        index.delete(id1, &mut storage);
+        // 3. Delete one vector using RFC-001 soft_delete API
+        index.soft_delete(id1).unwrap();
 
         // 3. Snapshot
         let mut backend = MemoryBackend::new();
@@ -41,9 +41,9 @@ mod tests {
         let v1_rec = storage2.get_vector(id1);
         assert_eq!(&v1_rec[..], &[1.0, 1.0]);
 
-        // Verify Deletion
-        assert!(storage2.is_deleted(id1));
-        assert!(!storage2.is_deleted(id2));
+        // Verify Deletion (soft_delete marks in HnswIndex, not storage)
+        assert!(index2.is_deleted(id1).unwrap());
+        assert!(!index2.is_deleted(id2).unwrap());
 
         // Verify Graph
         let n1_rec = index2.get_node(node1).unwrap();

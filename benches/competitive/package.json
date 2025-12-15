@@ -18,8 +18,8 @@
   "author": "EdgeVec Team",
   "license": "MIT",
   "dependencies": {
-  },
-  "devDependencies": {
+    "hnswlib-node": "^3.0.0",
+    "voy-search": "^0.6.3"
   },
   "engines": {
     "node": ">=18.0.0"

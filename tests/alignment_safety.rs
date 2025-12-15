@@ -46,7 +46,7 @@ fn hnsw_node_roundtrip() {
         neighbor_offset: 100,
         neighbor_len: 16,
         max_layer: 3,
-        pad: 0,
+        deleted: 0, // v0.3.0: soft delete flag (was pad)
     };
 
     // Serialize to bytes
@@ -63,7 +63,7 @@ fn hnsw_node_roundtrip() {
     assert_eq!(original.neighbor_offset, recovered.neighbor_offset);
     assert_eq!(original.neighbor_len, recovered.neighbor_len);
     assert_eq!(original.max_layer, recovered.max_layer);
-    assert_eq!(original.pad, recovered.pad);
+    assert_eq!(original.deleted, recovered.deleted);
 }
 
 /// Tests roundtrip serialization of VectorId via bytemuck.
@@ -87,21 +87,21 @@ fn hnsw_node_slice_roundtrip() {
             neighbor_offset: 0,
             neighbor_len: 8,
             max_layer: 0,
-            pad: 0,
+            deleted: 0, // v0.3.0
         },
         HnswNode {
             vector_id: VectorId(2),
             neighbor_offset: 8,
             neighbor_len: 16,
             max_layer: 1,
-            pad: 0,
+            deleted: 0, // v0.3.0
         },
         HnswNode {
             vector_id: VectorId(3),
             neighbor_offset: 24,
             neighbor_len: 24,
             max_layer: 2,
-            pad: 0,
+            deleted: 0, // v0.3.0
         },
     ];
 
@@ -153,7 +153,7 @@ fn try_cast_slice_accepts_aligned() {
         neighbor_offset: 0,
         neighbor_len: 0,
         max_layer: 0,
-        pad: 0,
+        deleted: 0, // v0.3.0
     }];
 
     // Cast to bytes
@@ -193,7 +193,7 @@ fn zeroable_creates_valid_zero() {
     assert_eq!(zeroed_node.neighbor_offset, 0);
     assert_eq!(zeroed_node.neighbor_len, 0);
     assert_eq!(zeroed_node.max_layer, 0);
-    assert_eq!(zeroed_node.pad, 0);
+    assert_eq!(zeroed_node.deleted, 0);
 
     let zeroed_id: VectorId = bytemuck::Zeroable::zeroed();
     assert_eq!(zeroed_id, VectorId(0));

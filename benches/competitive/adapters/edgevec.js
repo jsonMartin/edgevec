@@ -9,6 +9,7 @@
  */
 
 const path = require('path');
+const { pathToFileURL } = require('url');
 
 /**
  * EdgeVec WASM Adapter
@@ -28,13 +29,15 @@ class EdgeVecAdapter {
      */
     async initialize(config) {
         // Path to EdgeVec WASM package (built with wasm-pack)
-        const pkgPath = path.join(__dirname, '../../../pkg');
+        const pkgPath = path.join(__dirname, '../../../pkg/edgevec.js');
+        // Use file:// URL for Windows compatibility
+        const pkgUrl = pathToFileURL(pkgPath).href;
 
         try {
             // Dynamic import of the WASM module
             // Note: This requires the WASM module to be built first with:
             //   wasm-pack build --target nodejs --release
-            this.wasm = await import(path.join(pkgPath, 'edgevec.js'));
+            this.wasm = await import(pkgUrl);
 
             // Create EdgeVec instance with config
             const edgevecConfig = new this.wasm.EdgeVecConfig(config.dimensions);
@@ -50,8 +53,9 @@ class EdgeVecAdapter {
 
             console.log(`[${this.name}] Initialized with dimensions=${config.dimensions}`);
         } catch (error) {
-            console.warn(`[${this.name}] WASM module not found. Build with: wasm-pack build --target nodejs`);
-            console.warn(`[${this.name}] Running in stub mode.`);
+            console.warn(`[${this.name}] WASM module not found at ${pkgPath}`);
+            console.warn(`[${this.name}] Error: ${error.message}`);
+            console.warn(`[${this.name}] Build with: wasm-pack build --target nodejs --release`);
             this.instance = null;
         }
     }

@@ -1,8 +1,8 @@
 {
   "name": "edgevec",
   "type": "module",
-  "description": "High-performance embedded vector database for Browser, Node, and Edge",
-  "version": "0.2.0-alpha.2",
+  "description": "High-performance embedded vector database for Browser, Node, and Edge with Soft Delete",
+  "version": "0.3.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -10,8 +10,10 @@
   },
   "files": [
     "edgevec_bg.wasm",
+    "edgevec_bg.wasm.d.ts",
     "edgevec.js",
-    "edgevec.d.ts"
+    "edgevec.d.ts",
+    "README.md"
   ],
   "main": "edgevec.js",
   "types": "edgevec.d.ts",
@@ -23,6 +25,9 @@
     "database",
     "wasm",
     "hnsw",
-    "similarity-search"
+    "similarity-search",
+    "soft-delete",
+    "compaction",
+    "embedding"
   ]
 }

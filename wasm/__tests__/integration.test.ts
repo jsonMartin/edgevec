@@ -1,6 +1,7 @@
 // wasm/__tests__/integration.test.ts
 
-import { EdgeVecClient, EdgeVecConfigBuilder } from '../index';
+import { EdgeVecClient } from '../EdgeVecClient';
+import { EdgeVecConfigBuilder } from '../EdgeVecConfig';
 
 describe('Integration Tests', () => {
   describe('Browser Workflow', () => {

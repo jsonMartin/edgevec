@@ -1,5 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use edgevec::quantization::{QuantizerConfig, ScalarQuantizer};
+use edgevec::quantization::ScalarQuantizer;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 

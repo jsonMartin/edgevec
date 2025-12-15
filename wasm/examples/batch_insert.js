@@ -110,6 +110,8 @@ const DOM = {
 
     // Speedup
     speedupValue: document.getElementById('speedupValue'),
+    speedupUnit: document.getElementById('speedupUnit'),
+    speedupNote: document.getElementById('speedupNote'),
 
     // Terminal
     terminalOutput: document.getElementById('terminalOutput'),
@@ -492,13 +494,32 @@ async function runComparison() {
         // Run batch
         const batchResult = await runBatchInsert();
 
-        // Calculate speedup
-        const speedup = seqResult.totalTime / batchResult.totalTime;
-        DOM.speedupValue.textContent = speedup.toFixed(2) + 'x';
+        // Calculate efficiency ratio
+        const ratio = seqResult.totalTime / batchResult.totalTime;
+        const count = parseInt(DOM.vectorCount.value, 10);
+        DOM.speedupValue.textContent = ratio.toFixed(2) + 'x';
+
+        // Update unit text and note based on ratio and batch size
+        if (ratio > 1.05) {
+            DOM.speedupUnit.textContent = 'faster (batch wins)';
+            DOM.speedupNote.textContent = 'Batch reduces JS↔WASM boundary overhead.';
+        } else if (ratio < 0.95) {
+            DOM.speedupUnit.textContent = 'slower (sequential wins)';
+            DOM.speedupNote.textContent = 'At this scale, both methods are equivalent. HNSW graph construction dominates.';
+        } else {
+            DOM.speedupUnit.textContent = 'equivalent';
+            DOM.speedupNote.textContent = 'At larger scales, HNSW graph construction dominates and both methods converge.';
+        }
+
+        // Add scaling note for larger batches
+        if (count >= 5000) {
+            DOM.speedupNote.textContent += ' Batch still provides simpler API with single call.';
+        }
+
         DOM.speedupCard.classList.add('visible');
 
         log('='.repeat(50), LogLevel.INFO);
-        log(`SPEEDUP: Batch is ${speedup.toFixed(2)}x faster than sequential`, LogLevel.SUCCESS);
+        log(`EFFICIENCY: Batch ratio ${ratio.toFixed(2)}x vs sequential`, LogLevel.SUCCESS);
 
         showStatus('Comparison complete!', 'success');
 
