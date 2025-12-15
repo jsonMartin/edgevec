@@ -14,15 +14,22 @@
 ## What's New in v0.3.0
 
 ### Soft Delete API (RFC-001)
-- **`softDelete(id)`** — O(1) tombstone-based deletion
-- **`isDeleted(id)`** — Check deletion status
-- **`deletedCount()` / `liveCount()`** — Vector statistics
-- **`tombstoneRatio()`** — Monitor index health
+- **`soft_delete(id)`** — O(1) tombstone-based deletion
+- **`is_deleted(id)`** — Check deletion status
+- **`deleted_count()` / `live_count()`** — Vector statistics
+- **`tombstone_ratio()`** — Monitor index health
 
 ### Compaction API
 - **`compact()`** — Rebuild index removing all tombstones
-- **`needsCompaction()`** — Check if compaction recommended
-- **`compactionWarning()`** — Get actionable warning message
+- **`needs_compaction()`** — Check if compaction recommended
+- **`compaction_warning()`** — Get actionable warning message
+- Configurable threshold (default: 30% tombstones)
+
+### WASM Bindings
+- Full soft delete API exposed to JavaScript/TypeScript
+- `softDelete()`, `isDeleted()`, `deletedCount()`, `liveCount()`
+- `compact()`, `needsCompaction()`, `compactionWarning()`
+- Interactive browser demo at `/wasm/examples/soft_delete.html`
 
 ### Persistence Format v0.3
 - Automatic migration from v0.2 snapshots
@@ -31,6 +38,7 @@
 ### Previous (v0.2.1)
 - Safety hardening with `bytemuck` for alignment-verified operations
 - Batch insert API with progress callback
+- 24x faster search than voy (fastest pure-WASM competitor)
 
 ---
 
@@ -171,6 +179,80 @@ fn main() -> Result<(), BatchError> {
 
 **Features:** Progress tracking, best-effort semantics, and unified error handling.
 
+### Soft Delete (Rust)
+
+Delete vectors without rebuilding the index (v0.3.0+):
+
+```rust,no_run
+use edgevec::{HnswConfig, HnswIndex, VectorStorage};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let config = HnswConfig::new(128);
+    let mut storage = VectorStorage::new(&config, None);
+    let mut index = HnswIndex::new(config, &storage)?;
+
+    // Insert a vector
+    let vector = vec![1.0; 128];
+    let id = index.insert(&vector, &mut storage)?;
+
+    // Soft delete (O(1) operation)
+    let was_deleted = index.soft_delete(id)?;
+    println!("Deleted: {}", was_deleted);
+
+    // Check deletion status
+    println!("Is deleted: {}", index.is_deleted(id)?);
+
+    // Get statistics
+    println!("Live: {}, Deleted: {}", index.live_count(), index.deleted_count());
+    println!("Tombstone ratio: {:.1}%", index.tombstone_ratio() * 100.0);
+
+    // Compact when tombstones accumulate (rebuilds index)
+    if index.needs_compaction() {
+        let (new_index, new_storage, result) = index.compact(&mut storage)?;
+        println!("Removed {} tombstones", result.tombstones_removed);
+        // Use new_index and new_storage for future operations
+    }
+
+    Ok(())
+}
+```
+
+### Soft Delete (JavaScript)
+
+```javascript
+import init, { EdgeVec, EdgeVecConfig } from 'edgevec';
+
+await init();
+const config = new EdgeVecConfig(128);
+const index = new EdgeVec(config);
+
+// Insert vectors
+const vector = new Float32Array(128).fill(0.5);
+const id = index.insert(vector);
+
+// Soft delete
+const wasDeleted = index.softDelete(id);
+console.log('Deleted:', wasDeleted);
+
+// Statistics
+console.log('Live:', index.liveCount());
+console.log('Deleted:', index.deletedCount());
+console.log('Tombstone ratio:', index.tombstoneRatio());
+
+// Compact when needed
+if (index.needsCompaction()) {
+    const result = index.compact();
+    console.log(`Removed ${result.tombstones_removed} tombstones`);
+}
+```
+
+| Operation | Time Complexity | Notes |
+|:----------|:----------------|:------|
+| `soft_delete()` | O(1) | Set tombstone byte |
+| `is_deleted()` | O(1) | Read tombstone byte |
+| `search()` | O(log n) | Automatically excludes tombstones |
+| `compact()` | O(n log n) | Full index rebuild |
+
 ---
 
 ## Development Status
@@ -286,6 +368,67 @@ Native bindings (hnswlib-node) are faster but require C++ compilation and don't 
 | **`BENCHMARK_SCIENTIST`** | Performance testing |
 | **HOSTILE_REVIEWER** | Quality gate (has veto power) |
 | **DOCWRITER** | Documentation, README |
+
+---
+
+## Development Environment
+
+### Local CI Simulation
+
+Before pushing changes, run the local CI simulation to catch issues:
+
+```bash
+# Run full CI check with timing validation
+cargo xtask ci-check
+
+# Run pre-release validation (CI + docs + publish dry-run)
+cargo xtask pre-release
+```
+
+The `ci-check` command:
+- Sets CI environment variables (`RUSTFLAGS`, `PROPTEST_CASES`, `NUM_VECTORS`)
+- Runs formatting, clippy, tests, and WASM checks
+- Validates each step completes within CI timeout limits
+
+**Timing Budgets (xtask / CI timeout):**
+| Step | Local Limit | CI Timeout | Typical |
+|:-----|:------------|:-----------|:--------|
+| Formatting | 30s | 5min | <1s |
+| Clippy | 180s | 10min | ~20s |
+| Tests | 600s | 30min | ~50s |
+| WASM Check | 120s | 10min | <1s |
+
+If a step exceeds its local limit, the build fails to catch performance regressions before CI.
+
+### Environment Variables
+
+| Variable | Local Default | CI Value | Purpose |
+|:---------|:--------------|:---------|:--------|
+| `RUSTFLAGS` | (native) | `-C target-cpu=x86-64-v2` | Prevent SIGILL on CI runners |
+| `PROPTEST_CASES` | 256 | 32 | Reduce proptest runtime |
+| `NUM_VECTORS` | 10000 | 1000 | Reduce integration test runtime |
+
+### Building
+
+```bash
+# Standard build
+cargo build --release
+
+# WASM build
+wasm-pack build --release
+
+# Run tests
+cargo test --all
+
+# Run benchmarks
+cargo bench
+```
+
+### Release Process
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full release process, including:
+- [Release Checklist](./docs/RELEASE_CHECKLIST.md)
+- [Rollback Procedures](./docs/ROLLBACK_PROCEDURES.md)
 
 ---
 

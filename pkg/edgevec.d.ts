@@ -233,6 +233,53 @@ export class EdgeVec {
    */
   insertBatchFlat(vectors: Float32Array, count: number): Uint32Array;
   /**
+   * Soft-delete multiple vectors using BigUint64Array (modern browsers).
+   *
+   * Efficiently deletes multiple vectors in a single operation. More efficient
+   * than calling `softDelete()` N times due to reduced FFI overhead and
+   * deduplication of input IDs.
+   *
+   * **Browser Compatibility:** Requires BigUint64Array support (Chrome 67+,
+   * Firefox 68+, Safari 15+). For Safari 14 compatibility, use
+   * `softDeleteBatchCompat()` instead.
+   *
+   * # Arguments
+   *
+   * * `ids` - A Uint32Array of vector IDs to delete
+   *
+   * # Returns
+   *
+   * A `WasmBatchDeleteResult` object containing:
+   * * `deleted` - Number of vectors successfully deleted
+   * * `alreadyDeleted` - Number of vectors that were already deleted
+   * * `invalidIds` - Number of IDs not found in the index
+   * * `total` - Total IDs in input (including duplicates)
+   * * `uniqueCount` - Number of unique IDs after deduplication
+   *
+   * # Behavior
+   *
+   * * **Deduplication:** Duplicate IDs in input are processed only once
+   * * **Idempotent:** Re-deleting an already-deleted vector returns `alreadyDeleted`
+   * * **Atomic:** Two-phase validation ensures all-or-nothing semantics
+   *
+   * # Errors
+   *
+   * Returns an error if the batch size exceeds the maximum (10M IDs).
+   *
+   * # Example (JavaScript)
+   *
+   * ```javascript
+   * const ids = new Uint32Array([1, 3, 5, 7, 9, 11]);
+   * const result = index.softDeleteBatch(ids);
+   *
+   * console.log(`Deleted: ${result.deleted}`);
+   * console.log(`Already deleted: ${result.alreadyDeleted}`);
+   * console.log(`Invalid IDs: ${result.invalidIds}`);
+   * console.log(`All valid: ${result.allValid()}`);
+   * ```
+   */
+  softDeleteBatch(ids: Uint32Array): WasmBatchDeleteResult;
+  /**
    * Get a warning message if compaction is recommended.
    *
    * # Returns
@@ -268,6 +315,38 @@ export class EdgeVec {
    * * `ratio` - The new threshold (clamped to 0.01 - 0.99).
    */
   setCompactionThreshold(ratio: number): void;
+  /**
+   * Soft-delete multiple vectors using number array (Safari 14 compatible).
+   *
+   * This method provides Safari 14 compatibility by accepting a regular JavaScript
+   * Array of numbers instead of BigUint64Array. IDs must be less than 2^53
+   * (Number.MAX_SAFE_INTEGER) to avoid precision loss.
+   *
+   * **Note:** For modern browsers, prefer `softDeleteBatch()` which uses typed arrays.
+   *
+   * # Arguments
+   *
+   * * `ids` - A JavaScript Array or Float64Array of vector IDs
+   *
+   * # Returns
+   *
+   * Same as `softDeleteBatch()` - see that method for details.
+   *
+   * # Errors
+   *
+   * Returns an error if the batch size exceeds the maximum (10M IDs) or if
+   * any ID exceeds Number.MAX_SAFE_INTEGER.
+   *
+   * # Example (JavaScript)
+   *
+   * ```javascript
+   * // Safari 14 compatible
+   * const ids = [1, 3, 5, 7, 9, 11];
+   * const result = index.softDeleteBatchCompat(ids);
+   * console.log(`Deleted: ${result.deleted}`);
+   * ```
+   */
+  softDeleteBatchCompat(ids: Float64Array): WasmBatchDeleteResult;
   /**
    * Batch insert with progress callback (W14.1).
    *
@@ -442,6 +521,44 @@ export class PersistenceIterator {
   next_chunk(): Uint8Array | undefined;
 }
 
+export class WasmBatchDeleteResult {
+  private constructor();
+  free(): void;
+  [Symbol.dispose](): void;
+  /**
+   * Check if any deletions occurred in this operation.
+   *
+   * Returns `true` if at least one vector was newly deleted.
+   */
+  anyDeleted(): boolean;
+  /**
+   * Check if all operations succeeded (no invalid IDs).
+   *
+   * Returns `true` if every ID was valid (either deleted or already deleted).
+   */
+  allValid(): boolean;
+  /**
+   * Number of invalid IDs (not found in the index).
+   */
+  readonly invalidIds: number;
+  /**
+   * Number of unique vector IDs after deduplication.
+   */
+  readonly uniqueCount: number;
+  /**
+   * Number of vectors that were already deleted (tombstoned).
+   */
+  readonly alreadyDeleted: number;
+  /**
+   * Total number of vector IDs provided in the input (including duplicates).
+   */
+  readonly total: number;
+  /**
+   * Number of vectors successfully deleted in this operation.
+   */
+  readonly deleted: number;
+}
+
 export class WasmCompactionResult {
   private constructor();
   free(): void;
@@ -479,6 +596,7 @@ export interface InitOutput {
   readonly __wbg_get_wasmcompactionresult_tombstones_removed: (a: number) => number;
   readonly __wbg_persistenceiterator_free: (a: number, b: number) => void;
   readonly __wbg_set_edgevecconfig_dimensions: (a: number, b: number) => void;
+  readonly __wbg_wasmbatchdeleteresult_free: (a: number, b: number) => void;
   readonly __wbg_wasmcompactionresult_free: (a: number, b: number) => void;
   readonly batchinsertconfig_new: () => number;
   readonly batchinsertconfig_set_validateDimensions: (a: number, b: number) => void;
@@ -504,6 +622,8 @@ export interface InitOutput {
   readonly edgevec_search: (a: number, b: number, c: number, d: number) => void;
   readonly edgevec_setCompactionThreshold: (a: number, b: number) => void;
   readonly edgevec_softDelete: (a: number, b: number, c: number) => void;
+  readonly edgevec_softDeleteBatch: (a: number, b: number, c: number) => void;
+  readonly edgevec_softDeleteBatchCompat: (a: number, b: number, c: number) => void;
   readonly edgevec_tombstoneRatio: (a: number) => number;
   readonly edgevecconfig_new: (a: number) => number;
   readonly edgevecconfig_set_ef_construction: (a: number, b: number) => void;
@@ -512,10 +632,17 @@ export interface InitOutput {
   readonly edgevecconfig_set_m0: (a: number, b: number) => void;
   readonly edgevecconfig_set_metric: (a: number, b: number, c: number) => void;
   readonly persistenceiterator_next_chunk: (a: number) => number;
+  readonly wasmbatchdeleteresult_allValid: (a: number) => number;
+  readonly wasmbatchdeleteresult_alreadyDeleted: (a: number) => number;
+  readonly wasmbatchdeleteresult_anyDeleted: (a: number) => number;
+  readonly wasmbatchdeleteresult_deleted: (a: number) => number;
+  readonly wasmbatchdeleteresult_invalidIds: (a: number) => number;
   readonly init_logging: () => void;
-  readonly __wasm_bindgen_func_elem_301: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_294: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_496: (a: number, b: number, c: number, d: number) => void;
+  readonly wasmbatchdeleteresult_total: (a: number) => number;
+  readonly wasmbatchdeleteresult_uniqueCount: (a: number) => number;
+  readonly __wasm_bindgen_func_elem_325: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_318: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_520: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number) => void;
   readonly __wbindgen_export2: (a: number, b: number, c: number) => void;
   readonly __wbindgen_export3: (a: number, b: number) => number;

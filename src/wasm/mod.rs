@@ -783,6 +783,136 @@ impl EdgeVec {
             duration_ms: result.duration_ms as u32,
         })
     }
+
+    // =========================================================================
+    // BATCH DELETE API (W18.5 — RFC-001)
+    // =========================================================================
+
+    /// Soft-delete multiple vectors using BigUint64Array (modern browsers).
+    ///
+    /// Efficiently deletes multiple vectors in a single operation. More efficient
+    /// than calling `softDelete()` N times due to reduced FFI overhead and
+    /// deduplication of input IDs.
+    ///
+    /// **Browser Compatibility:** Requires BigUint64Array support (Chrome 67+,
+    /// Firefox 68+, Safari 15+). For Safari 14 compatibility, use
+    /// `softDeleteBatchCompat()` instead.
+    ///
+    /// # Arguments
+    ///
+    /// * `ids` - A Uint32Array of vector IDs to delete
+    ///
+    /// # Returns
+    ///
+    /// A `WasmBatchDeleteResult` object containing:
+    /// * `deleted` - Number of vectors successfully deleted
+    /// * `alreadyDeleted` - Number of vectors that were already deleted
+    /// * `invalidIds` - Number of IDs not found in the index
+    /// * `total` - Total IDs in input (including duplicates)
+    /// * `uniqueCount` - Number of unique IDs after deduplication
+    ///
+    /// # Behavior
+    ///
+    /// * **Deduplication:** Duplicate IDs in input are processed only once
+    /// * **Idempotent:** Re-deleting an already-deleted vector returns `alreadyDeleted`
+    /// * **Atomic:** Two-phase validation ensures all-or-nothing semantics
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the batch size exceeds the maximum (10M IDs).
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const ids = new Uint32Array([1, 3, 5, 7, 9, 11]);
+    /// const result = index.softDeleteBatch(ids);
+    ///
+    /// console.log(`Deleted: ${result.deleted}`);
+    /// console.log(`Already deleted: ${result.alreadyDeleted}`);
+    /// console.log(`Invalid IDs: ${result.invalidIds}`);
+    /// console.log(`All valid: ${result.allValid()}`);
+    /// ```
+    #[wasm_bindgen(js_name = softDeleteBatch)]
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn soft_delete_batch(
+        &mut self,
+        ids: js_sys::Uint32Array,
+    ) -> Result<WasmBatchDeleteResult, JsValue> {
+        // Convert Uint32Array to Vec<VectorId>
+        let id_vec: Vec<u32> = ids.to_vec();
+        let vec_ids: Vec<crate::hnsw::VectorId> = id_vec
+            .iter()
+            .map(|&id| crate::hnsw::VectorId(u64::from(id)))
+            .collect();
+
+        // Call core batch delete
+        let result = self.inner.soft_delete_batch(&vec_ids);
+
+        Ok(WasmBatchDeleteResult {
+            deleted: result.deleted as u32,
+            already_deleted: result.already_deleted as u32,
+            invalid_ids: result.invalid_ids as u32,
+            total: result.total as u32,
+            unique_count: result.unique_count as u32,
+        })
+    }
+
+    /// Soft-delete multiple vectors using number array (Safari 14 compatible).
+    ///
+    /// This method provides Safari 14 compatibility by accepting a regular JavaScript
+    /// Array of numbers instead of BigUint64Array. IDs must be less than 2^53
+    /// (Number.MAX_SAFE_INTEGER) to avoid precision loss.
+    ///
+    /// **Note:** For modern browsers, prefer `softDeleteBatch()` which uses typed arrays.
+    ///
+    /// # Arguments
+    ///
+    /// * `ids` - A JavaScript Array or Float64Array of vector IDs
+    ///
+    /// # Returns
+    ///
+    /// Same as `softDeleteBatch()` - see that method for details.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the batch size exceeds the maximum (10M IDs) or if
+    /// any ID exceeds Number.MAX_SAFE_INTEGER.
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// // Safari 14 compatible
+    /// const ids = [1, 3, 5, 7, 9, 11];
+    /// const result = index.softDeleteBatchCompat(ids);
+    /// console.log(`Deleted: ${result.deleted}`);
+    /// ```
+    #[wasm_bindgen(js_name = softDeleteBatchCompat)]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    #[allow(clippy::cast_sign_loss)]
+    pub fn soft_delete_batch_compat(
+        &mut self,
+        ids: js_sys::Float64Array,
+    ) -> Result<WasmBatchDeleteResult, JsValue> {
+        // Convert Float64Array to Vec<VectorId>
+        // Safe for IDs < 2^53 (Number.MAX_SAFE_INTEGER)
+        let id_vec: Vec<f64> = ids.to_vec();
+        let vec_ids: Vec<crate::hnsw::VectorId> = id_vec
+            .iter()
+            .map(|&id| crate::hnsw::VectorId(id as u64))
+            .collect();
+
+        // Call core batch delete
+        let result = self.inner.soft_delete_batch(&vec_ids);
+
+        Ok(WasmBatchDeleteResult {
+            deleted: result.deleted as u32,
+            already_deleted: result.already_deleted as u32,
+            invalid_ids: result.invalid_ids as u32,
+            total: result.total as u32,
+            unique_count: result.unique_count as u32,
+        })
+    }
 }
 
 /// Result of a compaction operation (v0.3.0).
@@ -802,4 +932,67 @@ pub struct WasmCompactionResult {
     /// Time taken for the compaction operation in milliseconds.
     #[wasm_bindgen(readonly)]
     pub duration_ms: u32,
+}
+
+/// Result of a batch delete operation (W18.4/W18.5).
+///
+/// Returned by `EdgeVec.softDeleteBatch()` and `EdgeVec.softDeleteBatchCompat()`
+/// to provide detailed metrics about the batch deletion.
+#[wasm_bindgen]
+#[derive(Debug, Clone)]
+pub struct WasmBatchDeleteResult {
+    deleted: u32,
+    already_deleted: u32,
+    invalid_ids: u32,
+    total: u32,
+    unique_count: u32,
+}
+
+#[wasm_bindgen]
+impl WasmBatchDeleteResult {
+    /// Number of vectors successfully deleted in this operation.
+    #[wasm_bindgen(getter)]
+    pub fn deleted(&self) -> u32 {
+        self.deleted
+    }
+
+    /// Number of vectors that were already deleted (tombstoned).
+    #[wasm_bindgen(getter, js_name = "alreadyDeleted")]
+    pub fn already_deleted(&self) -> u32 {
+        self.already_deleted
+    }
+
+    /// Number of invalid IDs (not found in the index).
+    #[wasm_bindgen(getter, js_name = "invalidIds")]
+    pub fn invalid_ids(&self) -> u32 {
+        self.invalid_ids
+    }
+
+    /// Total number of vector IDs provided in the input (including duplicates).
+    #[wasm_bindgen(getter)]
+    pub fn total(&self) -> u32 {
+        self.total
+    }
+
+    /// Number of unique vector IDs after deduplication.
+    #[wasm_bindgen(getter, js_name = "uniqueCount")]
+    pub fn unique_count(&self) -> u32 {
+        self.unique_count
+    }
+
+    /// Check if all operations succeeded (no invalid IDs).
+    ///
+    /// Returns `true` if every ID was valid (either deleted or already deleted).
+    #[wasm_bindgen(js_name = "allValid")]
+    pub fn all_valid(&self) -> bool {
+        self.invalid_ids == 0
+    }
+
+    /// Check if any deletions occurred in this operation.
+    ///
+    /// Returns `true` if at least one vector was newly deleted.
+    #[wasm_bindgen(js_name = "anyDeleted")]
+    pub fn any_deleted(&self) -> bool {
+        self.deleted > 0
+    }
 }

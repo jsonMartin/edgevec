@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeVec | Batch Delete Demo</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0a0f' width='100' height='100'/><polygon fill='%2300ffff' points='50,10 90,30 90,70 50,90 10,70 10,30'/><polygon fill='%230a0a0f' points='50,25 75,37 75,63 50,75 25,63 25,37'/><circle fill='%23ff00ff' cx='50' cy='50' r='8'/></svg>">
+    <style>
+        /* ═══════════════════════════════════════════════════════════════════
+           CYBERPUNK THEME - EdgeVec Batch Delete Demo
+           ═══════════════════════════════════════════════════════════════════ */
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --cyan: #00ffff;
+            --cyan-dim: #00aaaa;
+            --magenta: #ff00ff;
+            --magenta-dim: #aa00aa;
+            --purple: #9945ff;
+            --yellow: #ffff00;
+            --green: #00ff88;
+            --red: #ff3366;
+            --orange: #ff9933;
+            --white: #e0e0e0;
+            --gray: #666680;
+            --border: #2a2a3a;
+            --glow-cyan: 0 0 20px rgba(0, 255, 255, 0.3);
+            --glow-magenta: 0 0 20px rgba(255, 0, 255, 0.3);
+            --glow-green: 0 0 20px rgba(0, 255, 136, 0.3);
+            --glow-red: 0 0 20px rgba(255, 51, 102, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Monaco', monospace;
+            background: var(--bg-primary);
+            color: var(--white);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background Grid Effect */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           HEADER
+           ═══════════════════════════════════════════════════════════════════ */
+
+        header {
+            border-bottom: 1px solid var(--border);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+        }
+
+        .logo-icon svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(var(--glow-cyan));
+        }
+
+        .logo-text {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--cyan) 0%, var(--magenta) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 2px;
+        }
+
+        .logo-version {
+            font-size: 10px;
+            color: var(--gray);
+            background: var(--bg-tertiary);
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+
+        .header-info {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .info-label {
+            color: var(--gray);
+        }
+
+        .info-value {
+            color: var(--cyan);
+        }
+
+        .info-value.supported {
+            color: var(--green);
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           MAIN LAYOUT
+           ═══════════════════════════════════════════════════════════════════ */
+
+        main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 40px;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 30px;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           CONTROL PANEL
+           ═══════════════════════════════════════════════════════════════════ */
+
+        .control-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            height: fit-content;
+            position: sticky;
+            top: 30px;
+        }
+
+        .panel-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--magenta);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--gray);
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .control-input {
+            width: 100%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 12px 14px;
+            color: var(--white);
+            font-family: inherit;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .control-input:focus {
+            outline: none;
+            border-color: var(--cyan);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .control-hint {
+            font-size: 10px;
+            color: var(--gray);
+            margin-top: 4px;
+        }
+
+        /* Action Buttons */
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn {
+            background: transparent;
+            border: 1px solid;
+            border-radius: 4px;
+            padding: 14px 20px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--cyan);
+            color: var(--bg-primary);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .btn-danger {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: var(--red);
+            color: var(--bg-primary);
+            box-shadow: var(--glow-red);
+        }
+
+        .btn-secondary {
+            border-color: var(--gray);
+            color: var(--gray);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            border-color: var(--white);
+            color: var(--white);
+        }
+
+        .btn-success {
+            border-color: var(--green);
+            color: var(--green);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: var(--green);
+            color: var(--bg-primary);
+            box-shadow: var(--glow-green);
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           RESULTS AREA
+           ═══════════════════════════════════════════════════════════════════ */
+
+        .results-area {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--gray);
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .stat-value.total {
+            color: var(--cyan);
+            text-shadow: var(--glow-cyan);
+        }
+
+        .stat-value.live {
+            color: var(--green);
+            text-shadow: var(--glow-green);
+        }
+
+        .stat-value.deleted {
+            color: var(--orange);
+        }
+
+        .stat-value.ratio {
+            color: var(--magenta);
+        }
+
+        /* Results Grid */
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .result-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .result-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--gray);
+        }
+
+        .result-badge {
+            font-size: 10px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--green);
+            border: 1px solid var(--green);
+        }
+
+        .badge-warning {
+            background: rgba(255, 255, 0, 0.1);
+            color: var(--yellow);
+            border: 1px solid var(--yellow);
+        }
+
+        .badge-error {
+            background: rgba(255, 51, 102, 0.1);
+            color: var(--red);
+            border: 1px solid var(--red);
+        }
+
+        .metrics {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--gray);
+        }
+
+        .metric-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--white);
+        }
+
+        .metric-value.highlight {
+            color: var(--cyan);
+            text-shadow: var(--glow-cyan);
+        }
+
+        /* Terminal Output */
+        .terminal {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            grid-column: 1 / -1;
+        }
+
+        .terminal-header {
+            background: var(--bg-tertiary);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .terminal-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: var(--red); }
+        .terminal-dot.yellow { background: var(--yellow); }
+        .terminal-dot.green { background: var(--green); }
+
+        .terminal-title {
+            flex: 1;
+            text-align: center;
+            font-size: 11px;
+            color: var(--gray);
+        }
+
+        .terminal-body {
+            padding: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .terminal-body::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .terminal-body::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        .terminal-body::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        .log-line {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .log-time {
+            color: var(--gray);
+            flex-shrink: 0;
+        }
+
+        .log-level {
+            flex-shrink: 0;
+            font-weight: 600;
+        }
+
+        .log-level.info { color: var(--cyan); }
+        .log-level.success { color: var(--green); }
+        .log-level.error { color: var(--red); }
+        .log-level.warn { color: var(--yellow); }
+
+        .log-message {
+            color: var(--white);
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           FOOTER
+           ═══════════════════════════════════════════════════════════════════ */
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 20px 40px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--gray);
+            margin-top: 40px;
+        }
+
+        footer a {
+            color: var(--cyan);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           RESPONSIVE
+           ═══════════════════════════════════════════════════════════════════ */
+
+        @media (max-width: 1024px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+
+            .control-panel {
+                position: static;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            header {
+                flex-direction: column;
+                gap: 16px;
+                padding: 16px 20px;
+            }
+
+            .header-info {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            main {
+                padding: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <polygon fill="#00ffff" points="50,10 90,30 90,70 50,90 10,70 10,30"/>
+                    <polygon fill="#0a0a0f" points="50,25 75,37 75,63 50,75 25,63 25,37"/>
+                    <circle fill="#ff00ff" cx="50" cy="50" r="8"/>
+                </svg>
+            </div>
+            <span class="logo-text">EDGEVEC</span>
+            <span class="logo-version">v0.3.0</span>
+        </div>
+        <div class="header-info">
+            <div class="info-item">
+                <span class="info-label">Feature:</span>
+                <span class="info-value">Batch Delete</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">WASM:</span>
+                <span class="info-value supported" id="wasmStatus">Ready</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Browser:</span>
+                <span class="info-value" id="browserMode">Detecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <aside class="control-panel">
+            <h2 class="panel-title">Setup</h2>
+
+            <div class="control-group">
+                <label class="control-label" for="vectorCount">Initial Vectors</label>
+                <input type="number" id="vectorCount" class="control-input" value="1000" min="10" max="10000">
+                <span class="control-hint">Vectors to insert (10 - 10,000)</span>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label" for="batchSize">Batch Size</label>
+                <input type="number" id="batchSize" class="control-input" value="100" min="1" max="1000">
+                <span class="control-hint">IDs to delete per batch (1 - 1,000)</span>
+            </div>
+
+            <h3 class="panel-title" style="margin-top: 24px;">Actions</h3>
+            <div class="actions">
+                <button id="setupBtn" class="btn btn-primary">
+                    <span>Setup Index</span>
+                </button>
+                <button id="batchDeleteBtn" class="btn btn-danger" disabled>
+                    <span>Batch Delete</span>
+                </button>
+                <button id="deleteAllBtn" class="btn btn-danger" disabled>
+                    <span>Delete All Live</span>
+                </button>
+                <button id="compactBtn" class="btn btn-secondary" disabled>
+                    <span>Compact Index</span>
+                </button>
+                <button id="resetBtn" class="btn btn-secondary">
+                    <span>Reset Demo</span>
+                </button>
+            </div>
+        </aside>
+
+        <section class="results-area">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Vectors</div>
+                    <div class="stat-value total" id="totalVectors">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Live Count</div>
+                    <div class="stat-value live" id="liveCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Deleted Count</div>
+                    <div class="stat-value deleted" id="deletedCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Tombstone Ratio</div>
+                    <div class="stat-value ratio" id="tombstoneRatio">0%</div>
+                </div>
+            </div>
+
+            <div class="results-grid">
+                <div id="lastBatchResult" class="result-card" style="display: none;">
+                    <div class="result-header">
+                        <span class="result-title">Last Batch Delete</span>
+                        <span class="result-badge" id="resultBadge"></span>
+                    </div>
+                    <div class="metrics">
+                        <div class="metric-row">
+                            <span class="metric-label">Deleted</span>
+                            <span class="metric-value highlight" id="resultDeleted">-</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Already Deleted</span>
+                            <span class="metric-value" id="resultAlreadyDeleted">-</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Invalid IDs</span>
+                            <span class="metric-value" id="resultInvalidIds">-</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Total / Unique</span>
+                            <span class="metric-value" id="resultTotalUnique">-</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Duration</span>
+                            <span class="metric-value" id="resultDuration">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="compactionResult" class="result-card" style="display: none;">
+                    <div class="result-header">
+                        <span class="result-title">Compaction Result</span>
+                        <span class="result-badge badge-success">Complete</span>
+                    </div>
+                    <div class="metrics">
+                        <div class="metric-row">
+                            <span class="metric-label">Tombstones Removed</span>
+                            <span class="metric-value highlight" id="compactRemoved">-</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">New Size</span>
+                            <span class="metric-value" id="compactNewSize">-</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Duration</span>
+                            <span class="metric-value" id="compactDuration">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="terminal">
+                    <div class="terminal-header">
+                        <span class="terminal-dot red"></span>
+                        <span class="terminal-dot yellow"></span>
+                        <span class="terminal-dot green"></span>
+                        <span class="terminal-title">Console Output</span>
+                    </div>
+                    <div class="terminal-body" id="terminalOutput">
+                        <div class="log-line">
+                            <span class="log-time">[00:00:00]</span>
+                            <span class="log-level info">INFO</span>
+                            <span class="log-message">EdgeVec Batch Delete Demo initialized</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        EdgeVec &copy; 2025 | W18.5 Batch Delete WASM Bindings |
+        <a href="https://github.com/matte1782/edgevec" target="_blank">GitHub</a>
+    </footer>
+
+    <script type="module" src="batch_delete.js"></script>
+</body>
+</html>

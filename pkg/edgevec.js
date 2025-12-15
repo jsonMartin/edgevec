@@ -32,6 +32,11 @@ function getArrayF32FromWasm0(ptr, len) {
     return getFloat32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
 }
 
+function getArrayF64FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getFloat64ArrayMemory0().subarray(ptr / 8, ptr / 8 + len);
+}
+
 function getArrayU32FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint32ArrayMemory0().subarray(ptr / 4, ptr / 4 + len);
@@ -69,6 +74,14 @@ function getFloat32ArrayMemory0() {
         cachedFloat32ArrayMemory0 = new Float32Array(wasm.memory.buffer);
     }
     return cachedFloat32ArrayMemory0;
+}
+
+let cachedFloat64ArrayMemory0 = null;
+function getFloat64ArrayMemory0() {
+    if (cachedFloat64ArrayMemory0 === null || cachedFloat64ArrayMemory0.byteLength === 0) {
+        cachedFloat64ArrayMemory0 = new Float64Array(wasm.memory.buffer);
+    }
+    return cachedFloat64ArrayMemory0;
 }
 
 function getStringFromWasm0(ptr, len) {
@@ -211,12 +224,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_301(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_301(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_325(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_325(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_496(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_496(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_520(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_520(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -238,6 +251,10 @@ const EdgeVecConfigFinalization = (typeof FinalizationRegistry === 'undefined')
 const PersistenceIteratorFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_persistenceiterator_free(ptr >>> 0, 1));
+
+const WasmBatchDeleteResultFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_wasmbatchdeleteresult_free(ptr >>> 0, 1));
 
 const WasmCompactionResultFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
@@ -682,6 +699,69 @@ export class EdgeVec {
         }
     }
     /**
+     * Soft-delete multiple vectors using BigUint64Array (modern browsers).
+     *
+     * Efficiently deletes multiple vectors in a single operation. More efficient
+     * than calling `softDelete()` N times due to reduced FFI overhead and
+     * deduplication of input IDs.
+     *
+     * **Browser Compatibility:** Requires BigUint64Array support (Chrome 67+,
+     * Firefox 68+, Safari 15+). For Safari 14 compatibility, use
+     * `softDeleteBatchCompat()` instead.
+     *
+     * # Arguments
+     *
+     * * `ids` - A Uint32Array of vector IDs to delete
+     *
+     * # Returns
+     *
+     * A `WasmBatchDeleteResult` object containing:
+     * * `deleted` - Number of vectors successfully deleted
+     * * `alreadyDeleted` - Number of vectors that were already deleted
+     * * `invalidIds` - Number of IDs not found in the index
+     * * `total` - Total IDs in input (including duplicates)
+     * * `uniqueCount` - Number of unique IDs after deduplication
+     *
+     * # Behavior
+     *
+     * * **Deduplication:** Duplicate IDs in input are processed only once
+     * * **Idempotent:** Re-deleting an already-deleted vector returns `alreadyDeleted`
+     * * **Atomic:** Two-phase validation ensures all-or-nothing semantics
+     *
+     * # Errors
+     *
+     * Returns an error if the batch size exceeds the maximum (10M IDs).
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const ids = new Uint32Array([1, 3, 5, 7, 9, 11]);
+     * const result = index.softDeleteBatch(ids);
+     *
+     * console.log(`Deleted: ${result.deleted}`);
+     * console.log(`Already deleted: ${result.alreadyDeleted}`);
+     * console.log(`Invalid IDs: ${result.invalidIds}`);
+     * console.log(`All valid: ${result.allValid()}`);
+     * ```
+     * @param {Uint32Array} ids
+     * @returns {WasmBatchDeleteResult}
+     */
+    softDeleteBatch(ids) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_softDeleteBatch(retptr, this.__wbg_ptr, addHeapObject(ids));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return WasmBatchDeleteResult.__wrap(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
      * Get a warning message if compaction is recommended.
      *
      * # Returns
@@ -739,6 +819,54 @@ export class EdgeVec {
      */
     setCompactionThreshold(ratio) {
         wasm.edgevec_setCompactionThreshold(this.__wbg_ptr, ratio);
+    }
+    /**
+     * Soft-delete multiple vectors using number array (Safari 14 compatible).
+     *
+     * This method provides Safari 14 compatibility by accepting a regular JavaScript
+     * Array of numbers instead of BigUint64Array. IDs must be less than 2^53
+     * (Number.MAX_SAFE_INTEGER) to avoid precision loss.
+     *
+     * **Note:** For modern browsers, prefer `softDeleteBatch()` which uses typed arrays.
+     *
+     * # Arguments
+     *
+     * * `ids` - A JavaScript Array or Float64Array of vector IDs
+     *
+     * # Returns
+     *
+     * Same as `softDeleteBatch()` - see that method for details.
+     *
+     * # Errors
+     *
+     * Returns an error if the batch size exceeds the maximum (10M IDs) or if
+     * any ID exceeds Number.MAX_SAFE_INTEGER.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * // Safari 14 compatible
+     * const ids = [1, 3, 5, 7, 9, 11];
+     * const result = index.softDeleteBatchCompat(ids);
+     * console.log(`Deleted: ${result.deleted}`);
+     * ```
+     * @param {Float64Array} ids
+     * @returns {WasmBatchDeleteResult}
+     */
+    softDeleteBatchCompat(ids) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_softDeleteBatchCompat(retptr, this.__wbg_ptr, addHeapObject(ids));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return WasmBatchDeleteResult.__wrap(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Batch insert with progress callback (W14.1).
@@ -1078,6 +1206,93 @@ export class PersistenceIterator {
 if (Symbol.dispose) PersistenceIterator.prototype[Symbol.dispose] = PersistenceIterator.prototype.free;
 
 /**
+ * Result of a batch delete operation (W18.4/W18.5).
+ *
+ * Returned by `EdgeVec.softDeleteBatch()` and `EdgeVec.softDeleteBatchCompat()`
+ * to provide detailed metrics about the batch deletion.
+ */
+export class WasmBatchDeleteResult {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(WasmBatchDeleteResult.prototype);
+        obj.__wbg_ptr = ptr;
+        WasmBatchDeleteResultFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        WasmBatchDeleteResultFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_wasmbatchdeleteresult_free(ptr, 0);
+    }
+    /**
+     * Check if any deletions occurred in this operation.
+     *
+     * Returns `true` if at least one vector was newly deleted.
+     * @returns {boolean}
+     */
+    anyDeleted() {
+        const ret = wasm.wasmbatchdeleteresult_anyDeleted(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Number of invalid IDs (not found in the index).
+     * @returns {number}
+     */
+    get invalidIds() {
+        const ret = wasm.wasmbatchdeleteresult_invalidIds(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Number of unique vector IDs after deduplication.
+     * @returns {number}
+     */
+    get uniqueCount() {
+        const ret = wasm.batchinsertresult_total(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Number of vectors that were already deleted (tombstoned).
+     * @returns {number}
+     */
+    get alreadyDeleted() {
+        const ret = wasm.wasmbatchdeleteresult_alreadyDeleted(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Total number of vector IDs provided in the input (including duplicates).
+     * @returns {number}
+     */
+    get total() {
+        const ret = wasm.batchinsertresult_inserted(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Number of vectors successfully deleted in this operation.
+     * @returns {number}
+     */
+    get deleted() {
+        const ret = wasm.wasmbatchdeleteresult_deleted(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Check if all operations succeeded (no invalid IDs).
+     *
+     * Returns `true` if every ID was valid (either deleted or already deleted).
+     * @returns {boolean}
+     */
+    allValid() {
+        const ret = wasm.wasmbatchdeleteresult_allValid(this.__wbg_ptr);
+        return ret !== 0;
+    }
+}
+if (Symbol.dispose) WasmBatchDeleteResult.prototype[Symbol.dispose] = WasmBatchDeleteResult.prototype.free;
+
+/**
  * Result of a compaction operation (v0.3.0).
  *
  * Returned by `EdgeVec.compact()` to provide metrics about the operation.
@@ -1227,7 +1442,15 @@ function __wbg_get_imports() {
         const ret = getObject(arg0).length;
         return ret;
     };
+    imports.wbg.__wbg_length_406f6daaaa453057 = function(arg0) {
+        const ret = getObject(arg0).length;
+        return ret;
+    };
     imports.wbg.__wbg_length_86ce4877baf913bb = function(arg0) {
+        const ret = getObject(arg0).length;
+        return ret;
+    };
+    imports.wbg.__wbg_length_89c3414ed7f0594d = function(arg0) {
         const ret = getObject(arg0).length;
         return ret;
     };
@@ -1257,7 +1480,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_496(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_520(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -1284,8 +1507,14 @@ function __wbg_get_imports() {
         const ret = new Array(arg0 >>> 0);
         return addHeapObject(ret);
     };
+    imports.wbg.__wbg_prototypesetcall_6a0ca140cebe5ef8 = function(arg0, arg1, arg2) {
+        Uint32Array.prototype.set.call(getArrayU32FromWasm0(arg0, arg1), getObject(arg2));
+    };
     imports.wbg.__wbg_prototypesetcall_96cc7097487b926d = function(arg0, arg1, arg2) {
         Float32Array.prototype.set.call(getArrayF32FromWasm0(arg0, arg1), getObject(arg2));
+    };
+    imports.wbg.__wbg_prototypesetcall_d3c4edbb4ef96ca1 = function(arg0, arg1, arg2) {
+        Float64Array.prototype.set.call(getArrayF64FromWasm0(arg0, arg1), getObject(arg2));
     };
     imports.wbg.__wbg_prototypesetcall_dfe9b766cdc1f1fd = function(arg0, arg1, arg2) {
         Uint8Array.prototype.set.call(getArrayU8FromWasm0(arg0, arg1), getObject(arg2));
@@ -1355,14 +1584,14 @@ function __wbg_get_imports() {
         const ret = getStringFromWasm0(arg0, arg1);
         return addHeapObject(ret);
     };
+    imports.wbg.__wbindgen_cast_644fd6eb3bcf11b4 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 68, function: Function { arguments: [Externref], shim_idx: 69, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_318, __wasm_bindgen_func_elem_325);
+        return addHeapObject(ret);
+    };
     imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {
         // Cast intrinsic for `F64 -> Externref`.
         const ret = arg0;
-        return addHeapObject(ret);
-    };
-    imports.wbg.__wbindgen_cast_f48321c4a1f59c82 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 63, function: Function { arguments: [Externref], shim_idx: 64, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_294, __wasm_bindgen_func_elem_301);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_object_clone_ref = function(arg0) {
@@ -1382,6 +1611,7 @@ function __wbg_finalize_init(instance, module) {
     cachedBigUint64ArrayMemory0 = null;
     cachedDataViewMemory0 = null;
     cachedFloat32ArrayMemory0 = null;
+    cachedFloat64ArrayMemory0 = null;
     cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
 
