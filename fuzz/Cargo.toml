@@ -4,6 +4,10 @@ version = "0.0.0"
 publish = false
 edition = "2021"
 
+# Empty workspace table to prevent inclusion in parent workspace
+# Required for cargo-fuzz which manages its own workspace structure
+[workspace]
+
 [package.metadata]
 cargo-fuzz = true
 

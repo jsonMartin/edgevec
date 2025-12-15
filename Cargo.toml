@@ -8,6 +8,7 @@
 
 [workspace]
 members = [".", "xtask"]
+exclude = ["fuzz"]  # Fuzz crate uses cargo-fuzz which manages its own workspace
 
 [package]
 name = "edgevec"
