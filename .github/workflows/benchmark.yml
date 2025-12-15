@@ -14,6 +14,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Override .cargo/config.toml's target-cpu=native to prevent SIGILL on CI runners
+  # CI runners have varying CPU capabilities, so we use x86-64-v3 (AVX2) as baseline
+  RUSTFLAGS: "-C target-cpu=x86-64-v3 -C opt-level=3"
 
 jobs:
   benchmark:
@@ -32,10 +35,13 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-bench-
+            ${{ runner.os }}-cargo-registry-
+
+      # Do NOT cache target/ to avoid SIGILL from CPU-specific artifacts
+      - name: Clean build artifacts
+        run: cargo clean || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
