@@ -1,150 +1,161 @@
-# EdgeVec Roadmap v1.3
+# EdgeVec Roadmap v2.0
 
-**Date:** 2025-12-11
+**Date:** 2025-12-16
 **Author:** PLANNER
-**Status:** [REVISED] (Week 7 Complete - Persistence & HNSW Done)
+**Status:** [REVISED] — Week 19 Reconciliation Update
+**Current Version:** v0.3.0 (released)
+**Next Version:** v0.4.0 (in progress)
 
 ---
 
 ## Executive Summary
 
 **Total Duration:** ~32 Weeks (Dec 2025 – Jul 2026)
-**Current Status:** Week 7 Complete (Ahead of Schedule on Core, On Track for Integration).
-**Philosophy:** Test-First, WASM-Native, Memory-Constrained.
-**Critical Path:** Test Harness → Persistence Layer → **Quantization** → WASM Integration.
-**Buffer Strategy:** 4 weeks of explicit contingency allocated.
+**Current Status:** Week 19 — v0.4.0 Release Sprint
+**Philosophy:** Test-First, WASM-Native, Memory-Constrained
+**Critical Path:** v0.4.0 Release → v0.5.0 (ARM/NEON) → v1.0 (Production)
 
 ---
 
-## Phase 1: Foundation (Weeks 1-4)
+## Phase 1: Foundation (Weeks 1-4) — COMPLETE
 
 ### Milestone 1: Core Scaffolding & Test Harness
-**Dates:** Weeks 1-4 (Dec 8 - Jan 2)
-**Status:** ✅ COMPLETE
-**Theme:** "Verification infrastructure before feature code."
-
-**Objectives:**
-- Establish the repo structure with strict CI checks (Miri, Clippy).
-- Implement the "Nvidia Grade" test harness (Proptest, Fuzzing skeleton).
-- Implement basic types (`VectorId`, `NodeId`) and `VectorStorage`.
+**Status:** COMPLETE
+**Gate:** `.claude/GATE_2_COMPLETE.md`
 
 **Deliverables:**
-1.  **Repo Setup:** CI pipeline running `cargo test`, `cargo fmt`, `cargo clippy`.
-2.  **Test Harness:** `proptest` integration, `cargo-fuzz` setup, `miri` configuration.
-3.  **Core Types:** `VectorId`, `NodeId`, `VectorStorage` (Arena-based).
-4.  **Verification:** Fuzz target for `VectorStorage` inputs.
+- Repo setup with CI pipeline
+- Test harness (proptest, cargo-fuzz, miri)
+- Core types (VectorId, NodeId, VectorStorage)
 
 ---
 
-## Phase 2: Persistence & Compression (Weeks 5-8)
+## Phase 2: Persistence & Compression (Weeks 5-8) — COMPLETE
 
 ### Milestone 2: Storage Engine, Persistence, & Quantization
-**Dates:** Weeks 5-8 (Jan 5 - Jan 30)
-**Status:** ✅ COMPLETE
-**Theme:** "Data must survive a crash and fit in RAM."
-
-**Objectives:**
-- Implement the `StorageBackend` trait and `MemoryBackend`.
-- Build the `WriteAheadLog` (WAL) with checksums.
-- Implement `SnapshotManager` for atomic checkpoints.
-- Define and verify the binary file format (`.evec`).
-- **Implement Scalar Quantization (SQ8)** to reduce memory by 4x.
+**Status:** COMPLETE
+**Gate:** `.claude/GATE_WEEK8_COMPLETE.md`
 
 **Deliverables:**
-1.  **Storage Layer:** `WriteAheadLog`, `SnapshotManager`, `FileHeader`.
-2.  **Serialization:** `postcard` integration for all on-disk structures.
-3.  **Quantization:** `ScalarQuantizer` (u8/i8) with SIMD support. [DONE - Week 6]
-4.  **Verification:** `PROP-WAL-001` and `PROP-PERSIST-001` tests.
-
-**Outcomes:**
-- **Pivot Executed:** Week 6 pivot to SQ8 solved the memory crisis (1M vectors in <1GB).
-- **Persistence Hardened:** Week 7 delivered WAL and Snapshots.
+- WriteAheadLog, SnapshotManager
+- Scalar Quantization (SQ8) — 4x memory reduction
+- Binary file format (.evec)
 
 ---
 
-## [BUFFER] Strategic Contingency 1
-**Dates:** Weeks 9-10 (Feb 2 - Feb 13)
-**Purpose:** Catch-up time for M1/M2 slippage or unforeseen WASM memory issues.
-**Status:** AVAILABLE.
+## Phase 3: Intelligence (Weeks 9-15) — COMPLETE
 
----
-
-## Phase 3: Intelligence (Weeks 11-18)
-
-### Milestone 3: HNSW Graph Implementation
-**Dates:** Pulled Forward (Completed in Phase 1/2)
-**Status:** ✅ COMPLETE
-**Theme:** "Correctness first, then performance."
-
-**Objectives:**
-- Implement the HNSW graph algorithms (Insert, Search).
-- Implement `NeighborPool` with VByte compression (critical for memory budget).
-- Integrate `DeterministicRng` for reproducible builds.
-- Verify Recall@10 > 0.95.
+### Milestone 3: HNSW Graph + SIMD + RFC-001
+**Status:** COMPLETE
+**Gates:**
+- `.claude/GATE_9_COMPLETE.md` through `.claude/GATE_15_COMPLETE.md`
 
 **Deliverables:**
-1.  **Graph Core:** `HnswIndex`, `HnswNode`, `HnswConfig`.
-2.  **Compression:** `NeighborPool` with VByte encoding/decoding.
-3.  **Algorithms:** Layer sampling, neighbor selection, heuristic search.
-4.  **Verification:** `verify_recall_at_10` test suite.
+- HNSW graph algorithms (Insert, Search)
+- NeighborPool with VByte compression
+- Runtime SIMD detection
+- RFC-001 Soft Delete design (approved)
 
 ---
 
-## Phase 4: Integration (Weeks 19-26)
+## Phase 4: Feature Development (Weeks 16-18) — COMPLETE
 
-### Milestone 4: WASM Integration & Optimization
-**Dates:** Weeks 8-16 (Rescheduled)
-**Status:** 🚧 IN PROGRESS
-**Theme:** "It must work in the browser."
-
-**Objectives:**
-- Expose the public API via `wasm-bindgen`.
-- Implement `IndexedDbBackend` for browser persistence.
-- Create the TypeScript client library.
-- Performance profiling and optimization (SIMD, allocation reduction).
+### Milestone 4.1: Soft Delete (Week 16)
+**Status:** COMPLETE
+**Gate:** `.claude/GATE_16_COMPLETE.md`
+**Score:** 92/100
 
 **Deliverables:**
-1.  **WASM Bindings:** `edgevec_new`, `edgevec_insert`, `edgevec_search`.
-2.  **Browser Storage:** `IndexedDbBackend` implementation.
-3.  **JS Client:** TypeScript wrapper with Promise-based API.
-4.  **Benchmarks:** Browser-based benchmark suite.
+- `soft_delete()`, `is_deleted()`, `deleted_count()`, `live_count()`
+- `compact()`, `needs_compaction()`, `compaction_warning()`
+- Persistence format v0.3 with tombstone support
+- Zero memory overhead (reuses padding byte)
 
-**Risks:**
-- [R-M4-1] `IndexedDB` transaction limits blocking large writes. (Mitigation: Chunked writes in the JS layer).
-- [R-M4-2] WASM memory growth fragmentation. (Mitigation: Use `wee_alloc` or custom allocator tuning).
+### Milestone 4.2: v0.3.0 Release (Week 17)
+**Status:** COMPLETE
+**Gate:** `.claude/GATE_17_COMPLETE.md`
+**Release:** v0.3.0 on crates.io and npm
+
+**Deliverables:**
+- WASM soft delete bindings
+- TypeScript definitions
+- Browser demo (`wasm/examples/soft_delete.html`)
+- Documentation update
+
+### Milestone 4.3: Process Hardening & Batch Delete (Week 18)
+**Status:** COMPLETE
+**Gate:** `.claude/GATE_18_COMPLETE.md`
+
+**Deliverables:**
+- CI hardening with `cargo xtask ci-check`
+- P99 latency tracking infrastructure
+- `soft_delete_batch()` API
+- WASM batch delete bindings with Safari fallback
+- Dual-license (MIT OR Apache-2.0)
 
 ---
 
-## [BUFFER] Integration Contingency 2
-**Dates:** Weeks 27-28
-**Status:** RESERVED.
+## Phase 5: v0.4.0 Release (Week 19) — IN PROGRESS
+
+### Milestone 5: Documentation & Release Polish
+**Status:** IN PROGRESS
+**Target:** v0.4.0 release
+**Gate:** `.claude/GATE_19_WEEK_PLAN_APPROVED.md`
+
+**Week 19 Tasks:**
+
+| Day | Task | Status |
+|:----|:-----|:-------|
+| Day 1 | Week 16-18 Reconciliation | IN PROGRESS |
+| Day 2 | Benchmark Dashboard | PENDING |
+| Day 3 | User Documentation Sprint | PENDING |
+| Day 4 | Test Hardening & CI | PENDING |
+| Day 5 | v0.4.0 Release Prep | PENDING |
+
+**Deliverables:**
+- Reconciliation docs for Weeks 16-18
+- Benchmark visualization dashboard
+- TUTORIAL.md, PERFORMANCE_TUNING.md, TROUBLESHOOTING.md, INTEGRATION_GUIDE.md
+- Chaos tests and P99 benchmarks
+- CHANGELOG.md, RELEASE_CHECKLIST, CONTRIBUTING.md
 
 ---
 
-## Phase 5: Release (Weeks 29-32)
+## Phase 6: v0.5.0+ (Future)
 
-### Milestone 5: Production Hardening & Release
-**Dates:** Weeks 29-32
-**Status:** PENDING
-**Theme:** "Polishing the diamond."
+### Milestone 6: Performance Optimization
+**Status:** PLANNED
+**Target:** v0.5.0+
 
-**Objectives:**
-- Finalize documentation (Rustdoc, README, Architecture details).
-- Create comprehensive examples and demos.
-- Final code audit and cleanup.
-- Publish to crates.io and npm.
+**Planned Features:**
+- ARM/NEON SIMD optimization
+- Mobile support (iOS Safari, Android Chrome)
+- Memory profiling and optimization
+- Sharding for >1M vectors
+
+---
+
+## Version History
+
+| Version | Date | Highlights |
+|:--------|:-----|:-----------|
+| v0.1.0 | 2025-12-05 | Initial alpha (HNSW, SQ8) |
+| v0.2.0 | 2025-12-10 | Batch API, WASM bindings |
+| v0.2.1 | 2025-12-14 | Safety hardening (bytemuck) |
+| v0.3.0 | 2025-12-15 | Soft Delete API (RFC-001) |
+| v0.4.0 | TBD | Documentation, Dashboard, CI |
 
 ---
 
 ## Risk Register Summary
 
-| ID | Risk | Impact | Likelihood | Owner | Mitigation |
-|:---|:-----|:-------|:-----------|:------|:-----------|
-| R1 | WASM Memory Limits (4GB) | HIGH | LOW | ARCHITECT | Graceful errors, sharding (future) |
-| R2 | Browser IDB Variability | MEDIUM | HIGH | WASM_DEV | Extensive browser testing matrix |
-| R3 | Recall degradation on weird distributions | HIGH | MEDIUM | ALGO_DEV | Test on SIFT/GIST/GloVe datasets |
-| R4 | SIMD not portable in WASM | MEDIUM | MEDIUM | RUST_DEV | Feature flags for simd128 |
-| R5 | **Memory usage exceeds 1GB for 1M vectors** | HIGH | HIGH | ARCHITECT | **MITIGATED (via Quantization)** |
+| ID | Risk | Status |
+|:---|:-----|:-------|
+| R1 | WASM Memory Limits (4GB) | MITIGATED |
+| R2 | Browser IDB Variability | TESTED |
+| R3 | Recall degradation | TESTED (>0.95) |
+| R4 | SIMD portability | RUNTIME DETECTION |
+| R5 | Memory usage >1GB | MITIGATED (SQ8) |
 
 ---
 
@@ -152,4 +163,21 @@
 
 | Reviewer | Verdict | Date |
 |:---------|:--------|:-----|
-| HOSTILE_REVIEWER | ✅ APPROVED | 2025-12-05 |
+| HOSTILE_REVIEWER | APPROVED | 2025-12-05 (v1.0) |
+| HOSTILE_REVIEWER | APPROVED | 2025-12-14 (Week 16) |
+| HOSTILE_REVIEWER | APPROVED | 2025-12-15 (Week 17) |
+| HOSTILE_REVIEWER | APPROVED | 2025-12-16 (Week 19 Plan) |
+
+---
+
+## Revision History
+
+| Version | Date | Change |
+|:--------|:-----|:-------|
+| v1.0 | 2025-12-05 | Initial roadmap |
+| v1.3 | 2025-12-11 | Week 7 update |
+| v2.0 | 2025-12-16 | Week 19 reconciliation — Weeks 16-18 complete |
+
+---
+
+**END OF ROADMAP**
