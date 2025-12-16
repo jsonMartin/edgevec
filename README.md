@@ -255,6 +255,78 @@ if (index.needsCompaction()) {
 
 ---
 
+## Interactive Examples
+
+Try EdgeVec directly in your browser with our NVIDIA-grade cyberpunk demo suite:
+
+<p align="center">
+  <a href="wasm/examples/index.html">
+    <img src="docs/screenshot/demo-catalog.png" alt="EdgeVec Demo Catalog" width="800">
+  </a>
+</p>
+
+<p align="center">
+  <strong>
+    <a href="wasm/examples/index.html">View All Examples</a> |
+    <a href="wasm/examples/benchmark-dashboard.html">Launch Dashboard</a>
+  </strong>
+</p>
+
+### Demo Gallery
+
+<table>
+<tr>
+<td width="50%">
+<a href="wasm/examples/benchmark-dashboard.html">
+<img src="docs/screenshot/benchmark-dashboard.png" alt="Benchmark Dashboard">
+</a>
+<h4>Performance Dashboard</h4>
+<p>Competitive analysis vs hnswlib-node & voy with interactive Chart.js visualizations</p>
+</td>
+<td width="50%">
+<a href="wasm/examples/soft_delete.html">
+<img src="docs/screenshot/soft-delete-demo.png" alt="Soft Delete Demo">
+</a>
+<h4>Soft Delete & Compaction</h4>
+<p>RFC-001 implementation with tombstone visualization and real-time metrics</p>
+</td>
+</tr>
+<tr>
+<td width="50%">
+<a href="wasm/examples/batch_insert.html">
+<img src="docs/screenshot/batch-insert-demo.png" alt="Batch Insert Demo">
+</a>
+<h4>Batch Insert</h4>
+<p>Sequential vs batch comparison with progress tracking</p>
+</td>
+<td width="50%">
+<a href="wasm/examples/stress-test.html">
+<img src="docs/screenshot/stress-test-demo.png" alt="Stress Test Demo">
+</a>
+<h4>Stress Test</h4>
+<p>Push EdgeVec to its limits with continuous operations</p>
+</td>
+</tr>
+</table>
+
+### Running Locally
+
+```bash
+# Clone the repository
+git clone https://github.com/matte1782/edgevec.git
+cd edgevec
+
+# IMPORTANT: Start server from project root!
+python -m http.server 8080
+
+# Open in browser (include full path)
+# http://localhost:8080/wasm/examples/index.html
+```
+
+> ⚠️ **Note:** Do NOT start server from `wasm/examples/` — WASM module requires `/pkg/` access from root.
+
+---
+
 ## Development Status
 
 `EdgeVec` follows a **military-grade development protocol**. No code is written without an approved plan.
@@ -286,10 +358,23 @@ if (index.needsCompaction()) {
 
 ### What's Next (v0.4.0)
 
-1. **Multi-vector Delete** — Batch delete API
+1. ~~**Multi-vector Delete**~~ ✅ Shipped in v0.3.0
 2. **P99 Tracking** — Latency distribution metrics in CI
-3. **ARM/NEON Optimization** — Cross-platform SIMD verification
-4. **Mobile Support** — iOS Safari and Android Chrome formalized
+3. **Benchmark Dashboard** — Interactive performance visualization
+4. **User Documentation** — Tutorial, tuning guide, integration guide
+
+### Future Roadmap (v0.5.0+)
+
+1. **ARM/NEON Optimization** — Cross-platform SIMD verification
+2. **Mobile Support** — iOS Safari and Android Chrome formalized
+3. **CLI Tools** — Optional developer command-line interface
+
+### Path to v1.0
+
+EdgeVec will reach v1.0 after:
+- Production usage feedback from v0.4.0/v0.5.0
+- Security audit
+- API stability guarantee commitment
 
 ---
 
