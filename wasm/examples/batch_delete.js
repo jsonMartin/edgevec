@@ -1,8 +1,28 @@
 // EdgeVec Batch Delete Demo (W18.5)
 // Demonstrates batch delete API with browser compatibility
+// Uses dynamic imports for file:// protocol compatibility
 
-import init, { EdgeVecConfig } from '../../pkg/edgevec.js';
-import { softDeleteBatch, getBrowserInfo, supportsBigUint64 } from '../../pkg/edgevec-wrapper.js';
+// WASM module paths - works when serving from PROJECT ROOT
+// IMPORTANT: Start server from edgevec/ root, NOT from wasm/examples/
+// Example: cd edgevec && python -m http.server 8080
+//          Then open: http://localhost:8080/wasm/examples/batch_delete.html
+const WASM_PATHS = [
+    '../../pkg/edgevec.js',      // From /wasm/examples/ → /pkg/
+    '/pkg/edgevec.js',           // Absolute from root
+    '../pkg/edgevec.js',         // From /wasm/ → /pkg/
+    './pkg/edgevec.js'           // Fallback
+];
+
+const WRAPPER_PATHS = [
+    '../../pkg/edgevec-wrapper.js',
+    '/pkg/edgevec-wrapper.js',
+    '../pkg/edgevec-wrapper.js',
+    './pkg/edgevec-wrapper.js'
+];
+
+// Dynamic module references
+let wasmModule = null;
+let wrapperModule = null;
 
 // Global state
 let index = null;
@@ -11,7 +31,7 @@ let totalInserted = 0;
 
 // Get browser info and update UI
 function initBrowserInfo() {
-    const info = getBrowserInfo();
+    const info = wrapperModule.getBrowserInfo();
     const modeEl = document.getElementById('browserMode');
 
     if (info.mode === 'modern') {
@@ -86,10 +106,10 @@ async function setupIndex() {
     try {
         log(`Creating new EdgeVec index (128 dimensions)...`, 'info');
 
-        const config = new EdgeVecConfig(128);
+        const config = new wasmModule.EdgeVecConfig(128);
         config.m = 16;
         config.ef_construction = 200;
-        index = new config.constructor(config);
+        index = new wasmModule.EdgeVec(config);
 
         log(`Inserting ${count.toLocaleString()} random vectors...`, 'info');
 
@@ -157,7 +177,7 @@ async function batchDelete() {
 
         // Use wrapper for browser compatibility
         const deleteStart = performance.now();
-        const result = softDeleteBatch(index, ids);
+        const result = wrapperModule.softDeleteBatch(index, ids);
         const deleteTime = (performance.now() - deleteStart).toFixed(3);
 
         log(`Batch delete complete in ${deleteTime}ms`, 'success');
@@ -218,7 +238,7 @@ async function deleteAllLive() {
         const allIds = Array.from({ length: totalCount }, (_, i) => i + 1);
 
         const deleteStart = performance.now();
-        const result = softDeleteBatch(index, allIds);
+        const result = wrapperModule.softDeleteBatch(index, allIds);
         const deleteTime = (performance.now() - deleteStart).toFixed(3);
 
         log(`Delete all complete in ${deleteTime}ms`, 'success');
@@ -305,8 +325,42 @@ function resetDemo() {
 async function initDemo() {
     try {
         log('Initializing WASM module...', 'info');
-        await init();
-        log('WASM module loaded successfully', 'success');
+
+        // Try loading WASM module from multiple paths
+        for (const path of WASM_PATHS) {
+            try {
+                log(`  Trying: ${path}`, 'info');
+                wasmModule = await import(path);
+                log(`  Loaded WASM from: ${path}`, 'success');
+                break;
+            } catch (e) {
+                log(`  Failed: ${e.message}`, 'warn');
+            }
+        }
+
+        if (!wasmModule) {
+            throw new Error('Could not load WASM module from any path');
+        }
+
+        // Try loading wrapper module from multiple paths
+        for (const path of WRAPPER_PATHS) {
+            try {
+                log(`  Trying wrapper: ${path}`, 'info');
+                wrapperModule = await import(path);
+                log(`  Loaded wrapper from: ${path}`, 'success');
+                break;
+            } catch (e) {
+                log(`  Failed: ${e.message}`, 'warn');
+            }
+        }
+
+        if (!wrapperModule) {
+            throw new Error('Could not load wrapper module from any path');
+        }
+
+        // Initialize the WASM module
+        await wasmModule.default();
+        log('WASM module initialized successfully', 'success');
 
         // Init browser info
         initBrowserInfo();
@@ -322,6 +376,18 @@ async function initDemo() {
 
     } catch (e) {
         log(`Initialization failed: ${e.message}`, 'error');
+        log('', 'error');
+        log('═══════════════════════════════════════════════════', 'error');
+        log('  HOW TO FIX: Start server from PROJECT ROOT', 'error');
+        log('═══════════════════════════════════════════════════', 'error');
+        log('', 'error');
+        log('1. Open terminal in the edgevec project root folder', 'info');
+        log('2. Run: python -m http.server 8080', 'info');
+        log('3. Open: http://localhost:8080/wasm/examples/index.html', 'info');
+        log('', 'error');
+        log('DO NOT start server from wasm/examples/ folder!', 'warn');
+        log('The WASM module is at /pkg/ which requires root access.', 'warn');
+
         console.error(e);
         document.getElementById('wasmStatus').textContent = 'Failed';
         document.getElementById('wasmStatus').classList.remove('supported');

@@ -4,6 +4,7 @@
  *
  * Provides a reusable class for soft delete demonstrations and testing.
  * Import this module for programmatic access to soft delete functionality.
+ * Uses dynamic imports for file:// protocol compatibility.
  *
  * @example
  * import { SoftDeleteDemo } from './soft_delete.js';
@@ -21,7 +22,19 @@
  * }
  */
 
-import init, { EdgeVec, EdgeVecConfig } from '../../pkg/edgevec.js';
+// WASM module paths - works when serving from PROJECT ROOT
+// IMPORTANT: Start server from edgevec/ root, NOT from wasm/examples/
+// Example: cd edgevec && python -m http.server 8080
+//          Then open: http://localhost:8080/wasm/examples/soft_delete.html
+const WASM_PATHS = [
+    '../../pkg/edgevec.js',      // From /wasm/examples/ → /pkg/
+    '/pkg/edgevec.js',           // Absolute from root
+    '../pkg/edgevec.js',         // From /wasm/ → /pkg/
+    './pkg/edgevec.js'           // Fallback
+];
+
+// Module-level WASM reference (loaded dynamically)
+let wasmModule = null;
 
 /**
  * Soft Delete Demo Class
@@ -71,9 +84,29 @@ export class SoftDeleteDemo {
             return this;
         }
 
-        await init();
-        const config = new EdgeVecConfig(this.dimension);
-        this.index = new EdgeVec(config);
+        // Load WASM module dynamically if not already loaded
+        if (!wasmModule) {
+            for (const path of WASM_PATHS) {
+                try {
+                    console.log(`[SoftDeleteDemo] Trying WASM path: ${path}`);
+                    wasmModule = await import(path);
+                    console.log(`[SoftDeleteDemo] Loaded WASM from: ${path}`);
+                    break;
+                } catch (e) {
+                    console.warn(`[SoftDeleteDemo] Failed to load from ${path}: ${e.message}`);
+                }
+            }
+
+            if (!wasmModule) {
+                throw new Error('Could not load WASM module from any path');
+            }
+
+            // Initialize the WASM module
+            await wasmModule.default();
+        }
+
+        const config = new wasmModule.EdgeVecConfig(this.dimension);
+        this.index = new wasmModule.EdgeVec(config);
         this.initialized = true;
 
         this._emit('insert', { type: 'init', dimension: this.dimension });
@@ -396,8 +429,8 @@ export class SoftDeleteDemo {
         this._ensureInitialized();
 
         this.insertedIds = [];
-        const config = new EdgeVecConfig(this.dimension);
-        this.index = new EdgeVec(config);
+        const config = new wasmModule.EdgeVecConfig(this.dimension);
+        this.index = new wasmModule.EdgeVec(config);
 
         this._emit('insert', { type: 'reset' });
     }

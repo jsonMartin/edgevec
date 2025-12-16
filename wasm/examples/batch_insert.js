@@ -48,12 +48,15 @@ const PRESETS = {
 
 /**
  * @constant {string[]} WASM_MODULE_PATHS - Possible paths for WASM module
+ * IMPORTANT: Start server from edgevec/ root, NOT from wasm/examples/
+ * Example: cd edgevec && python -m http.server 8080
+ *          Then open: http://localhost:8080/wasm/examples/batch_insert.html
  */
 const WASM_MODULE_PATHS = [
-    '../../pkg/edgevec.js',
-    '../pkg/edgevec.js',
-    '/pkg/edgevec.js',
-    './pkg/edgevec.js',
+    '../../pkg/edgevec.js',      // From /wasm/examples/ → /pkg/
+    '/pkg/edgevec.js',           // Absolute from root
+    '../pkg/edgevec.js',         // From /wasm/ → /pkg/
+    './pkg/edgevec.js',          // Fallback
 ];
 
 // =============================================================================

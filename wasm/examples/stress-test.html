@@ -1,231 +1,959 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>EdgeVec IndexedDB Stress Test</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeVec | Stress Test</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0a0f' width='100' height='100'/><polygon fill='%2300ffff' points='50,10 90,30 90,70 50,90 10,70 10,30'/><polygon fill='%230a0a0f' points='50,25 75,37 75,63 50,75 25,63 25,37'/><circle fill='%23ff00ff' cx='50' cy='50' r='8'/></svg>">
     <style>
+        /* =====================================================================
+           CYBERPUNK THEME - EdgeVec Stress Test
+           ===================================================================== */
+
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --cyan: #00ffff;
+            --cyan-dim: #00aaaa;
+            --magenta: #ff00ff;
+            --magenta-dim: #aa00aa;
+            --purple: #9945ff;
+            --yellow: #ffff00;
+            --green: #00ff88;
+            --red: #ff3366;
+            --orange: #ff9933;
+            --white: #e0e0e0;
+            --gray: #666680;
+            --border: #2a2a3a;
+            --glow-cyan: 0 0 20px rgba(0, 255, 255, 0.3);
+            --glow-magenta: 0 0 20px rgba(255, 0, 255, 0.3);
+            --glow-green: 0 0 20px rgba(0, 255, 136, 0.3);
+            --glow-red: 0 0 20px rgba(255, 51, 102, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
-            font-family: monospace;
-            padding: 20px;
-            max-width: 800px;
+            font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Monaco', monospace;
+            background: var(--bg-primary);
+            color: var(--white);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background Grid Effect */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* Scanline Effect */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 0, 0, 0.1) 2px,
+                rgba(0, 0, 0, 0.1) 4px
+            );
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0.3;
+        }
+
+        /* =====================================================================
+           HEADER
+           ===================================================================== */
+
+        header {
+            border-bottom: 1px solid var(--border);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+        }
+
+        .logo-icon svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(var(--glow-cyan));
+        }
+
+        .logo-text {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--cyan) 0%, var(--magenta) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 2px;
+        }
+
+        .logo-version {
+            font-size: 10px;
+            color: var(--gray);
+            background: var(--bg-tertiary);
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+        }
+
+        .header-info {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+            align-items: center;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .info-label {
+            color: var(--gray);
+        }
+
+        .info-value {
+            color: var(--cyan);
+        }
+
+        .info-value.supported {
+            color: var(--green);
+        }
+
+        .back-link {
+            color: var(--magenta);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 12px;
+            padding: 8px 16px;
+            border: 1px solid var(--magenta);
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+
+        .back-link:hover {
+            background: var(--magenta);
+            color: var(--bg-primary);
+            box-shadow: var(--glow-magenta);
+        }
+
+        /* =====================================================================
+           MAIN LAYOUT
+           ===================================================================== */
+
+        main {
+            max-width: 1400px;
             margin: 0 auto;
+            padding: 30px 40px;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 30px;
         }
-        h1 {
-            color: #333;
+
+        /* =====================================================================
+           CONTROL PANEL
+           ===================================================================== */
+
+        .control-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            height: fit-content;
+            position: sticky;
+            top: 30px;
         }
-        #log {
-            background: #f5f5f5;
-            padding: 15px;
-            border-radius: 5px;
-            white-space: pre-wrap;
+
+        .panel-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--magenta);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-description {
+            font-size: 12px;
+            color: var(--gray);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        /* Action Buttons */
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn {
+            background: transparent;
+            border: 1px solid;
+            border-radius: 4px;
+            padding: 14px 20px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--cyan);
+            color: var(--bg-primary);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .btn-secondary {
+            border-color: var(--gray);
+            color: var(--gray);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            border-color: var(--white);
+            color: var(--white);
+        }
+
+        .btn-warning {
+            border-color: var(--orange);
+            color: var(--orange);
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: var(--orange);
+            color: var(--bg-primary);
+        }
+
+        .btn-danger {
+            border-color: var(--red);
+            color: var(--red);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: var(--red);
+            color: var(--bg-primary);
+            box-shadow: var(--glow-red);
+        }
+
+        .btn-vector-count {
+            font-size: 10px;
+            color: var(--gray);
+            margin-top: 2px;
+        }
+
+        /* =====================================================================
+           RESULTS AREA
+           ===================================================================== */
+
+        .results-area {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Status Banner */
+        .status-banner {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .status-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--gray);
+        }
+
+        .status-indicator.idle {
+            background: var(--gray);
+        }
+
+        .status-indicator.running {
+            background: var(--cyan);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-indicator.complete {
+            background: var(--green);
+        }
+
+        .status-indicator.error {
+            background: var(--red);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.7); }
+            50% { opacity: 0.7; box-shadow: 0 0 0 10px rgba(0, 255, 255, 0); }
+        }
+
+        .status-text {
+            font-size: 14px;
+            color: var(--white);
+        }
+
+        .status-meta {
+            font-size: 12px;
+            color: var(--gray);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--gray);
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .stat-value.cyan { color: var(--cyan); text-shadow: var(--glow-cyan); }
+        .stat-value.green { color: var(--green); text-shadow: var(--glow-green); }
+        .stat-value.magenta { color: var(--magenta); text-shadow: var(--glow-magenta); }
+        .stat-value.orange { color: var(--orange); }
+
+        /* Terminal Output */
+        .terminal {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .terminal-header {
+            background: var(--bg-tertiary);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .terminal-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: var(--red); }
+        .terminal-dot.yellow { background: var(--yellow); }
+        .terminal-dot.green { background: var(--green); }
+
+        .terminal-title {
+            flex: 1;
+            text-align: center;
+            font-size: 11px;
+            color: var(--gray);
+        }
+
+        .terminal-body {
+            padding: 16px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-size: 12px;
             line-height: 1.6;
         }
-        .pass { color: #28a745; }
-        .fail { color: #dc3545; }
-        .info { color: #007bff; }
-        .warn { color: #ffc107; }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            margin: 10px 5px 10px 0;
+
+        .terminal-body::-webkit-scrollbar {
+            width: 6px;
         }
-        #status {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 5px;
+
+        .terminal-body::-webkit-scrollbar-track {
+            background: var(--bg-primary);
         }
-        .running { background: #fff3cd; }
-        .complete { background: #d4edda; }
-        .error { background: #f8d7da; }
+
+        .terminal-body::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        .log-line {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+
+        .log-time {
+            color: var(--gray);
+            flex-shrink: 0;
+        }
+
+        .log-level {
+            flex-shrink: 0;
+            font-weight: 600;
+            min-width: 60px;
+        }
+
+        .log-level.info { color: var(--cyan); }
+        .log-level.success { color: var(--green); }
+        .log-level.error { color: var(--red); }
+        .log-level.warn { color: var(--yellow); }
+        .log-level.phase { color: var(--magenta); }
+
+        .log-message {
+            color: var(--white);
+        }
+
+        .log-message.dim {
+            color: var(--gray);
+        }
+
+        /* =====================================================================
+           FOOTER
+           ===================================================================== */
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 20px 40px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--gray);
+            margin-top: 40px;
+        }
+
+        footer a {
+            color: var(--cyan);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* =====================================================================
+           RESPONSIVE
+           ===================================================================== */
+
+        @media (max-width: 1024px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+
+            .control-panel {
+                position: static;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            header {
+                flex-direction: column;
+                gap: 16px;
+                padding: 16px 20px;
+            }
+
+            .header-info {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            main {
+                padding: 20px;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>EdgeVec IndexedDB Stress Test</h1>
-    <p>Tests WASM module loading, batch insert, and IndexedDB persistence at scale.</p>
+    <header>
+        <a href="index.html" class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <polygon fill="#00ffff" points="50,10 90,30 90,70 50,90 10,70 10,30"/>
+                    <polygon fill="#0a0a0f" points="50,25 75,37 75,63 50,75 25,63 25,37"/>
+                    <circle fill="#ff00ff" cx="50" cy="50" r="8"/>
+                </svg>
+            </div>
+            <span class="logo-text">EDGEVEC</span>
+            <span class="logo-version">v0.3.0</span>
+        </a>
+        <div class="header-info">
+            <div class="info-item">
+                <span class="info-label">Feature:</span>
+                <span class="info-value">Stress Test</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">WASM:</span>
+                <span class="info-value supported" id="wasmStatus">Loading...</span>
+            </div>
+            <a href="index.html" class="back-link">&#8592; Examples</a>
+        </div>
+    </header>
 
-    <div>
-        <button onclick="runQuickTest()">Quick Test (1k vectors)</button>
-        <button onclick="runMediumTest()">Medium Test (10k vectors)</button>
-        <button onclick="runStressTest()">Full Stress Test (50k vectors)</button>
-    </div>
+    <main>
+        <aside class="control-panel">
+            <h2 class="panel-title">Stress Test Suite</h2>
+            <p class="panel-description">
+                Push EdgeVec to its limits. Tests WASM module loading,
+                batch insert performance, search accuracy, and IndexedDB
+                persistence at scale.
+            </p>
 
-    <div id="status"></div>
-    <div id="log"></div>
+            <h3 class="panel-title" style="margin-top: 24px;">Run Tests</h3>
+            <div class="actions">
+                <button id="quickBtn" class="btn btn-primary" disabled>
+                    <span>Quick Test</span>
+                    <span class="btn-vector-count">1K vectors</span>
+                </button>
+                <button id="mediumBtn" class="btn btn-secondary" disabled>
+                    <span>Medium Test</span>
+                    <span class="btn-vector-count">1K + 10K vectors</span>
+                </button>
+                <button id="stressBtn" class="btn btn-warning" disabled>
+                    <span>Full Stress</span>
+                    <span class="btn-vector-count">1K + 10K + 50K vectors</span>
+                </button>
+                <button id="extremeBtn" class="btn btn-danger" disabled>
+                    <span>Extreme Test</span>
+                    <span class="btn-vector-count">100K vectors</span>
+                </button>
+            </div>
+        </aside>
+
+        <section class="results-area">
+            <div class="status-banner">
+                <div class="status-content">
+                    <div class="status-indicator idle" id="statusIndicator"></div>
+                    <span class="status-text" id="statusText">Ready to test</span>
+                </div>
+                <span class="status-meta" id="statusMeta">Click a test to begin</span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Vectors</div>
+                    <div class="stat-value cyan" id="statVectors">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Insert Time</div>
+                    <div class="stat-value green" id="statInsert">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Search Time</div>
+                    <div class="stat-value magenta" id="statSearch">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Persist Time</div>
+                    <div class="stat-value orange" id="statPersist">-</div>
+                </div>
+            </div>
+
+            <div class="terminal">
+                <div class="terminal-header">
+                    <span class="terminal-dot red"></span>
+                    <span class="terminal-dot yellow"></span>
+                    <span class="terminal-dot green"></span>
+                    <span class="terminal-title">Test Output</span>
+                </div>
+                <div class="terminal-body" id="terminalOutput">
+                    <div class="log-line">
+                        <span class="log-time">[00:00:00]</span>
+                        <span class="log-level info">INFO</span>
+                        <span class="log-message">EdgeVec Stress Test Suite ready</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        EdgeVec &copy; 2025 | Stress Test Suite |
+        <a href="https://github.com/matte1782/edgevec" target="_blank">GitHub</a>
+    </footer>
 
     <script type="module">
-        // Import from pkg directory (relative to wasm/examples)
-        import init, { WasmHnswIndex, WasmHnswConfig } from '../../pkg/edgevec.js';
+        // =====================================================================
+        // IMPORTS (Dynamic with fallbacks)
+        // =====================================================================
 
-        let initialized = false;
+        // WASM module paths - works when serving from PROJECT ROOT
+        // IMPORTANT: Start server from edgevec/ root, NOT from wasm/examples/
+        // Example: cd edgevec && python -m http.server 8080
+        //          Then open: http://localhost:8080/wasm/examples/stress-test.html
+        const WASM_PATHS = [
+            '../../pkg/edgevec.js',      // From /wasm/examples/ → /pkg/
+            '/pkg/edgevec.js',           // Absolute from root
+            '../pkg/edgevec.js',         // From /wasm/ → /pkg/
+            './pkg/edgevec.js'           // Fallback (unlikely to work)
+        ];
 
-        function setStatus(text, className) {
-            const status = document.getElementById('status');
-            status.textContent = text;
-            status.className = className;
-        }
+        let wasmModule = null;
 
-        function log(msg, className = '') {
-            const logDiv = document.getElementById('log');
-            const span = document.createElement('span');
-            span.className = className;
-            span.textContent = msg + '\n';
-            logDiv.appendChild(span);
+        // =====================================================================
+        // STATE
+        // =====================================================================
+
+        let isInitialized = false;
+        let isRunning = false;
+        const startTime = Date.now();
+
+        // =====================================================================
+        // LOGGING
+        // =====================================================================
+
+        function log(msg, level = 'info') {
+            const now = Date.now();
+            const elapsed = now - startTime;
+            const timestamp = new Date(elapsed).toISOString().substr(11, 8);
+
+            const logDiv = document.getElementById('terminalOutput');
+            const line = document.createElement('div');
+            line.className = 'log-line';
+
+            line.innerHTML = `
+                <span class="log-time">[${timestamp}]</span>
+                <span class="log-level ${level}">${level.toUpperCase()}</span>
+                <span class="log-message">${msg}</span>
+            `;
+
+            logDiv.appendChild(line);
             logDiv.scrollTop = logDiv.scrollHeight;
-            console.log(msg);
+            console.log(`[${level}] ${msg}`);
         }
 
         function clearLog() {
-            document.getElementById('log').innerHTML = '';
+            const logDiv = document.getElementById('terminalOutput');
+            logDiv.innerHTML = '';
         }
 
-        async function ensureInit() {
-            if (!initialized) {
-                await init();
-                initialized = true;
-                log('WASM initialized', 'pass');
-            }
+        // =====================================================================
+        // STATUS UPDATES
+        // =====================================================================
+
+        function setStatus(text, state, meta = '') {
+            document.getElementById('statusText').textContent = text;
+            document.getElementById('statusMeta').textContent = meta;
+
+            const indicator = document.getElementById('statusIndicator');
+            indicator.className = 'status-indicator ' + state;
         }
+
+        function updateStat(id, value) {
+            document.getElementById(id).textContent = value;
+        }
+
+        function setButtonsEnabled(enabled) {
+            document.getElementById('quickBtn').disabled = !enabled;
+            document.getElementById('mediumBtn').disabled = !enabled;
+            document.getElementById('stressBtn').disabled = !enabled;
+            document.getElementById('extremeBtn').disabled = !enabled;
+        }
+
+        // =====================================================================
+        // TEST RUNNER
+        // =====================================================================
 
         async function runTest(sizes) {
+            if (isRunning) {
+                log('Test already in progress', 'warn');
+                return;
+            }
+
+            isRunning = true;
+            setButtonsEnabled(false);
             clearLog();
-            setStatus('Running...', 'running');
+
+            const totalVectors = sizes.reduce((a, b) => a + b, 0);
+            setStatus('Running tests...', 'running', `Testing ${sizes.length} batch sizes`);
+            log(`Starting stress test: ${sizes.map(s => s.toLocaleString()).join(', ')} vectors`, 'phase');
 
             try {
-                await ensureInit();
-
-                const config = new WasmHnswConfig();
-                config.dimensions = 128;
-                config.m = 16;
-                config.ef_construction = 200;
-
                 for (const size of sizes) {
-                    log(`\n=== Testing ${size.toLocaleString()} vectors ===`, 'info');
-
-                    // Create fresh index for each size
-                    const index = new WasmHnswIndex(config);
-                    log(`Index created (dimensions: ${config.dimensions})`);
-
-                    // Generate vectors
-                    log(`Generating ${size.toLocaleString()} random vectors...`);
-                    const vectors = [];
-                    for (let i = 0; i < size; i++) {
-                        const vec = new Float32Array(128);
-                        for (let j = 0; j < 128; j++) {
-                            vec[j] = Math.random() * 2 - 1;
-                        }
-                        vectors.push([BigInt(i + 1), vec]);
-                    }
-
-                    // Insert with timing
-                    log(`Inserting vectors...`);
-                    const insertStart = performance.now();
-                    let lastProgress = 0;
-
-                    try {
-                        const result = index.batch_insert_with_progress(
-                            vectors,
-                            (done, total) => {
-                                const pct = Math.floor((done / total) * 100);
-                                if (pct >= lastProgress + 10) {
-                                    log(`  Progress: ${pct}%`);
-                                    lastProgress = pct;
-                                }
-                            }
-                        );
-
-                        const insertTime = (performance.now() - insertStart).toFixed(0);
-                        log(`  Insert complete: ${insertTime}ms (${result.inserted_count} inserted)`, 'pass');
-
-                        // Memory estimate
-                        const memEstimate = (size * 128 * 4 / 1024 / 1024).toFixed(1);
-                        log(`  Estimated memory: ~${memEstimate}MB vectors + index overhead`);
-
-                    } catch (insertErr) {
-                        log(`  Insert FAILED: ${insertErr.message}`, 'fail');
-                        continue;
-                    }
-
-                    // Search test
-                    log(`Running search test (k=10)...`);
-                    const query = new Float32Array(128);
-                    for (let j = 0; j < 128; j++) {
-                        query[j] = Math.random() * 2 - 1;
-                    }
-
-                    const searchStart = performance.now();
-                    const searchResults = index.search(query, 10, 100);
-                    const searchTime = (performance.now() - searchStart).toFixed(2);
-                    log(`  Search complete: ${searchTime}ms (${searchResults.length} results)`, 'pass');
-
-                    // IndexedDB save test
-                    log(`Saving to IndexedDB...`);
-                    const dbName = `stress-test-${size}`;
-                    const saveStart = performance.now();
-
-                    try {
-                        await index.save_to_indexeddb(dbName);
-                        const saveTime = (performance.now() - saveStart).toFixed(0);
-                        log(`  Save complete: ${saveTime}ms`, 'pass');
-                    } catch (saveErr) {
-                        log(`  Save FAILED: ${saveErr.message}`, 'fail');
-                        log(`  (This may be due to Safari transaction timeout or quota limits)`, 'warn');
-                    }
-
-                    // IndexedDB load test
-                    log(`Loading from IndexedDB...`);
-                    const loadStart = performance.now();
-
-                    try {
-                        const loadedIndex = await WasmHnswIndex.load_from_indexeddb(dbName);
-                        const loadTime = (performance.now() - loadStart).toFixed(0);
-                        const loadedCount = loadedIndex.vector_count();
-                        log(`  Load complete: ${loadTime}ms (${loadedCount} vectors)`, 'pass');
-
-                        // Verify loaded index works
-                        const verifyResults = loadedIndex.search(query, 10, 100);
-                        log(`  Verification search: ${verifyResults.length} results`, 'pass');
-
-                        // Cleanup
-                        loadedIndex.free();
-                    } catch (loadErr) {
-                        log(`  Load FAILED: ${loadErr.message}`, 'fail');
-                    }
-
-                    // Cleanup IndexedDB
-                    try {
-                        const deleteReq = indexedDB.deleteDatabase(dbName);
-                        await new Promise((resolve, reject) => {
-                            deleteReq.onsuccess = resolve;
-                            deleteReq.onerror = reject;
-                        });
-                        log(`  Cleaned up IndexedDB: ${dbName}`);
-                    } catch (e) {
-                        // Ignore cleanup errors
-                    }
-
-                    // Free index memory
-                    index.free();
+                    await runSingleTest(size);
                 }
 
-                log(`\n=== Stress Test Complete ===`, 'pass');
-                setStatus('Complete!', 'complete');
+                log('All tests completed successfully!', 'success');
+                setStatus('Complete!', 'complete', `Tested ${sizes.length} configurations`);
 
             } catch (e) {
-                log(`\nFATAL ERROR: ${e.message}`, 'fail');
-                log(e.stack || '', 'fail');
-                setStatus('Error!', 'error');
+                log(`FATAL ERROR: ${e.message}`, 'error');
+                if (e.stack) log(e.stack, 'error');
+                setStatus('Error!', 'error', e.message);
+            } finally {
+                isRunning = false;
+                setButtonsEnabled(true);
             }
         }
 
-        // Expose functions globally for button onclick
-        window.runQuickTest = () => runTest([1000]);
-        window.runMediumTest = () => runTest([1000, 10000]);
-        window.runStressTest = () => runTest([1000, 10000, 50000]);
+        async function runSingleTest(size) {
+            log(``, 'info');
+            log(`======== Testing ${size.toLocaleString()} vectors ========`, 'phase');
 
-        // Auto-init on page load
-        ensureInit().catch(e => {
-            log(`Init failed: ${e.message}`, 'fail');
-        });
+            // Create index
+            log(`Creating EdgeVec index (128 dimensions)...`, 'info');
+            const config = new wasmModule.EdgeVecConfig(128);
+            config.m = 16;
+            config.ef_construction = 200;
+            const index = new wasmModule.EdgeVec(config);
+            log(`Index created with M=16, efC=200`, 'success');
+
+            // Generate vectors
+            log(`Generating ${size.toLocaleString()} random vectors...`, 'info');
+            const vectors = [];
+            for (let i = 0; i < size; i++) {
+                const vec = new Float32Array(128);
+                for (let j = 0; j < 128; j++) {
+                    vec[j] = Math.random() * 2 - 1;
+                }
+                vectors.push(vec);
+            }
+            log(`Vectors generated`, 'success');
+
+            // Batch insert with progress
+            log(`Inserting vectors via batch API...`, 'info');
+            const insertStart = performance.now();
+
+            try {
+                const result = index.insertBatchWithProgress(vectors, (done, total) => {
+                    if (done === 0) {
+                        log(`  Batch insert started (${total} vectors)`, 'info');
+                    } else if (done === total) {
+                        log(`  Batch insert progress: 100%`, 'info');
+                    }
+                });
+
+                const insertTime = (performance.now() - insertStart).toFixed(0);
+                const avgPerVec = (parseFloat(insertTime) / size).toFixed(3);
+                log(`Insert complete: ${insertTime}ms (${result.inserted} inserted)`, 'success');
+                log(`  Average: ${avgPerVec}ms per vector`, 'info');
+                updateStat('statVectors', size.toLocaleString());
+                updateStat('statInsert', insertTime + 'ms');
+
+            } catch (insertErr) {
+                log(`Insert FAILED: ${insertErr.message}`, 'error');
+                throw insertErr;
+            }
+
+            // Memory estimate
+            const memEstimate = (size * 128 * 4 / 1024 / 1024).toFixed(1);
+            log(`  Estimated memory: ~${memEstimate}MB vectors + index overhead`, 'info');
+
+            // Search test
+            log(`Running search test (k=10)...`, 'info');
+            const query = new Float32Array(128);
+            for (let j = 0; j < 128; j++) {
+                query[j] = Math.random() * 2 - 1;
+            }
+
+            const searchStart = performance.now();
+            const searchResults = index.search(query, 10);
+            const searchTime = (performance.now() - searchStart).toFixed(2);
+            log(`Search complete: ${searchTime}ms (${searchResults.length} results)`, 'success');
+            updateStat('statSearch', searchTime + 'ms');
+
+            // IndexedDB save test
+            const dbName = `edgevec-stress-${size}`;
+            log(`Saving to IndexedDB ("${dbName}")...`, 'info');
+            const saveStart = performance.now();
+
+            try {
+                await index.save(dbName);
+                const saveTime = (performance.now() - saveStart).toFixed(0);
+                log(`Save complete: ${saveTime}ms`, 'success');
+                updateStat('statPersist', saveTime + 'ms');
+            } catch (saveErr) {
+                log(`Save FAILED: ${saveErr.message}`, 'error');
+                log(`  (May be Safari transaction timeout or quota)`, 'warn');
+            }
+
+            // IndexedDB load test
+            log(`Loading from IndexedDB...`, 'info');
+            const loadStart = performance.now();
+
+            try {
+                const loadedIndex = await wasmModule.EdgeVec.load(dbName);
+                const loadTime = (performance.now() - loadStart).toFixed(0);
+                const loadedCount = loadedIndex.liveCount();
+                log(`Load complete: ${loadTime}ms (${loadedCount} vectors)`, 'success');
+
+                // Verify loaded index works
+                const verifyResults = loadedIndex.search(query, 10);
+                log(`Verification search: ${verifyResults.length} results`, 'success');
+
+                // Cleanup
+                loadedIndex.free();
+            } catch (loadErr) {
+                log(`Load FAILED: ${loadErr.message}`, 'error');
+            }
+
+            // Cleanup IndexedDB
+            try {
+                const deleteReq = indexedDB.deleteDatabase(dbName);
+                await new Promise((resolve, reject) => {
+                    deleteReq.onsuccess = resolve;
+                    deleteReq.onerror = reject;
+                });
+                log(`Cleaned up IndexedDB: ${dbName}`, 'info');
+            } catch (e) {
+                // Ignore cleanup errors
+            }
+
+            // Free index memory
+            index.free();
+            log(`Index freed`, 'info');
+        }
+
+        // =====================================================================
+        // INITIALIZATION
+        // =====================================================================
+
+        async function initialize() {
+            try {
+                log('Initializing WASM module...', 'info');
+
+                // Try each path until one works
+                let loadedPath = null;
+                for (const path of WASM_PATHS) {
+                    try {
+                        log(`Trying: ${path}`, 'info');
+                        wasmModule = await import(path);
+                        loadedPath = path;
+                        break;
+                    } catch (e) {
+                        log(`  Failed: ${e.message}`, 'warn');
+                    }
+                }
+
+                if (!wasmModule) {
+                    throw new Error('Could not load WASM module from any path');
+                }
+
+                log(`Loaded from: ${loadedPath}`, 'success');
+
+                // Initialize the WASM module
+                await wasmModule.default();
+                isInitialized = true;
+
+                document.getElementById('wasmStatus').textContent = 'Ready';
+                log('WASM module initialized successfully', 'success');
+
+                setButtonsEnabled(true);
+                setStatus('Ready to test', 'idle', 'WASM initialized');
+
+            } catch (e) {
+                log(`Initialization FAILED: ${e.message}`, 'error');
+                log('', 'error');
+                log('═══════════════════════════════════════════════════', 'error');
+                log('  HOW TO FIX: Start server from PROJECT ROOT', 'error');
+                log('═══════════════════════════════════════════════════', 'error');
+                log('', 'error');
+                log('1. Open terminal in the edgevec project root folder', 'info');
+                log('2. Run: python -m http.server 8080', 'info');
+                log('3. Open: http://localhost:8080/wasm/examples/index.html', 'info');
+                log('', 'error');
+                log('DO NOT start server from wasm/examples/ folder!', 'warn');
+                log('The WASM module is at /pkg/ which requires root access.', 'warn');
+
+                document.getElementById('wasmStatus').textContent = 'Failed';
+                document.getElementById('wasmStatus').classList.remove('supported');
+                setStatus('See instructions below', 'error', 'Server configuration issue');
+            }
+        }
+
+        // =====================================================================
+        // EVENT LISTENERS
+        // =====================================================================
+
+        document.getElementById('quickBtn').addEventListener('click', () => runTest([1000]));
+        document.getElementById('mediumBtn').addEventListener('click', () => runTest([1000, 10000]));
+        document.getElementById('stressBtn').addEventListener('click', () => runTest([1000, 10000, 50000]));
+        document.getElementById('extremeBtn').addEventListener('click', () => runTest([100000]));
+
+        // =====================================================================
+        // START
+        // =====================================================================
+
+        initialize();
     </script>
 </body>
 </html>

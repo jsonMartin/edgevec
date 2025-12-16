@@ -994,7 +994,7 @@
     <canvas id="particleCanvas"></canvas>
 
     <header>
-        <div class="logo">
+        <a href="index.html" class="logo" style="text-decoration: none;">
             <div class="logo-icon">
                 <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                     <defs>
@@ -1015,7 +1015,7 @@
                 <span class="version-tag">v0.3.0</span>
                 <span class="feature-tag">Soft Delete</span>
             </div>
-        </div>
+        </a>
         <div class="header-info">
             <div class="info-item">
                 <span class="info-label">WASM:</span>
@@ -1029,6 +1029,7 @@
                 <span class="info-label">Dimension:</span>
                 <span class="info-value">128</span>
             </div>
+            <a href="index.html" style="color: var(--magenta); text-decoration: none; font-weight: 600; font-size: 12px; margin-left: auto; padding: 8px 16px; border: 1px solid var(--magenta); border-radius: 6px; transition: all 0.3s ease;">← Examples</a>
         </div>
     </header>
 
@@ -1189,7 +1190,18 @@
     </footer>
 
     <script type="module">
-        import init, { EdgeVec, EdgeVecConfig } from '../../pkg/edgevec.js';
+        // WASM module paths - works when serving from PROJECT ROOT
+        // IMPORTANT: Start server from edgevec/ root, NOT from wasm/examples/
+        // Example: cd edgevec && python -m http.server 8080
+        //          Then open: http://localhost:8080/wasm/examples/soft_delete.html
+        const WASM_PATHS = [
+            '../../pkg/edgevec.js',      // From /wasm/examples/ → /pkg/
+            '/pkg/edgevec.js',           // Absolute from root
+            '../pkg/edgevec.js',         // From /wasm/ → /pkg/
+            './pkg/edgevec.js'           // Fallback
+        ];
+
+        let wasmModule = null;
 
         // ═══════════════════════════════════════════════════════════════════
         // STATE
@@ -1572,8 +1584,8 @@
             }
 
             insertedIds = [];
-            const config = new EdgeVecConfig(dimension);
-            index = new EdgeVec(config);
+            const config = new wasmModule.EdgeVecConfig(dimension);
+            index = new wasmModule.EdgeVec(config);
 
             log('Index reset', 'info');
             updateStats();
@@ -1586,9 +1598,25 @@
 
         async function main() {
             try {
-                await init();
-                const config = new EdgeVecConfig(dimension);
-                index = new EdgeVec(config);
+                // Load WASM module dynamically
+                for (const path of WASM_PATHS) {
+                    try {
+                        console.log(`[SoftDelete] Trying: ${path}`);
+                        wasmModule = await import(path);
+                        console.log(`[SoftDelete] Loaded from: ${path}`);
+                        break;
+                    } catch (e) {
+                        console.warn(`[SoftDelete] Failed: ${e.message}`);
+                    }
+                }
+
+                if (!wasmModule) {
+                    throw new Error('Could not load WASM module from any path');
+                }
+
+                await wasmModule.default();
+                const config = new wasmModule.EdgeVecConfig(dimension);
+                index = new wasmModule.EdgeVec(config);
 
                 document.getElementById('wasmStatus').textContent = 'Ready';
                 document.getElementById('wasmStatus').classList.add('live');
@@ -1603,6 +1631,17 @@
                 document.getElementById('wasmStatus').classList.remove('live');
                 document.getElementById('wasmStatus').classList.add('danger');
                 log(`Initialization failed: ${e}`, 'error');
+                log('', 'error');
+                log('═══════════════════════════════════════════════════', 'error');
+                log('  HOW TO FIX: Start server from PROJECT ROOT', 'error');
+                log('═══════════════════════════════════════════════════', 'error');
+                log('', 'error');
+                log('1. Open terminal in the edgevec project root folder', 'info');
+                log('2. Run: python -m http.server 8080', 'info');
+                log('3. Open: http://localhost:8080/wasm/examples/index.html', 'info');
+                log('', 'error');
+                log('DO NOT start server from wasm/examples/ folder!', 'warn');
+                log('The WASM module is at /pkg/ which requires root access.', 'warn');
                 console.error(e);
             }
         }
