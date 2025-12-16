@@ -3,7 +3,7 @@
 [![CI](https://github.com/matte1782/edgevec/actions/workflows/ci.yml/badge.svg)](https://github.com/matte1782/edgevec/actions/workflows/ci.yml)
 [![Performance](https://github.com/matte1782/edgevec/actions/workflows/benchmark.yml/badge.svg)](https://github.com/matte1782/edgevec/actions/workflows/benchmark.yml)
 [![Crates.io](https://img.shields.io/crates/v/edgevec.svg)](https://crates.io/crates/edgevec)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/matte1782/edgevec/blob/main/LICENSE)
+[![License](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/matte1782/edgevec/blob/main/LICENSE-MIT)
 
 **High-performance vector search for Browser, Node, and Edge**
 
@@ -255,6 +255,36 @@ if (index.needsCompaction()) {
 
 ---
 
+## Interactive Examples
+
+Try EdgeVec directly in your browser with our interactive demos:
+
+**[View All Examples](wasm/examples/index.html)** | [Launch Dashboard](wasm/examples/benchmark-dashboard.html)
+
+| Demo | Description |
+|:-----|:------------|
+| [Performance Dashboard](wasm/examples/benchmark-dashboard.html) | **Featured** — Competitive analysis vs hnswlib-node & voy with interactive charts |
+| [Batch Insert](wasm/examples/batch_insert.html) | Test bulk insertion performance with real-time metrics |
+| [Batch Delete](wasm/examples/batch_delete.html) | Measure batch deletion throughput |
+| [Soft Delete & Compaction](wasm/examples/soft_delete.html) | RFC-001 implementation — tombstone deletion with live visualization |
+| [Stress Test](wasm/examples/stress-test.html) | Push EdgeVec to its limits with continuous operations |
+
+### Running Locally
+
+```bash
+# Clone the repository
+git clone https://github.com/matte1782/edgevec.git
+cd edgevec
+
+# Start local server
+python -m http.server 8000
+
+# Open in browser
+# http://localhost:8000/wasm/examples/
+```
+
+---
+
 ## Development Status
 
 `EdgeVec` follows a **military-grade development protocol**. No code is written without an approved plan.
@@ -286,10 +316,23 @@ if (index.needsCompaction()) {
 
 ### What's Next (v0.4.0)
 
-1. **Multi-vector Delete** — Batch delete API
+1. ~~**Multi-vector Delete**~~ ✅ Shipped in v0.3.0
 2. **P99 Tracking** — Latency distribution metrics in CI
-3. **ARM/NEON Optimization** — Cross-platform SIMD verification
-4. **Mobile Support** — iOS Safari and Android Chrome formalized
+3. **Benchmark Dashboard** — Interactive performance visualization
+4. **User Documentation** — Tutorial, tuning guide, integration guide
+
+### Future Roadmap (v0.5.0+)
+
+1. **ARM/NEON Optimization** — Cross-platform SIMD verification
+2. **Mobile Support** — iOS Safari and Android Chrome formalized
+3. **CLI Tools** — Optional developer command-line interface
+
+### Path to v1.0
+
+EdgeVec will reach v1.0 after:
+- Production usage feedback from v0.4.0/v0.5.0
+- Security audit
+- API stability guarantee commitment
 
 ---
 
@@ -457,7 +500,18 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full release process, including
 
 ## License
 
-MIT — See [LICENSE](./LICENSE)
+Licensed under either of:
+
+* Apache License, Version 2.0 ([LICENSE-APACHE](./LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license ([LICENSE-MIT](./LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
 
 ---
 
