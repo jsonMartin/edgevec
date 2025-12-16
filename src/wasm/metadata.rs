@@ -387,7 +387,7 @@ mod tests {
         // Valid integers should work (these don't call JsError::new)
         assert!(JsMetadataValue::from_integer(0.0).is_ok());
         assert!(JsMetadataValue::from_integer(-1.0).is_ok());
-        assert!(JsMetadataValue::from_integer(1000000.0).is_ok());
+        assert!(JsMetadataValue::from_integer(1_000_000.0).is_ok());
 
         // MAX_SAFE_INTEGER should work
         let max_safe = 9_007_199_254_740_991.0;
@@ -401,10 +401,10 @@ mod tests {
 
     #[test]
     fn test_js_metadata_value_float() {
-        let value = JsMetadataValue::from_float(3.14);
+        let value = JsMetadataValue::from_float(3.125);
         assert!(value.is_float());
         assert_eq!(value.get_type(), "float");
-        assert_eq!(value.as_float(), Some(3.14));
+        assert_eq!(value.as_float(), Some(3.125));
     }
 
     #[test]

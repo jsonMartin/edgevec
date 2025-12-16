@@ -49,7 +49,7 @@ fn test_metadata_value_from_integer_max_safe() {
 
 #[wasm_bindgen_test]
 fn test_metadata_value_from_integer_rejects_fractional() {
-    let result = JsMetadataValue::from_integer(3.14);
+    let result = JsMetadataValue::from_integer(3.5);
     assert!(result.is_err(), "Should reject fractional value");
 }
 
@@ -67,10 +67,10 @@ fn test_metadata_value_from_integer_rejects_infinity() {
 
 #[wasm_bindgen_test]
 fn test_metadata_value_from_float() {
-    let value = JsMetadataValue::from_float(3.14159);
+    let value = JsMetadataValue::from_float(3.125);
     assert!(value.is_float());
     assert_eq!(value.get_type(), "float");
-    assert_eq!(value.as_float(), Some(3.14159));
+    assert_eq!(value.as_float(), Some(3.125));
 }
 
 #[wasm_bindgen_test]
@@ -133,9 +133,9 @@ fn test_metadata_value_to_js_integer() {
 
 #[wasm_bindgen_test]
 fn test_metadata_value_to_js_float() {
-    let value = JsMetadataValue::from_float(2.718);
+    let value = JsMetadataValue::from_float(2.5);
     let js_val = value.to_js();
-    assert_eq!(js_val.as_f64(), Some(2.718));
+    assert_eq!(js_val.as_f64(), Some(2.5));
 }
 
 #[wasm_bindgen_test]
@@ -485,7 +485,7 @@ async fn test_metadata_survives_save_load_roundtrip() {
     // Set various metadata types
     let str_val = JsMetadataValue::from_string("Test Document".to_string());
     let int_val = JsMetadataValue::from_integer(42.0).unwrap();
-    let float_val = JsMetadataValue::from_float(3.14159);
+    let float_val = JsMetadataValue::from_float(3.125);
     let bool_val = JsMetadataValue::from_boolean(true);
 
     index.set_metadata(id, "title", &str_val).unwrap();
@@ -529,7 +529,7 @@ async fn test_metadata_survives_save_load_roundtrip() {
     assert!(score.is_float());
     // Use approximate comparison for floats
     let score_val = score.as_float().unwrap();
-    assert!((score_val - 3.14159).abs() < 0.00001);
+    assert!((score_val - 3.125).abs() < 0.00001);
 
     let active = loaded
         .get_metadata(id, "active")
