@@ -442,11 +442,8 @@ mod tests {
 
     #[test]
     fn test_json_format_string_array() {
-        let value = MetadataValue::StringArray(vec![
-            "a".to_string(),
-            "b".to_string(),
-            "c".to_string(),
-        ]);
+        let value =
+            MetadataValue::StringArray(vec!["a".to_string(), "b".to_string(), "c".to_string()]);
         let json = serde_json::to_string(&value).unwrap();
         assert_eq!(json, r#"{"type":"string_array","value":["a","b","c"]}"#);
     }
@@ -549,7 +546,10 @@ mod tests {
         assert_eq!(MetadataValue::Integer(0).type_name(), "integer");
         assert_eq!(MetadataValue::Float(0.0).type_name(), "float");
         assert_eq!(MetadataValue::Boolean(false).type_name(), "boolean");
-        assert_eq!(MetadataValue::StringArray(vec![]).type_name(), "string_array");
+        assert_eq!(
+            MetadataValue::StringArray(vec![]).type_name(),
+            "string_array"
+        );
     }
 
     // =========================================================================

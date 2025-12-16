@@ -393,7 +393,9 @@ mod tests {
         assert!(validate_value(&value).is_err());
         assert!(matches!(
             validate_value(&value),
-            Err(MetadataError::InvalidFloat { reason: "NaN not allowed" })
+            Err(MetadataError::InvalidFloat {
+                reason: "NaN not allowed"
+            })
         ));
     }
 
@@ -403,7 +405,9 @@ mod tests {
         assert!(validate_value(&value).is_err());
         assert!(matches!(
             validate_value(&value),
-            Err(MetadataError::InvalidFloat { reason: "Infinity not allowed" })
+            Err(MetadataError::InvalidFloat {
+                reason: "Infinity not allowed"
+            })
         ));
     }
 
