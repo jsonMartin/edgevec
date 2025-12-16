@@ -1,0 +1,12 @@
+{
+  "name": "edgevec-browserstack-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EdgeVec BrowserStack mobile browser tests",
+  "scripts": {
+    "test": "node run-tests.js"
+  },
+  "dependencies": {
+    "selenium-webdriver": "^4.16.0"
+  }
+}

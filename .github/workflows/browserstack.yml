@@ -1,0 +1,110 @@
+name: BrowserStack Mobile Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly to catch browser updates (Monday 6am UTC)
+    - cron: '0 6 * * 1'
+
+env:
+  BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+  BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+
+jobs:
+  mobile-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only run if BrowserStack secrets are configured
+    if: ${{ github.event_name == 'schedule' || (secrets.BROWSERSTACK_USERNAME != '' && secrets.BROWSERSTACK_ACCESS_KEY != '') }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Install Node dependencies
+        run: npm ci
+        working-directory: tests/browserstack
+
+      - name: Build WASM
+        run: wasm-pack build --target web --release
+
+      - name: Prepare test assets
+        run: |
+          mkdir -p tests/mobile/pkg
+          cp pkg/edgevec.js tests/mobile/
+          cp pkg/edgevec_bg.wasm tests/mobile/
+
+      - name: Start local server
+        run: |
+          python -m http.server 8080 &
+          sleep 2
+
+      - name: Setup BrowserStack Local
+        uses: browserstack/github-actions/setup-local@master
+        with:
+          local-testing: start
+          local-identifier: ${{ github.run_id }}
+
+      - name: Run iOS Safari 16 Tests (iPhone 14)
+        run: |
+          node run-tests.js \
+            --platform ios \
+            --browser safari \
+            --os-version 16 \
+            --device "iPhone 14"
+        working-directory: tests/browserstack
+
+      - name: Run Android Chrome 13 Tests (Pixel 7)
+        run: |
+          node run-tests.js \
+            --platform android \
+            --browser chrome \
+            --os-version 13 \
+            --device "Google Pixel 7"
+        working-directory: tests/browserstack
+
+      - name: Run iOS Safari 15 Tests (iPhone 13)
+        run: |
+          node run-tests.js \
+            --platform ios \
+            --browser safari \
+            --os-version 15 \
+            --device "iPhone 13"
+        working-directory: tests/browserstack
+
+      - name: Run Android Chrome 11 Tests (Galaxy S21)
+        run: |
+          node run-tests.js \
+            --platform android \
+            --browser chrome \
+            --os-version 11 \
+            --device "Samsung Galaxy S21"
+        working-directory: tests/browserstack
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browserstack-results-${{ github.run_id }}
+          path: tests/browserstack/results/
+          retention-days: 30
+
+      - name: Stop BrowserStack Local
+        if: always()
+        uses: browserstack/github-actions/setup-local@master
+        with:
+          local-testing: stop
