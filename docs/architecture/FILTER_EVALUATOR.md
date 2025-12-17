@@ -1102,6 +1102,79 @@ pub fn validate_ast_limits(expr: &FilterExpr) -> Result<(), FilterError> {
 
     Ok(())
 }
+
+/// Count total nodes and maximum depth in an AST.
+///
+/// # Returns
+/// Tuple of (node_count, max_depth)
+///
+/// # Complexity
+/// O(n) where n = number of nodes
+fn count_nodes_and_depth(expr: &FilterExpr) -> (usize, usize) {
+    fn count_recursive(expr: &FilterExpr, current_depth: usize) -> (usize, usize) {
+        match expr {
+            // Leaf nodes: 1 node, current depth
+            FilterExpr::LiteralString(_) |
+            FilterExpr::LiteralInt(_) |
+            FilterExpr::LiteralFloat(_) |
+            FilterExpr::LiteralBool(_) |
+            FilterExpr::Field(_) => (1, current_depth),
+
+            // Array literal: 1 + sum of children
+            FilterExpr::LiteralArray(elements) => {
+                let mut total_nodes = 1;
+                let mut max_depth = current_depth;
+                for elem in elements {
+                    let (nodes, depth) = count_recursive(elem, current_depth + 1);
+                    total_nodes += nodes;
+                    max_depth = max_depth.max(depth);
+                }
+                (total_nodes, max_depth)
+            }
+
+            // Binary operators: 1 + left + right
+            FilterExpr::Eq(left, right) |
+            FilterExpr::Ne(left, right) |
+            FilterExpr::Lt(left, right) |
+            FilterExpr::Le(left, right) |
+            FilterExpr::Gt(left, right) |
+            FilterExpr::Ge(left, right) |
+            FilterExpr::Contains(left, right) |
+            FilterExpr::StartsWith(left, right) |
+            FilterExpr::EndsWith(left, right) |
+            FilterExpr::Like(left, right) |
+            FilterExpr::In(left, right) |
+            FilterExpr::NotIn(left, right) |
+            FilterExpr::Any(left, right) |
+            FilterExpr::All(left, right) |
+            FilterExpr::None(left, right) |
+            FilterExpr::And(left, right) |
+            FilterExpr::Or(left, right) => {
+                let (left_nodes, left_depth) = count_recursive(left, current_depth + 1);
+                let (right_nodes, right_depth) = count_recursive(right, current_depth + 1);
+                (1 + left_nodes + right_nodes, left_depth.max(right_depth))
+            }
+
+            // Ternary operator: 1 + field + low + high
+            FilterExpr::Between(field, low, high) => {
+                let (f_nodes, f_depth) = count_recursive(field, current_depth + 1);
+                let (l_nodes, l_depth) = count_recursive(low, current_depth + 1);
+                let (h_nodes, h_depth) = count_recursive(high, current_depth + 1);
+                (1 + f_nodes + l_nodes + h_nodes, f_depth.max(l_depth).max(h_depth))
+            }
+
+            // Unary operators: 1 + child
+            FilterExpr::Not(inner) |
+            FilterExpr::IsNull(inner) |
+            FilterExpr::IsNotNull(inner) => {
+                let (inner_nodes, inner_depth) = count_recursive(inner, current_depth + 1);
+                (1 + inner_nodes, inner_depth)
+            }
+        }
+    }
+
+    count_recursive(expr, 1)
+}
 ```
 
 ### 6.5 Stack Usage During Evaluation
@@ -1449,10 +1522,15 @@ Where:
 
 ### 10.1 Short-Circuit Test Cases
 
+> **Note:** The `parse()` function used in these test cases is provided by the
+> parser module (`src/filter/parser.rs`), which will be implemented in Week 23.
+> These tests demonstrate the expected behavior once the parser is available.
+
 ```rust
 #[cfg(test)]
 mod short_circuit_tests {
     use super::*;
+    use crate::filter::parser::parse; // Implemented in Week 23 (W23.1)
 
     /// Test 1: AND short-circuit on first false
     #[test]
