@@ -17,49 +17,68 @@ jobs:
   mobile-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Only run if BrowserStack secrets are configured
-    if: ${{ github.event_name == 'schedule' || (secrets.BROWSERSTACK_USERNAME != '' && secrets.BROWSERSTACK_ACCESS_KEY != '') }}
+    # Only run if BrowserStack secrets are configured (checked in first step)
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'push' || github.event_name == 'pull_request' }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check BrowserStack secrets
+        id: check-secrets
+        run: |
+          if [ -z "$BROWSERSTACK_USERNAME" ] || [ -z "$BROWSERSTACK_ACCESS_KEY" ]; then
+            echo "BrowserStack secrets not configured. Skipping tests."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Rust
+        if: steps.check-secrets.outputs.skip != 'true'
         uses: dtolnay/rust-action@stable
 
       - name: Setup Node.js
+        if: steps.check-secrets.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Install wasm-pack
+        if: steps.check-secrets.outputs.skip != 'true'
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Install Node dependencies
+        if: steps.check-secrets.outputs.skip != 'true'
         run: npm ci
         working-directory: tests/browserstack
 
       - name: Build WASM
+        if: steps.check-secrets.outputs.skip != 'true'
         run: wasm-pack build --target web --release
 
       - name: Prepare test assets
+        if: steps.check-secrets.outputs.skip != 'true'
         run: |
           mkdir -p tests/mobile/pkg
           cp pkg/edgevec.js tests/mobile/
           cp pkg/edgevec_bg.wasm tests/mobile/
 
       - name: Start local server
+        if: steps.check-secrets.outputs.skip != 'true'
         run: |
           python -m http.server 8080 &
           sleep 2
 
       - name: Setup BrowserStack Local
+        if: steps.check-secrets.outputs.skip != 'true'
         uses: browserstack/github-actions/setup-local@master
         with:
           local-testing: start
           local-identifier: ${{ github.run_id }}
 
       - name: Run iOS Safari 16 Tests (iPhone 14)
+        if: steps.check-secrets.outputs.skip != 'true'
         run: |
           node run-tests.js \
             --platform ios \
@@ -69,6 +88,7 @@ jobs:
         working-directory: tests/browserstack
 
       - name: Run Android Chrome 13 Tests (Pixel 7)
+        if: steps.check-secrets.outputs.skip != 'true'
         run: |
           node run-tests.js \
             --platform android \
@@ -78,6 +98,7 @@ jobs:
         working-directory: tests/browserstack
 
       - name: Run iOS Safari 15 Tests (iPhone 13)
+        if: steps.check-secrets.outputs.skip != 'true'
         run: |
           node run-tests.js \
             --platform ios \
@@ -87,6 +108,7 @@ jobs:
         working-directory: tests/browserstack
 
       - name: Run Android Chrome 11 Tests (Galaxy S21)
+        if: steps.check-secrets.outputs.skip != 'true'
         run: |
           node run-tests.js \
             --platform android \
@@ -97,14 +119,14 @@ jobs:
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.check-secrets.outputs.skip != 'true'
         with:
           name: browserstack-results-${{ github.run_id }}
           path: tests/browserstack/results/
           retention-days: 30
 
       - name: Stop BrowserStack Local
-        if: always()
+        if: always() && steps.check-secrets.outputs.skip != 'true'
         uses: browserstack/github-actions/setup-local@master
         with:
           local-testing: stop
