@@ -836,8 +836,8 @@
         <footer class="footer">
             <p>
                 EdgeVec v0.5.0 |
-                <a href="https://github.com/edgevec/edgevec" target="_blank" rel="noopener noreferrer">GitHub</a> |
-                <a href="../docs/api/FILTER_SYNTAX.md" target="_blank">Filter Syntax Docs</a>
+                <a href="https://github.com/matte1782/edgevec" target="_blank" rel="noopener noreferrer">GitHub</a> |
+                <a href="../../docs/api/FILTER_SYNTAX.md" target="_blank">Filter Syntax Docs</a>
             </p>
         </footer>
     </div>
@@ -935,32 +935,6 @@
                 description: "Real-world product search"
             }
         ];
-
-        // ═══════════════════════════════════════════════════════════════════════════
-        // COMMON ERROR FIXES (W24.4.4)
-        // ═══════════════════════════════════════════════════════════════════════════
-
-        const ERROR_FIXES = {
-            // Unquoted string values
-            '= ([a-zA-Z][a-zA-Z0-9_]*)(?!["\'])': (match, value) => ({
-                suggestion: `Did you forget quotes? Try: = "${value}"`,
-                fix: `= "${value}"`
-            }),
-            // Missing closing quote
-            '"[^"]*$': () => ({
-                suggestion: 'Missing closing quote "',
-                fix: null
-            }),
-            // Missing closing paren
-            '\\([^)]*$': () => ({
-                suggestion: 'Missing closing parenthesis )',
-                fix: null
-            }),
-            // Common typos
-            'BEETWEEN': () => ({ suggestion: 'Did you mean BETWEEN?', fix: 'BETWEEN' }),
-            'CONTIANS': () => ({ suggestion: 'Did you mean CONTAINS?', fix: 'CONTAINS' }),
-            'STATRSWITH': () => ({ suggestion: 'Did you mean STARTS_WITH?', fix: 'STARTS_WITH' }),
-        };
 
         // ═══════════════════════════════════════════════════════════════════════════
         // DOM REFERENCES
@@ -1187,10 +1161,12 @@
                 `;
 
                 if (suggestion.fix) {
+                    // Escape both HTML and JS string delimiters to prevent XSS
+                    const safeFix = escapeHtml(suggestion.fix).replace(/'/g, '&#39;').replace(/\\/g, '\\\\');
                     html += `
                         <div class="error-actions">
-                            <button class="btn btn-small" onclick="applyFix('${escapeHtml(suggestion.fix)}')">Apply Fix</button>
-                            <a href="../docs/api/FILTER_SYNTAX.md" target="_blank" class="btn btn-small">View Docs</a>
+                            <button class="btn btn-small" onclick="applyFix('${safeFix}')">Apply Fix</button>
+                            <a href="../../docs/api/FILTER_SYNTAX.md" target="_blank" class="btn btn-small">View Docs</a>
                         </div>
                     `;
                 }
