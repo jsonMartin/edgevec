@@ -61,8 +61,8 @@ const filtered = results.filter(r =>
 );
 
 // Or use the Filter API for complex expressions
-import { parseFilter } from 'edgevec';
-const filter = parseFilter('category = "books" AND price < 50');
+import { Filter } from 'edgevec';
+const filter = Filter.parse('category = "books" AND price < 50');
 ```
 
 ---
