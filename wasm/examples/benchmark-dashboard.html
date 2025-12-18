@@ -1578,7 +1578,7 @@
 
             } catch (e) {
                 console.error('[FilterBench] Error:', e);
-                resultsDiv.innerHTML = `<div class="filter-bench-empty" style="color: var(--red);">Error: ${e.message}</div>`;
+                resultsDiv.innerHTML = `<div class="filter-bench-empty" style="color: var(--red);">Error: ${escapeHtml(e.message)}</div>`;
             } finally {
                 btn.classList.remove('loading');
                 btn.disabled = false;

@@ -1682,7 +1682,7 @@
                 resultsList.innerHTML = `
                     <div class="results-empty" style="color: var(--red);">
                         <div class="results-empty-icon">❌</div>
-                        <div>Error loading data: ${e.message}</div>
+                        <div>Error loading data: ${escapeHtml(e.message)}</div>
                     </div>
                 `;
             } finally {
