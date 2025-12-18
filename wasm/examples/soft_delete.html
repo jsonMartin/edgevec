@@ -1304,6 +1304,20 @@
         }
 
         // ═══════════════════════════════════════════════════════════════════
+        // XSS ESCAPE UTILITY
+        // ═══════════════════════════════════════════════════════════════════
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
         // FILTER PARSING
         // ═══════════════════════════════════════════════════════════════════
 
@@ -1666,7 +1680,6 @@
             results = results.slice(0, 10);
 
             const elapsed = searchTime.toFixed(2);
-            const filterBadge = hasFilter ? `<span class="filter-badge active">🔍 Filtered</span>` : '';
             document.getElementById('searchTime').textContent = `${elapsed}ms ${hasFilter ? `(${results.length}/${rawResults.length} matched)` : ''}`;
 
             const resultsList = document.getElementById('resultsList');
@@ -1700,7 +1713,7 @@
                         <span class="result-id" style="flex: 1;">
                             ID: ${r.id}
                             <span style="color: var(--gray); font-size: 10px; margin-left: 8px;">
-                                ${meta.category || ''} · $${meta.price || '-'} · ★${meta.rating || '-'}
+                                ${escapeHtml(meta.category) || ''} · $${escapeHtml(meta.price) || '-'} · ★${escapeHtml(meta.rating) || '-'}
                             </span>
                         </span>
                         <span class="result-distance">${r.score.toFixed(6)}</span>

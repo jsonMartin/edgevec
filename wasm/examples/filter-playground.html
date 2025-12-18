@@ -962,7 +962,7 @@
             <section class="panel" aria-labelledby="output-title">
                 <div class="panel-header">
                     <h2 id="output-title" class="panel-title">Parse Result</h2>
-                    <button class="btn btn-small" onclick="copyToClipboard('json-output')" title="Copy JSON to clipboard">Copy JSON</button>
+                    <button class="btn btn-small" onclick="copyToClipboard('json-output', event)" title="Copy JSON to clipboard">Copy JSON</button>
                 </div>
 
                 <div class="output-tabs" role="tablist" aria-label="Output views">
@@ -1602,7 +1602,7 @@
         });
 
         // Copy to clipboard functionality
-        window.copyToClipboard = async function(elementId) {
+        window.copyToClipboard = async function(elementId, event) {
             const element = document.getElementById(elementId);
             if (!element) return;
 
@@ -1610,8 +1610,7 @@
             try {
                 await navigator.clipboard.writeText(text);
                 // Show brief feedback
-                const originalTitle = element.parentElement.querySelector('.output-pre')?.title || '';
-                const btn = event.target.closest('button');
+                const btn = event?.target?.closest('button');
                 if (btn) {
                     const originalText = btn.textContent;
                     btn.textContent = 'Copied!';
