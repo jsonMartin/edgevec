@@ -16,10 +16,13 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs');
 
+// Resolve project root (parent of scripts directory)
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+
 // Configuration
 const CONFIG = {
     port: parseInt(process.argv.find((_, i, arr) => arr[i - 1] === '--port') || '8080'),
-    outputDir: process.argv.find((_, i, arr) => arr[i - 1] === '--output') || 'docs/images',
+    outputDir: process.argv.find((_, i, arr) => arr[i - 1] === '--output') || path.join(PROJECT_ROOT, 'docs', 'images'),
     baseUrl: null, // Set dynamically
     viewport: { width: 1200, height: 800, deviceScaleFactor: 2 },
     timeout: 30000,
@@ -108,14 +111,8 @@ const DEMOS = [
                 { timeout: CONFIG.timeout }
             ).catch(() => console.log('  Note: WASM status not found, continuing...'));
 
-            // Click "Insert 100" button if exists
-            const insertBtn = await page.$('button:has-text("Insert"), .btn-insert');
-            if (insertBtn) {
-                await insertBtn.click();
-                await page.waitForTimeout(500);
-            }
-
-            await page.waitForTimeout(500);
+            // Wait a bit for page to stabilize
+            await page.waitForTimeout(1000);
         }
     },
     {
