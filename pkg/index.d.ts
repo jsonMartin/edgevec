@@ -27,39 +27,8 @@
  * const results = db.search(new Float32Array(128).fill(0.1), 10);
  * ```
  */
-
-// Re-export core WASM bindings for direct low-level access
-// This maintains backwards compatibility with README examples
-export {
-  default,
-  EdgeVec,
-  EdgeVecConfig,
-  JsMetadataValue,
-  BatchInsertConfig,
-  BatchInsertResult,
-} from './edgevec.js';
-
-// Re-export Filter API
-export {
-  Filter,
-  FilterExpression,
-  FilterValidation,
-  FilterValidationError,
-  FilterValidationWarning,
-  MetadataValue,
-} from './filter.js';
-
+export { default, EdgeVec, EdgeVecConfig, JsMetadataValue, BatchInsertConfig, BatchInsertResult, } from './edgevec.js';
+export { Filter, FilterExpression, FilterValidation, FilterValidationError, FilterValidationWarning, MetadataValue, } from './filter.js';
 export { FilterBuilder, FieldCondition } from './filter-builder.js';
-
-// Re-export high-level wrapper API
-export {
-  EdgeVecIndex,
-  FilterException,
-  FilterStrategy,
-  Metadata,
-  SearchOptions,
-  SearchResult,
-  FilteredSearchResult,
-  IndexConfig,
-  SourcePosition,
-} from './edgevec-wrapper.js';
+export { EdgeVecIndex, FilterException, FilterStrategy, Metadata, SearchOptions, SearchResult, FilteredSearchResult, IndexConfig, SourcePosition, } from './edgevec-wrapper.js';
+//# sourceMappingURL=index.d.ts.map

@@ -2,7 +2,7 @@
   "name": "edgevec",
   "type": "module",
   "description": "WASM-native vector database with SQL-like filtering, persistence, and soft delete",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
@@ -14,32 +14,53 @@
     "edgevec.d.ts",
     "edgevec_bg.wasm.d.ts",
     "snippets",
-    "index.ts",
-    "filter.ts",
-    "filter-builder.ts",
-    "edgevec-wrapper.ts",
+    "index.js",
+    "index.js.map",
+    "index.d.ts",
+    "index.d.ts.map",
+    "filter.js",
+    "filter.js.map",
+    "filter.d.ts",
+    "filter.d.ts.map",
+    "filter-builder.js",
+    "filter-builder.js.map",
+    "filter-builder.d.ts",
+    "filter-builder.d.ts.map",
+    "edgevec-wrapper.js",
+    "edgevec-wrapper.js.map",
+    "edgevec-wrapper.d.ts",
+    "edgevec-wrapper.d.ts.map",
     "edgevec-types.d.ts",
     "LICENSE-APACHE",
     "LICENSE-MIT"
   ],
-  "main": "edgevec.js",
-  "types": "edgevec.d.ts",
+  "main": "index.js",
+  "types": "index.d.ts",
   "exports": {
     ".": {
-      "types": "./edgevec-types.d.ts",
-      "import": "./index.ts"
+      "types": "./index.d.ts",
+      "import": "./index.js",
+      "default": "./index.js"
     },
     "./filter": {
-      "types": "./filter.ts",
-      "import": "./filter.ts"
+      "types": "./filter.d.ts",
+      "import": "./filter.js",
+      "default": "./filter.js"
     },
     "./filter-builder": {
-      "types": "./filter-builder.ts",
-      "import": "./filter-builder.ts"
+      "types": "./filter-builder.d.ts",
+      "import": "./filter-builder.js",
+      "default": "./filter-builder.js"
     },
     "./wrapper": {
-      "types": "./edgevec-wrapper.ts",
-      "import": "./edgevec-wrapper.ts"
+      "types": "./edgevec-wrapper.d.ts",
+      "import": "./edgevec-wrapper.js",
+      "default": "./edgevec-wrapper.js"
+    },
+    "./core": {
+      "types": "./edgevec.d.ts",
+      "import": "./edgevec.js",
+      "default": "./edgevec.js"
     }
   },
   "sideEffects": [

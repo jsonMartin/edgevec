@@ -7,9 +7,18 @@
 
 **The first WASM-native vector database. Filter, delete, persist — all in the browser.**
 
-> ✅ **STATUS: v0.5.0 Released** — Filter API with 15 SQL-like operators.
+> ✅ **STATUS: v0.5.2 Released** — Filter API with 15 SQL-like operators.
+
+> **Note:** EdgeVec is designed for **browser-first** usage. Node.js usage requires a bundler (Vite, Webpack, Rollup, esbuild) to handle WASM loading. Direct Node.js ESM imports work for code organization, but WASM initialization requires bundler support.
 
 ---
+
+## What's New in v0.5.2
+
+### v0.5.2 Hotfix
+- **Fixed:** Package now exports compiled JavaScript instead of raw TypeScript
+- **Fixed:** Node.js `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` error resolved
+- **Added:** Direct subpath exports for `./filter`, `./filter-builder`, `./wrapper`, `./core`
 
 ## What's New in v0.5.0
 
@@ -68,7 +77,9 @@ rustflags = ["-C", "target-cpu=native"]
 
 Without this configuration, performance will be 60-78% slower due to missing SIMD optimizations.
 
-### Browser/Node.js Usage
+### Browser Usage (Recommended)
+
+EdgeVec is designed for browser-first usage with bundlers like Vite, Webpack, or Rollup.
 
 ```javascript
 import init, { EdgeVec, EdgeVecConfig, Filter } from 'edgevec';
