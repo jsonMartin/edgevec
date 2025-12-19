@@ -49,11 +49,19 @@
 
 **Agent:** WASM_SPECIALIST
 
-**Options:**
-1. **Android Studio Emulator** (requires Android SDK)
-2. **BrowserStack** (cloud-based)
-3. **Real Android device** (most accurate)
-4. **Chrome DevTools device mode** (limited, for layout only)
+**Verification:** Manual
+
+**Testing Approach (Updated):**
+- **Primary:** Remote friend with Android device
+- **Method:** Share hosted demo URL, request screenshots/screen recording
+- **Backup:** Chrome DevTools device mode for layout verification
+- **Backup 2:** BrowserStack free tier if needed
+
+**Remote Testing Protocol:**
+1. Deploy demos to GitHub Pages or temporary hosting
+2. Send URLs to friend with test checklist
+3. Friend reports: Works/Broken + screenshots
+4. Document results in test matrix
 
 ---
 

@@ -26,6 +26,8 @@
 
 **Agent:** PLANNER
 
+**Verification:** Manual — metrics documented in markdown file
+
 **Commands:**
 ```bash
 npm info edgevec
@@ -53,6 +55,8 @@ npm info edgevec
 **Estimated Duration:** 45 minutes
 
 **Agent:** PLANNER
+
+**Verification:** Manual — issues triaged with labels
 
 ---
 
