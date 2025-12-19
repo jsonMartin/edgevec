@@ -366,9 +366,9 @@ Before Day 7, verify:
    - Puppeteer-based screenshot automation
    - Captures 5 demo pages with setup states
    - Uses absolute path resolution for output
-   - 4/5 screenshots captured:
+   - All 5/5 screenshots captured:
      - playground-dark.png (216 KB)
      - playground-light.png (215 KB)
-     - dashboard.png (611 KB)
+     - dashboard.png (606 KB)
      - demo-catalog.png (1114 KB)
-   - soft-delete.png pending (script fixed, requires server re-run)
+     - soft-delete.png (245 KB)

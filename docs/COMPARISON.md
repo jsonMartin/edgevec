@@ -145,11 +145,12 @@ EdgeVec has zero infrastructure costs:
 EdgeVec is the **only** WASM library with SQL-like filtering:
 
 ```javascript
+import { Filter } from 'edgevec';
+
 // Only EdgeVec supports this in the browser
-const results = search(query, 10);
-const filtered = results.filter(r =>
-    parseFilter('category = "tech" AND price < 100')(metadata[r.id])
-);
+const results = db.search(query, 10);
+const filter = Filter.parse('category = "tech" AND price < 100');
+const filtered = results.filter(r => filter.evaluate(metadata[r.id]));
 ```
 
 ---
@@ -213,18 +214,19 @@ const results = await index.query({
 });
 
 // EdgeVec
+import { Filter } from 'edgevec';
+
 const index = new EdgeVec(config);
 const id = index.insert(vector);
 metadata[id] = { category: 'books' };
 const results = index.search(query, k);
-const filtered = results.filter(r =>
-    parseFilter('category = "books"')(metadata[r.id])
-);
+const filter = Filter.parse('category = "books"');
+const filtered = results.filter(r => filter.evaluate(metadata[r.id]));
 ```
 
 Key differences:
 - EdgeVec is local, no network calls
-- EdgeVec uses SQL-like filter syntax
+- EdgeVec uses SQL-like filter syntax via `Filter.parse()`
 - Metadata stored separately in EdgeVec v0.5
 
 ---
