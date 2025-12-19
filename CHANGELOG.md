@@ -7,10 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned (v0.5.0)
+### Planned (v0.6.0)
 - ARM/NEON SIMD optimization verification
 - Mobile support (iOS Safari, Android Chrome)
-- Enhanced metadata storage
+- Integrated metadata storage (server-side pattern)
+
+---
+
+## [0.5.0] - 2025-12-19 — Filter API Release
+
+**Focus:** Metadata filtering — The feature that transforms EdgeVec from a search library into a vector database.
+
+### Added
+
+#### Filter API
+- **SQL-like filter expressions** — 15 operators for metadata filtering
+  - Comparison: `=`, `!=`, `>`, `<`, `>=`, `<=`
+  - Set: `IN`, `NOT IN`
+  - String: `CONTAINS`, `STARTS_WITH`, `ENDS_WITH`
+  - Null: `IS NULL`, `IS NOT NULL`
+  - Boolean: `AND`, `OR`, `NOT`
+- **`Filter.parse()`** — Parse filter expressions with detailed error messages
+- **`Filter.evaluate()`** — Evaluate filters against metadata objects
+- **`FilterBuilder`** — TypeScript fluent API for type-safe filter construction
+- **Strategy selection** — Automatic prefilter/postfilter/hybrid selection
+
+#### Interactive Demos
+- **Filter Playground** (`wasm/examples/filter-playground.html`)
+  - Real-time filter parsing with syntax highlighting
+  - AST visualization
+  - Example expressions gallery
+  - Dark/light theme toggle
+  - Keyboard shortcuts (Ctrl+Enter, Ctrl+/)
+
+- **Demo Catalog** (`wasm/examples/index.html`)
+  - Professional landing page with all demos
+  - Mobile responsive design
+  - Filter integration across all demos
+
+#### Documentation
+- **`docs/api/FILTER_SYNTAX.md`** — Complete filter expression reference
+- **`docs/api/DATABASE_OPERATIONS.md`** — CRUD operations guide
+- **`docs/api/TYPESCRIPT_API.md`** — TypeScript API reference
+- **`docs/COMPARISON.md`** — EdgeVec vs alternatives guide
+- **`docs/design/ACCESSIBILITY_AUDIT.md`** — WCAG 2.1 AA compliance
+
+#### Competitive Analysis
+- **`docs/benchmarks/competitive_analysis_v2.md`** — Full methodology
+- **`docs/benchmarks/w24_voy_comparison.md`** — EdgeVec vs voy (24x faster)
+- **`docs/benchmarks/w24_hnswlib_comparison.md`** — EdgeVec vs hnswlib-node
+- **`docs/benchmarks/w24_tier2_feature_matrix.md`** — Feature comparison
+
+### Changed
+- **README.md** — Repositioned as "vector database" with feature matrix
+- **`pkg/package.json`** — 16 keywords for npm discoverability
+- **All demos** — Added filter capabilities and mobile responsiveness
+
+### Fixed
+- **UTF-8 panic** — Filter parser now handles multi-byte UTF-8 correctly (`f75a4c0`)
+- **XSS vulnerabilities** — Added `escapeHtml()` to all demos (`359cd7d`, `d60770c`)
+
+### Security
+- All user input in demos escaped via `escapeHtml()`
+- Filter parser fuzz tested for 24+ hours (14.4B executions, 0 crashes)
+
+### Performance
+| Metric | Result | Target |
+|:-------|:-------|:-------|
+| Search P50 (10k) | 0.20 ms | <1 ms |
+| Bundle (gzip) | 262 KB | <500 KB |
+| Fuzz testing | 24h+ | 0 crashes |
 
 ---
 
