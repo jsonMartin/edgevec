@@ -141,30 +141,154 @@ fn line_col_to_position(input: &str, line: usize, col: usize) -> usize {
 
 /// Generate helpful suggestions based on error context.
 fn generate_suggestion(message: &str, input: &str, position: usize) -> Option<String> {
-    // Check for common typos
-    if message.contains("expected") {
-        // Look for common operator typos
-        // SAFETY: Ensure position is a valid char boundary before slicing.
-        // If position is not on a char boundary (can happen with multi-byte UTF-8),
-        // we skip suggestions rather than panic.
-        if position < input.len() && input.is_char_boundary(position) {
-            let remaining = &input[position..];
-            if remaining.starts_with(':') {
-                return Some("Did you mean '=' instead of ':'?".to_string());
-            }
-            if remaining.starts_with("==") {
-                return Some("Use '=' for equality, not '=='".to_string());
-            }
-            if remaining.starts_with("&&") || remaining.starts_with("||") {
-                return Some(
-                    "Symbolic operators && and || are supported, or use AND/OR keywords"
-                        .to_string(),
-                );
+    // SAFETY: Ensure position is a valid char boundary before slicing.
+    // If position is not on a char boundary (can happen with multi-byte UTF-8),
+    // we skip suggestions rather than panic.
+    if position >= input.len() || !input.is_char_boundary(position) {
+        return None;
+    }
+
+    let remaining = &input[position..];
+    let before = &input[..position];
+
+    // Check for common operator typos
+    if remaining.starts_with(':') {
+        return Some("Did you mean '=' instead of ':'? EdgeVec uses '=' for equality.".to_string());
+    }
+    if remaining.starts_with("==") {
+        return Some("Use single '=' for equality comparisons, not '=='.".to_string());
+    }
+    if remaining.starts_with("===") {
+        return Some(
+            "EdgeVec uses '=' for equality. JavaScript-style '===' is not supported.".to_string(),
+        );
+    }
+    if remaining.starts_with("<>") {
+        return Some("Use '!=' for not-equal comparisons, not '<>'.".to_string());
+    }
+
+    // Check for symbolic logical operators (these ARE supported, but provide helpful context)
+    if remaining.starts_with("&&") || remaining.starts_with("||") {
+        // These are actually supported, so only suggest if there's a syntax issue
+        if message.contains("expected") {
+            return Some(
+                "Both symbolic (&&, ||) and keyword (AND, OR) operators are supported.".to_string(),
+            );
+        }
+    }
+
+    // Check for missing quotes around strings
+    if message.contains("expected") && !remaining.is_empty() {
+        let first_char = remaining.chars().next().unwrap_or(' ');
+        if first_char.is_alphabetic() && !is_keyword(remaining) {
+            // Check if this looks like an unquoted string after an operator
+            if before.ends_with("= ") || before.ends_with('=') {
+                let word: String = remaining
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric())
+                    .collect();
+                if !word.is_empty() && !is_keyword(&word) {
+                    return Some(format!(
+                        "String values must be quoted. Try: = \"{word}\" instead of = {word}"
+                    ));
+                }
             }
         }
     }
 
+    // Check for SQL-style syntax errors
+    if remaining.to_uppercase().starts_with("WHERE ") {
+        return Some(
+            "EdgeVec filter expressions don't use 'WHERE'. Start directly with conditions."
+                .to_string(),
+        );
+    }
+
+    // Check for missing operator between field and value
+    if message.contains("expected") {
+        // Look for pattern like "field value" without operator
+        let words: Vec<&str> = before.split_whitespace().collect();
+        if !words.is_empty() {
+            let last_word = *words.last().unwrap_or(&"");
+            if is_valid_field_name(last_word) && !is_keyword(last_word) {
+                if let Some(first_remaining_word) = remaining.split_whitespace().next() {
+                    if !is_operator(first_remaining_word) && !is_keyword(first_remaining_word) {
+                        return Some(format!(
+                            "Missing operator between '{last_word}' and value. \
+                             Expected: =, !=, <, <=, >, >=, CONTAINS, IN, etc."
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // Check for common array syntax errors
+    if remaining.starts_with('(')
+        && message.contains("expected")
+        && (before.to_uppercase().ends_with(" IN") || before.to_uppercase().ends_with(" IN "))
+    {
+        return Some(
+            "Use square brackets [...] for arrays, not parentheses (...). \
+             Example: category IN [\"a\", \"b\"]"
+                .to_string(),
+        );
+    }
+
+    // Check for BETWEEN syntax errors
+    if before.to_uppercase().contains("BETWEEN")
+        && !before.to_uppercase().contains(" AND ")
+        && (remaining.to_uppercase().starts_with("TO ")
+            || remaining.to_uppercase().starts_with("- "))
+    {
+        return Some(
+            "BETWEEN uses AND to separate values. Example: price BETWEEN 10 AND 100".to_string(),
+        );
+    }
+
     None
+}
+
+/// Check if a string is a recognized keyword.
+fn is_keyword(s: &str) -> bool {
+    let upper = s.to_uppercase();
+    let word: String = upper.chars().take_while(|c| c.is_alphabetic()).collect();
+    matches!(
+        word.as_str(),
+        "AND"
+            | "OR"
+            | "NOT"
+            | "IN"
+            | "BETWEEN"
+            | "LIKE"
+            | "CONTAINS"
+            | "STARTS_WITH"
+            | "ENDS_WITH"
+            | "IS"
+            | "NULL"
+            | "TRUE"
+            | "FALSE"
+            | "ANY"
+            | "ALL"
+            | "NONE"
+    )
+}
+
+/// Check if a string is a valid field name.
+fn is_valid_field_name(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    let first = s.chars().next().unwrap();
+    if !first.is_alphabetic() && first != '_' {
+        return false;
+    }
+    s.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// Check if a string is an operator.
+fn is_operator(s: &str) -> bool {
+    matches!(s, "=" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||" | "!")
 }
 
 /// Build AST from pest parse tree.
@@ -1086,5 +1210,100 @@ mod tests {
         let result = parse("名前 : 1"); // colon is invalid, should give suggestion
         assert!(result.is_err());
         // Key: should not panic even if error position is after multi-byte char
+    }
+
+    // =========================================================================
+    // ERROR SUGGESTION TESTS (W25.2.2)
+    // =========================================================================
+
+    #[test]
+    fn test_suggestion_colon_instead_of_equals() {
+        let result = parse("category : \"gpu\"");
+        assert!(result.is_err());
+        if let Err(FilterError::SyntaxError { suggestion, .. }) = result {
+            assert!(
+                suggestion.is_some(),
+                "Should suggest using '=' instead of ':'"
+            );
+            let s = suggestion.unwrap();
+            assert!(s.contains("="), "Suggestion should mention '='");
+        }
+    }
+
+    #[test]
+    fn test_suggestion_double_equals() {
+        // Test that == is rejected (EdgeVec uses single =)
+        let result = parse("a == 1");
+        assert!(result.is_err(), "== should not be valid syntax");
+        // Note: Suggestion may not always be provided depending on where pest reports the error
+    }
+
+    #[test]
+    fn test_suggestion_sql_not_equal() {
+        // Test that <> is rejected (EdgeVec uses !=)
+        let result = parse("a <> 1");
+        assert!(result.is_err(), "<> should not be valid syntax");
+        // Note: Suggestion may not always be provided depending on where pest reports the error
+    }
+
+    #[test]
+    fn test_suggestion_where_keyword() {
+        // Test that WHERE prefix is gracefully rejected
+        let result = parse("WHERE a = 1");
+        assert!(result.is_err(), "WHERE keyword should not be valid");
+    }
+
+    #[test]
+    fn test_suggestion_parentheses_for_array() {
+        let result = parse("category IN (\"a\", \"b\")");
+        assert!(result.is_err());
+        if let Err(FilterError::SyntaxError { suggestion, .. }) = result {
+            assert!(
+                suggestion.is_some(),
+                "Should suggest using [...] instead of (...)"
+            );
+            let s = suggestion.unwrap();
+            assert!(
+                s.contains("[") || s.contains("square brackets"),
+                "Suggestion should mention square brackets"
+            );
+        }
+    }
+
+    #[test]
+    fn test_helper_is_keyword() {
+        assert!(is_keyword("AND"));
+        assert!(is_keyword("and"));
+        assert!(is_keyword("Or"));
+        assert!(is_keyword("NOT"));
+        assert!(is_keyword("IN"));
+        assert!(is_keyword("CONTAINS"));
+        assert!(!is_keyword("category"));
+        assert!(!is_keyword("price"));
+    }
+
+    #[test]
+    fn test_helper_is_valid_field_name() {
+        assert!(is_valid_field_name("category"));
+        assert!(is_valid_field_name("price_usd"));
+        assert!(is_valid_field_name("_private"));
+        assert!(is_valid_field_name("field123"));
+        assert!(!is_valid_field_name("123field"));
+        assert!(!is_valid_field_name(""));
+        assert!(!is_valid_field_name("field-name"));
+    }
+
+    #[test]
+    fn test_helper_is_operator() {
+        assert!(is_operator("="));
+        assert!(is_operator("!="));
+        assert!(is_operator("<"));
+        assert!(is_operator("<="));
+        assert!(is_operator(">"));
+        assert!(is_operator(">="));
+        assert!(is_operator("&&"));
+        assert!(is_operator("||"));
+        assert!(!is_operator("AND"));
+        assert!(!is_operator("category"));
     }
 }

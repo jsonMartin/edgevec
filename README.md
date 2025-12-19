@@ -235,6 +235,9 @@ For these use cases, consider [Pinecone](https://pinecone.io), [Qdrant](https://
 
 ## Version History
 
+- **v0.5.3** — crates.io publishing fix (package size reduction)
+- **v0.5.2** — npm TypeScript compilation fix
+- **v0.5.1** — README update for npm display
 - **v0.5.0** — Metadata filtering with SQL-like syntax, Filter Playground demo
 - **v0.4.0** — Documentation sprint, benchmark dashboard, chaos testing
 - **v0.3.0** — Soft delete API, compaction, persistence format v3

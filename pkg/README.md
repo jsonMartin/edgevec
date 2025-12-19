@@ -353,7 +353,7 @@ python -m http.server 8080
 - ✅ **Crash Recovery (WAL)** — Log-based replay
 - ✅ **Atomic Snapshots** — Safe background saving
 - ✅ **Browser Integration** — WASM Bindings + IndexedDB
-- ✅ **npm Package** — `edgevec@0.5.0` published
+- ✅ **npm Package** — `edgevec@0.5.3` published
 - ✅ **Filter API** — 15 SQL-like operators with fuzz testing
 
 **Development Progress:**
@@ -406,7 +406,7 @@ Measured using `index.memory_usage() + storage.memory_usage()` after building 10
 
 | Package | Size (Gzipped) | Target | Status |
 |:--------|:---------------|:-------|:-------|
-| `edgevec@0.5.0` | **227 KB** | <500 KB | ✅ **55% under** |
+| `edgevec@0.5.3` | **227 KB** | <500 KB | ✅ **55% under** |
 
 ### Competitive Comparison (10k vectors, 128 dimensions)
 
