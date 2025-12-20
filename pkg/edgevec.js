@@ -1,4 +1,4 @@
-import { IndexedDbBackend } from './snippets/edgevec-e9d90602e6bb6c2c/src/js/storage.js';
+import { IndexedDbBackend } from './snippets/edgevec-c4203241896ff5ca/src/js/storage.js';
 
 let wasm;
 
@@ -224,12 +224,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_601(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_601(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_605(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_605(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_859(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_859(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_863(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_863(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -2354,7 +2354,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_859(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_863(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -2412,7 +2412,7 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_queueMicrotask_fca69f5bfad613a5 = function(arg0) {
         queueMicrotask(getObject(arg0));
     };
-    imports.wbg.__wbg_read_fae8abcd008c321a = function() { return handleError(function (arg0, arg1) {
+    imports.wbg.__wbg_read_710db9befb94d7f5 = function() { return handleError(function (arg0, arg1) {
         const ret = IndexedDbBackend.read(getStringFromWasm0(arg0, arg1));
         return addHeapObject(ret);
     }, arguments) };
@@ -2461,13 +2461,13 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_warn_6e567d0d926ff881 = function(arg0) {
         console.warn(getObject(arg0));
     };
-    imports.wbg.__wbg_write_2eb8c26f002dc6fe = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+    imports.wbg.__wbg_write_b60005356a2f68e0 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
         const ret = IndexedDbBackend.write(getStringFromWasm0(arg0, arg1), getArrayU8FromWasm0(arg2, arg3));
         return addHeapObject(ret);
     }, arguments) };
     imports.wbg.__wbindgen_cast_1e9af41a93765cab = function(arg0, arg1) {
         // Cast intrinsic for `Closure(Closure { dtor_idx: 88, function: Function { arguments: [Externref], shim_idx: 89, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_594, __wasm_bindgen_func_elem_601);
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_598, __wasm_bindgen_func_elem_605);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {

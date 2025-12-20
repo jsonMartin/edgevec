@@ -9,8 +9,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned (v0.6.0)
 - ARM/NEON SIMD optimization verification
-- Mobile support (iOS Safari, Android Chrome)
 - Integrated metadata storage (server-side pattern)
+
+---
+
+## [0.5.4] - 2025-12-20 — iOS Safari Compatibility
+
+**Focus:** Mobile browser support — EdgeVec now works correctly on iOS Safari.
+
+### Fixed
+
+#### iOS Safari WASM Compatibility
+- **`parse_filter_js is not a function` error** — Stale `wasm/pkg/` directory was shadowing the correct `pkg/` directory, causing old WASM bindings (without filter functions) to load
+  - Deleted stale `wasm/pkg/` directory
+  - Updated import paths to use only correct paths
+
+- **Browser caching old WASM modules** — ES module caching was serving stale versions even after rebuilds
+  - Added cache-busting query parameter `?v=${Date.now()}` to all WASM imports
+  - Ensures fresh module loads after each rebuild
+
+- **iOS Safari showing 0ms benchmark timings** — Safari limits `performance.now()` to 1ms resolution (Spectre mitigation)
+  - Changed from per-iteration timing to batch timing (50 iterations averaged)
+  - Now shows accurate sub-millisecond timings on iOS
+
+- **NaN% filter overhead on iOS** — Division by zero when unfiltered time was 0ms
+  - Added null check: display "0.0%" instead of "NaN%"
+
+### Added
+
+- **Embedding Integration Guide** (`docs/guides/EMBEDDING_GUIDE.md`) — Complete guide for generating embeddings with EdgeVec
+  - Transformers.js browser-native examples (MiniLM, BGE, Nomic)
+  - API examples: OpenAI, Cohere, HuggingFace
+  - Web Worker pattern for non-blocking embedding
+  - Model caching and batching best practices
+  - Complete example applications (Semantic Notes, FAQ Bot, Image Search with CLIP)
+  - Troubleshooting guide and model comparison table
+
+### Changed
+- Filter Playground: Removed stale import paths, added cache buster
+- Benchmark Dashboard: Batch timing for iOS precision, added cache buster
+
+### Verified Platforms
+- Desktop Chrome ✓
+- Desktop Firefox ✓
+- Desktop Safari ✓
+- iOS Safari (iPhone) ✓
+- iOS Safari (iPad) ✓
 
 ---
 

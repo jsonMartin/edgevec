@@ -68,6 +68,8 @@
 
         html {
             scroll-behavior: smooth;
+            /* C4 FIX: Prevent iOS Safari horizontal scroll */
+            overflow-x: hidden;
         }
 
         body {
@@ -1385,10 +1387,11 @@
         // FILTER BENCHMARK - Live WASM Performance Testing
         // ═══════════════════════════════════════════════════════════════════════════
 
+        // Cache buster to force fresh load after rebuild
+        const cacheBuster = `?v=${Date.now()}`;
         const WASM_PATHS = [
-            '../../pkg/edgevec.js',
-            '/pkg/edgevec.js',
-            '../pkg/edgevec.js'
+            '../../pkg/edgevec.js' + cacheBuster,
+            '/pkg/edgevec.js' + cacheBuster,
         ];
 
         let wasmModule = null;
@@ -1518,38 +1521,45 @@
 
                 resultsDiv.innerHTML = `<div class="filter-bench-empty">Running benchmarks...</div>`;
 
-                // Parse filter and measure time
+                // iOS Safari has 1ms timer resolution for security.
+                // Use batch timing: run N iterations, divide total time by N
+                const ITERATIONS = 50; // More iterations for better precision on iOS
+
+                // Parse filter and measure time (run 10x for iOS precision)
                 const parseStart = performance.now();
-                const filterFn = parseFilter(filterExpr);
-                const parseTime = performance.now() - parseStart;
-
-                // Benchmark unfiltered search (10 iterations)
-                const query = generateVector();
-                const unfilteredTimes = [];
+                let filterFn;
                 for (let i = 0; i < 10; i++) {
-                    const start = performance.now();
-                    index.search(query, 10);
-                    unfilteredTimes.push(performance.now() - start);
+                    filterFn = parseFilter(filterExpr);
                 }
-                const unfilteredP50 = unfilteredTimes.sort((a, b) => a - b)[5];
+                const parseTime = (performance.now() - parseStart) / 10;
 
-                // Benchmark filtered search (10 iterations)
-                const filteredTimes = [];
+                // Benchmark unfiltered search - batch timing for iOS precision
+                const query = generateVector();
+                const unfilteredStart = performance.now();
+                for (let i = 0; i < ITERATIONS; i++) {
+                    index.search(query, 10);
+                }
+                const unfilteredTotal = performance.now() - unfilteredStart;
+                const unfilteredP50 = unfilteredTotal / ITERATIONS;
+
+                // Benchmark filtered search - batch timing for iOS precision
                 let matchedCount = 0;
-                for (let i = 0; i < 10; i++) {
-                    const start = performance.now();
+                const filteredStart = performance.now();
+                for (let i = 0; i < ITERATIONS; i++) {
                     const results = index.search(query, 50);
                     const filtered = results.map(r => ({
                         ...r,
                         metadata: metadataStore[r.id] || {}
                     })).filter(r => filterFn ? filterFn(r.metadata) : true);
-                    filteredTimes.push(performance.now() - start);
-                    matchedCount = filtered.length;
+                    if (i === 0) matchedCount = filtered.length;
                 }
-                const filteredP50 = filteredTimes.sort((a, b) => a - b)[5];
+                const filteredTotal = performance.now() - filteredStart;
+                const filteredP50 = filteredTotal / ITERATIONS;
 
-                // Calculate overhead
-                const overhead = ((filteredP50 - unfilteredP50) / unfilteredP50 * 100).toFixed(1);
+                // Calculate overhead (C3 FIX: prevent NaN/Infinity when unfilteredP50 is 0)
+                const overhead = unfilteredP50 > 0
+                    ? ((filteredP50 - unfilteredP50) / unfilteredP50 * 100).toFixed(1)
+                    : '0.0';
 
                 // Update results
                 resultsDiv.innerHTML = `

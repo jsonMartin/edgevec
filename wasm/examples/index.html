@@ -89,6 +89,8 @@
         html {
             scroll-behavior: smooth;
             font-size: 16px;
+            /* C4 FIX: Prevent iOS Safari horizontal scroll */
+            overflow-x: hidden;
         }
 
         body {
@@ -536,6 +538,10 @@
             font-size: 13px;
             font-weight: 600;
             transition: all 0.3s ease;
+            /* C1 FIX: Ensure link is clickable above pseudo-elements */
+            position: relative;
+            z-index: 10;
+            cursor: pointer;
         }
 
         .demo-card-link:hover {
@@ -1180,6 +1186,117 @@
             .quickstart-code {
                 font-size: 11px;
                 padding: 16px;
+            }
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════════════
+           iOS SAFARI SPECIFIC FIXES (v0.5.4)
+           Fix horizontal overflow on small mobile screens
+           ═══════════════════════════════════════════════════════════════════════════ */
+
+        @supports (-webkit-touch-callout: none) {
+            /* iOS Safari specific styles */
+            body {
+                /* Prevent horizontal scroll on iOS */
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            main {
+                /* Ensure main content doesn't overflow */
+                max-width: 100vw;
+                box-sizing: border-box;
+            }
+
+            .demos-grid {
+                /* Force single column on narrow iOS screens */
+                width: 100%;
+                max-width: 100%;
+            }
+
+            .demo-card {
+                /* Prevent card content from causing overflow */
+                max-width: 100%;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+
+            .demo-card-description {
+                /* Ensure description text wraps properly */
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+
+            .quickstart-code {
+                /* Allow horizontal scroll on code blocks only */
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            /* Ensure touch targets are at least 44x44px for iOS */
+            .demo-card-link,
+            .btn-small,
+            .theme-toggle,
+            .nav-link {
+                min-height: 44px;
+                min-width: 44px;
+            }
+        }
+
+        /* Extra small screens (iPhone SE, etc) */
+        @media (max-width: 375px) {
+            main {
+                padding: 0 12px 40px;
+            }
+
+            .hero {
+                padding: 30px 12px;
+            }
+
+            .hero-title {
+                font-size: 22px;
+                letter-spacing: 1px;
+            }
+
+            .hero-subtitle {
+                font-size: 13px;
+            }
+
+            .hero-stats {
+                gap: 16px;
+            }
+
+            .hero-stat-value {
+                font-size: 22px;
+            }
+
+            .demo-card {
+                padding: 16px 14px;
+            }
+
+            .demo-card-title {
+                font-size: 16px;
+            }
+
+            .demo-card-description {
+                font-size: 13px;
+            }
+
+            .section-title {
+                font-size: 20px;
+            }
+
+            .quickstart {
+                padding: 16px 14px;
+            }
+
+            .quickstart-code {
+                font-size: 10px;
+                padding: 12px;
+            }
+
+            footer {
+                padding: 30px 12px;
             }
         }
 

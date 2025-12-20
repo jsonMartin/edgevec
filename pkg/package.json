@@ -1,90 +1,38 @@
 {
   "name": "edgevec",
+  "version": "0.5.4",
+  "description": "High-performance embedded vector database for Browser, Node, and Edge",
   "type": "module",
-  "description": "WASM-native vector database with SQL-like filtering, persistence, and soft delete",
-  "version": "0.5.3",
-  "license": "MIT OR Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/matte1782/edgevec"
-  },
+  "main": "edgevec.js",
+  "types": "edgevec.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ],
   "files": [
     "edgevec_bg.wasm",
     "edgevec.js",
     "edgevec.d.ts",
     "edgevec_bg.wasm.d.ts",
-    "snippets",
-    "index.js",
-    "index.js.map",
-    "index.d.ts",
-    "index.d.ts.map",
-    "filter.js",
-    "filter.js.map",
-    "filter.d.ts",
-    "filter.d.ts.map",
-    "filter-builder.js",
-    "filter-builder.js.map",
-    "filter-builder.d.ts",
-    "filter-builder.d.ts.map",
-    "edgevec-wrapper.js",
-    "edgevec-wrapper.js.map",
-    "edgevec-wrapper.d.ts",
-    "edgevec-wrapper.d.ts.map",
-    "edgevec-types.d.ts",
-    "LICENSE-APACHE",
-    "LICENSE-MIT"
+    "snippets"
   ],
-  "main": "index.js",
-  "types": "index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "import": "./index.js",
-      "default": "./index.js"
-    },
-    "./filter": {
-      "types": "./filter.d.ts",
-      "import": "./filter.js",
-      "default": "./filter.js"
-    },
-    "./filter-builder": {
-      "types": "./filter-builder.d.ts",
-      "import": "./filter-builder.js",
-      "default": "./filter-builder.js"
-    },
-    "./wrapper": {
-      "types": "./edgevec-wrapper.d.ts",
-      "import": "./edgevec-wrapper.js",
-      "default": "./edgevec-wrapper.js"
-    },
-    "./core": {
-      "types": "./edgevec.d.ts",
-      "import": "./edgevec.js",
-      "default": "./edgevec.js"
-    }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/matte1782/edgevec"
   },
-  "sideEffects": [
-    "./snippets/*"
-  ],
   "keywords": [
-    "vector-database",
-    "vector-search",
-    "hnsw",
+    "vector",
+    "database",
     "wasm",
-    "webassembly",
-    "filtered-search",
-    "metadata-filtering",
+    "hnsw",
     "similarity-search",
     "embeddings",
-    "semantic-search",
-    "browser",
-    "edge-computing",
-    "offline-first",
-    "indexeddb",
-    "soft-delete",
-    "persistence"
+    "machine-learning",
+    "browser"
   ],
-  "devDependencies": {
-    "typescript": "^5.0.0"
-  }
+  "author": "Matteo Panzeri",
+  "license": "MIT OR Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/matte1782/edgevec/issues"
+  },
+  "homepage": "https://github.com/matte1782/edgevec#readme"
 }

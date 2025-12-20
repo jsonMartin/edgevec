@@ -115,6 +115,8 @@
         html {
             scroll-behavior: smooth;
             font-size: 16px;
+            /* C4 FIX: Prevent iOS Safari horizontal scroll */
+            overflow-x: hidden;
         }
 
         body {
@@ -1153,18 +1155,75 @@
         // ═══════════════════════════════════════════════════════════════════════════
 
         async function initWasm() {
+            // iOS Safari debugging - v0.5.4 fix
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+            console.log('[EdgeVec] Platform detection:', { isIOS, isSafari, userAgent: navigator.userAgent });
+
             try {
-                // Try to load from pkg directory (local development)
-                const wasmPath = '../pkg/edgevec.js';
-                wasmModule = await import(wasmPath);
+                // Cache buster to force fresh load after rebuild
+                const cacheBuster = `?v=${Date.now()}`;
+
+                // Try multiple paths for different deployment scenarios
+                // NOTE: ../pkg/ was removed - old stale directory caused issues
+                const wasmPaths = [
+                    '../../pkg/edgevec.js' + cacheBuster,   // From wasm/examples/ (CORRECT)
+                    '/pkg/edgevec.js' + cacheBuster,        // Absolute from root
+                ];
+
+                let loadedPath = null;
+                for (const wasmPath of wasmPaths) {
+                    try {
+                        console.log('[EdgeVec] Trying path:', wasmPath);
+                        wasmModule = await import(wasmPath);
+                        loadedPath = wasmPath;
+                        console.log('[EdgeVec] Module imported from:', wasmPath);
+                        break;
+                    } catch (pathErr) {
+                        console.log('[EdgeVec] Path failed:', wasmPath, pathErr.message);
+                    }
+                }
+
+                if (!wasmModule) {
+                    throw new Error('Could not load WASM module from any path');
+                }
+
+                // Log available exports for debugging
+                console.log('[EdgeVec] Module exports:', Object.keys(wasmModule));
+
+                // Initialize the WASM module
+                console.log('[EdgeVec] Initializing WASM...');
                 await wasmModule.default();
+                console.log('[EdgeVec] WASM initialized successfully');
+
+                // Verify critical exports exist (iOS Safari fix)
+                const requiredExports = ['parse_filter_js', 'validate_filter_js', 'EdgeVec', 'EdgeVecConfig'];
+                const missingExports = requiredExports.filter(exp => typeof wasmModule[exp] === 'undefined');
+
+                if (missingExports.length > 0) {
+                    console.error('[EdgeVec] Missing exports:', missingExports);
+                    throw new Error(`WASM module incomplete. Missing: ${missingExports.join(', ')}`);
+                }
+
+                console.log('[EdgeVec] All required exports verified:', {
+                    parse_filter_js: typeof wasmModule.parse_filter_js,
+                    validate_filter_js: typeof wasmModule.validate_filter_js,
+                    EdgeVec: typeof wasmModule.EdgeVec,
+                    EdgeVecConfig: typeof wasmModule.EdgeVecConfig
+                });
 
                 loadingPlaceholder.innerHTML = '<span style="color: var(--green);">WASM module loaded. Enter a filter expression above.</span>';
                 filterInput.focus();
 
                 return true;
             } catch (err) {
-                console.error('Failed to load WASM:', err);
+                console.error('[EdgeVec] Failed to load WASM:', err);
+                console.error('[EdgeVec] Error stack:', err.stack);
+
+                // More helpful error message for iOS users
+                const iosHint = isIOS ? '<p style="font-size: 0.75rem; color: var(--orange); margin-top: 0.5rem;">iOS detected: Try clearing Safari cache or disabling content blockers.</p>' : '';
+
                 loadingPlaceholder.innerHTML = `
                     <div style="color: var(--red); text-align: center;">
                         <p style="margin-bottom: 0.5rem;">Failed to load WASM module</p>
@@ -1174,6 +1233,7 @@
                         <p style="font-size: 0.75rem; color: var(--gray-300); margin-top: 0.5rem;">
                             Error: ${err.message}
                         </p>
+                        ${iosHint}
                     </div>
                 `;
                 return false;

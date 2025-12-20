@@ -7,17 +7,34 @@
 
 ---
 
+## ⚠️ ACTUAL DEVICE TESTING COMPLETED — CRITICAL ISSUES FOUND
+
+> **STATUS: TESTED ON DEVICE — MULTIPLE FAILURES**
+>
+> This document has been updated with ACTUAL test results from iPhone 15 Pro (iOS 18.2).
+> **W25.3.3 REJECTED by HOSTILE_REVIEWER** due to 6 CRITICAL and 4 MAJOR issues.
+>
+> **See:**
+> - `docs/reviews/2025-12-19_W25_DAY3_IOS_TESTING_REJECTED.md` (rejection details)
+> - `docs/planning/W25_DAY3_REMEDIATION_PLAN.md` (fix plan)
+> - `W25_DAY3_IOS_TEST_CHECKLIST.md` (raw test results)
+
+---
+
 ## Test Environment
 
 | Parameter | Value |
 |:----------|:------|
-| Testing Method | Research-based (LambdaTest/BrowserStack pending) |
-| Target Devices | iPhone 15 Pro, iPad Pro |
-| iOS Versions | 17.4, 18.0 |
-| Safari Versions | 17.4, 18.0 |
+| Testing Method | ✅ **ACTUAL DEVICE TESTING** |
+| Device | iPhone 15 Pro |
+| iOS Version | 18.2 |
+| Safari Version | 18.2 |
 | EdgeVec Version | 0.5.3 |
+| Test Date | 2025-12-19 |
+| Tester | Human + WASM_SPECIALIST |
+| Review Status | ❌ REJECTED by HOSTILE_REVIEWER |
 
-**Note:** This document contains expected results based on compatibility research. Actual device testing will update these results.
+**Note:** This document contains ACTUAL test results from physical device testing.
 
 ---
 
@@ -67,11 +84,11 @@
 
 | Demo | Loads | Functions | Touch | Notes |
 |:-----|:------|:----------|:------|:------|
-| Demo Catalog | ✅ Expected | ✅ Expected | ⚠️ Test | Static HTML |
-| Filter Playground | ✅ Expected | ✅ Expected | ⚠️ Test | Text input focus |
-| Benchmark Dashboard | ✅ Expected | ✅ Expected | ⚠️ Test | Chart.js compat |
-| Soft Delete | ✅ Expected | ✅ Expected | ⚠️ Test | Canvas animations |
-| Batch Insert | ✅ Expected | ✅ Expected | ⚠️ Test | Progress bars |
+| Demo Catalog | ⚠️ BROKEN UI | ❌ FAIL | ✅ PASS | Horizontal layout broken on iOS only |
+| Filter Playground | ⚠️ BROKEN UI | ❌ FAIL | ⚠️ BROKEN | WASM parse_filter_js undefined; UI broken |
+| Benchmark Dashboard | ✅ PASS | ❌ FAIL | ✅ PASS | Returns 0 results, +NaN%; UI excellent |
+| Soft Delete | ✅ PASS | ⚠️ PARTIAL | ✅ PASS | Compaction non-functional; lags at 15k+ |
+| Batch Insert | ⚠️ NOT TESTED | ⚠️ NOT TESTED | ⚠️ NOT TESTED | Not included in W25.3.3 test plan |
 
 ---
 
@@ -128,11 +145,29 @@ On iOS Safari, monitor console for:
 
 ## Issues Found
 
-### During Testing (To be updated)
+### CRITICAL (Blocking v0.6.0 Mobile Support)
 
-| ID | Severity | Description | Reproduction Steps | Status |
-|:---|:---------|:------------|:-------------------|:-------|
-| (none yet) | - | - | - | - |
+| ID | Severity | Description | Reproduction Steps | Status | GitHub Issue |
+|:---|:---------|:------------|:-------------------|:-------|:-------------|
+| C1 | CRITICAL | Filter Playground WASM module broken | Open filter-playground.html on iOS → TypeError: parse_filter_js undefined | ❌ OPEN | TBD |
+| C2 | CRITICAL | Filter Playground UI broken on mobile | Open filter-playground.html on iOS → Horizontal overflow, touch broken | ❌ OPEN | TBD |
+| C3 | CRITICAL | Demo Catalog horizontal layout broken (iOS only) | Open index.html on iOS → UI broken horizontally | ❌ OPEN | TBD |
+| C4 | CRITICAL | Filter results differ between iOS and desktop | Run same filter on iOS and desktop → Different results | ❌ OPEN | TBD |
+| C5 | CRITICAL | Benchmark Dashboard returns invalid data | Open benchmark-dashboard.html on iOS → Shows 0 results, +NaN% | ❌ OPEN | TBD |
+| C6 | CRITICAL | Soft Delete compaction non-functional | Open soft_delete.html → Compact button doesn't reset tombstones | ❌ OPEN | TBD |
+
+### MAJOR (Must Fix Before Release)
+
+| ID | Severity | Description | Reproduction Steps | Status | GitHub Issue |
+|:---|:---------|:------------|:-------------------|:-------|:-------------|
+| M1 | MAJOR | Severe lag at 15k+ vectors on iOS | Insert 15k+ vectors on iOS → UI starts lagging | ❌ OPEN | TBD |
+| M2 | MAJOR | IOS_TEST_RESULTS.md not updated | N/A | ✅ FIXED | This edit |
+| M3 | MAJOR | Test matrix incomplete | N/A | ❌ OPEN | Pending retest |
+| M4 | MAJOR | W25.2 error messages not working on iOS | Type invalid filter → Error not helpful | ❌ OPEN | TBD |
+
+**Total Issues:** 6 Critical, 4 Major, 3 Minor
+**Rejection Document:** `docs/reviews/2025-12-19_W25_DAY3_IOS_TESTING_REJECTED.md`
+**Remediation Plan:** `docs/planning/W25_DAY3_REMEDIATION_PLAN.md`
 
 ---
 
@@ -161,26 +196,37 @@ WebAssembly.instantiate: ...
 
 ---
 
-## Recommendations Based on Research
+## Findings from Actual Device Testing
 
-### Confirmed Safe
+### ✅ Confirmed Working on iOS Safari 18.2
 
-1. **EdgeVec loads on iOS Safari 14+** — WebAssembly core fully supported
-2. **Filter API works** — Pure JavaScript, no WASM dependencies
-3. **IndexedDB persistence works** — Standard API, well supported
-4. **Basic vector operations work** — Under memory limits
+1. **WASM module loads** — Core WebAssembly instantiation works
+2. **Basic vector operations** — Insert, search work under 10k vectors
+3. **IndexedDB persistence** — Save/load functional (not heavily tested)
+4. **Touch interactions** — Generally responsive (where UI not broken)
+5. **Benchmark Dashboard UI** — Excellent design (though data invalid)
 
-### Needs Verification
+### ❌ Confirmed Broken on iOS Safari 18.2
 
-1. **Large vector counts (50k+)** — Approaching memory limits
-2. **Compaction on mobile** — Memory spike during rebuild
-3. **Touch interactions** — Demo-specific testing needed
-4. **Chart.js on iOS** — Benchmark dashboard rendering
+1. **Filter Playground** — WASM module missing parse_filter_js export
+2. **Filter Playground UI** — Horizontal overflow, layout broken on mobile
+3. **Demo Catalog** — Horizontal layout broken (iOS-specific)
+4. **Filter consistency** — Different results on iOS vs desktop (CRITICAL)
+5. **Benchmark Dashboard data** — Returns 0 results and +NaN%
+6. **Soft Delete compaction** — Doesn't reset tombstones
 
-### Not Expected to Work
+### ⚠️ Performance Issues Discovered
 
-1. **100k+ Float32 vectors** — Exceeds iOS memory limits
-2. **Private browsing mode** — IndexedDB disabled
+1. **15k+ vector lag** — Contradicts research claim of "50k vectors safe"
+   - **Research claimed:** ≤50k quantized vectors safe
+   - **Reality:** Lag starts at 15k vectors on iPhone 15 Pro
+2. **Compaction lag** — UI freezes during compaction at high vector counts
+
+### 🔍 Needs Further Investigation
+
+1. **Root cause of filter inconsistency** — Platform-specific behavior is unacceptable
+2. **WASM export differences** — Why parse_filter_js missing on iOS only?
+3. **Performance cliff** — Why does lag start at 15k instead of 50k?
 
 ---
 
@@ -229,6 +275,30 @@ console.log('ALL TESTS PASSED');
 
 ---
 
-**Agent:** WASM_SPECIALIST
-**Status:** W25.3.3 COMPLETE (research-based, pending actual device testing)
-**Next:** W25.3.4 (iOS-Specific Issues Documentation)
+---
+
+## Remediation Status
+
+**W25.3.3 Status:** ❌ **REJECTED** by HOSTILE_REVIEWER (2025-12-19)
+
+**Critical Issues:** 6
+**Major Issues:** 4
+**Minor Issues:** 3
+
+**Blocking:** v0.6.0 mobile support cannot proceed until all critical issues resolved.
+
+**Next Steps:**
+1. Review rejection document: `docs/reviews/2025-12-19_W25_DAY3_IOS_TESTING_REJECTED.md`
+2. Execute remediation plan: `docs/planning/W25_DAY3_REMEDIATION_PLAN.md`
+3. Fix all critical issues
+4. Re-test on iPhone 15 Pro
+5. Resubmit via `/review W25.3`
+
+**Estimated Remediation Time:** 5-6 work days (37-47 hours)
+
+---
+
+**Agent:** WASM_SPECIALIST (testing) + HOSTILE_REVIEWER (analysis)
+**Status:** W25.3.3 REJECTED — Awaiting remediation
+**Last Updated:** 2025-12-19
+**Next:** Execute W25_DAY3_REMEDIATION_PLAN.md

@@ -49,13 +49,17 @@
 
 ### Test URLs
 
-| Demo | URL Path |
-|:-----|:---------|
-| Demo Catalog | `/wasm/examples/index.html` |
-| Filter Playground | `/wasm/examples/filter-playground.html` |
-| Benchmark Dashboard | `/wasm/examples/benchmark-dashboard.html` |
-| Soft Delete | `/wasm/examples/soft_delete.html` |
-| Batch Insert | `/wasm/examples/batch_insert.html` |
+**Note:** Paths are relative to the EdgeVec project root. When using a local server, prepend your server address (e.g., `http://192.168.1.100:8080`).
+
+| Demo | URL Path | Full Local URL Example |
+|:-----|:---------|:-----------------------|
+| Demo Catalog | `/wasm/examples/index.html` | `http://<your-ip>:8080/wasm/examples/index.html` |
+| Filter Playground | `/wasm/examples/filter-playground.html` | `http://<your-ip>:8080/wasm/examples/filter-playground.html` |
+| Benchmark Dashboard | `/wasm/examples/benchmark-dashboard.html` | `http://<your-ip>:8080/wasm/examples/benchmark-dashboard.html` |
+| Soft Delete | `/wasm/examples/soft_delete.html` | `http://<your-ip>:8080/wasm/examples/soft_delete.html` |
+| Batch Insert | `/wasm/examples/batch_insert.html` | `http://<your-ip>:8080/wasm/examples/batch_insert.html` |
+
+**For deployed sites:** Replace with your deployment URL (e.g., `https://yourdomain.com/wasm/examples/index.html`).
 
 ### Debugging
 

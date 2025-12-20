@@ -12,7 +12,7 @@ exclude = ["fuzz"]  # Fuzz crate uses cargo-fuzz which manages its own workspace
 
 [package]
 name = "edgevec"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 rust-version = "1.70"
 description = "High-performance embedded vector database for Browser, Node, and Edge"
@@ -224,7 +224,11 @@ name = "batch_insert"
 # =============================================================================
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "--enable-bulk-memory"]  # Enable wasm-opt with size optimization
+# Disable wasm-opt temporarily to investigate iOS Safari compatibility issues
+# Root cause: wasm-opt was failing with "unexpected false: all used features should be allowed"
+# on i32.trunc_sat_f64_u instruction, which requires --enable-nontrapping-float-to-int
+# TODO: Re-enable wasm-opt with correct feature flags after verifying WASM works on iOS
+wasm-opt = false
 
 [profile.release]
 opt-level = "z"     # Optimize for size in WASM bundles

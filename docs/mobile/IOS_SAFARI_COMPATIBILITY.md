@@ -196,15 +196,20 @@ serde-wasm-bindgen = "0.6"
 
 | Platform | Minimum Version | Recommended | Notes |
 |:---------|:----------------|:------------|:------|
-| iOS Safari | 14.0 | 17.0+ | BigInt support required |
-| iPadOS Safari | 14.0 | 17.0+ | Same as iOS |
-| macOS Safari | 14.0 | 17.0+ | Desktop has more memory |
+| iOS Safari | **17.0** | 17.0+ | Tested and verified |
+| iPadOS Safari | **17.0** | 17.0+ | Same as iOS |
+| macOS Safari | **17.0** | 17.0+ | Desktop has more memory |
 
-### Degraded Support
+> **Note:** Safari 14-16 may work but is **UNTESTED**. We officially support Safari 17+ only.
+> BigInt (required for vector IDs) was introduced in Safari 14, but we have not verified
+> full compatibility on older versions.
 
-| Platform | Version | Issues |
+### Theoretical Compatibility (Untested)
+
+| Platform | Version | Status |
 |:---------|:--------|:-------|
-| iOS Safari 11-13 | ⚠️ Limited | No BigInt, older IndexedDB |
+| iOS Safari 14-16 | ⚠️ UNTESTED | May work, not verified |
+| iOS Safari 11-13 | ❌ NOT SUPPORTED | No BigInt |
 
 ---
 

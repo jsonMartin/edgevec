@@ -1161,9 +1161,9 @@ export interface InitOutput {
   readonly init_logging: () => void;
   readonly wasmbatchdeleteresult_total: (a: number) => number;
   readonly wasmbatchdeleteresult_uniqueCount: (a: number) => number;
-  readonly __wasm_bindgen_func_elem_601: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_594: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_859: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_605: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_598: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_863: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;
