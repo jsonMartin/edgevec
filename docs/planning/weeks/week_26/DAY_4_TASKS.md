@@ -276,13 +276,13 @@ crc32fast = "1.3"
 
 ## Day 4 Checklist
 
-- [ ] W26.4.1: MetadataSectionHeader struct defined (16 bytes)
-- [ ] W26.4.2: Postcard serialization implemented
-- [ ] W26.4.2: CRC32 validation implemented
-- [ ] All existing tests pass (`cargo test`)
-- [ ] New tests pass (`cargo test metadata_serialize`)
-- [ ] Clippy clean (`cargo clippy -- -D warnings`)
-- [ ] Formatted (`cargo fmt --check`)
+- [x] W26.4.1: MetadataSectionHeader struct defined (16 bytes)
+- [x] W26.4.2: Postcard serialization implemented
+- [x] W26.4.2: CRC32 validation implemented
+- [x] All existing tests pass (`cargo test`)
+- [x] New tests pass (`cargo test metadata_serialize`)
+- [x] Clippy clean (`cargo clippy -- -D warnings`)
+- [x] Formatted (`cargo fmt --check`)
 
 ## Day 4 Exit Criteria
 
@@ -305,11 +305,11 @@ After completing Day 4:
 - New `tests/metadata_serialize.rs`
 - Modified `Cargo.toml` (postcard, crc32fast dependencies)
 
-**Status:** PENDING_DAY_5
+**Status:** APPROVED (2025-12-21)
 
 **Next:** Day 5 — Persistence read/write + v0.3→v0.4 migration
 
 ---
 
 *Agent: RUST_ENGINEER*
-*Status: [PROPOSED]*
+*Status: [APPROVED]*

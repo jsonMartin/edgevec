@@ -467,13 +467,13 @@ mod migration_tests {
 
 ## Day 5 Checklist
 
-- [ ] W26.5.1: write_snapshot updated for v0.4
-- [ ] W26.5.2: read_snapshot updated for v0.4
-- [ ] W26.5.3: Migration tests pass
-- [ ] All existing tests pass (`cargo test`)
-- [ ] All new tests pass (`cargo test persistence_v04 migration`)
-- [ ] Clippy clean (`cargo clippy -- -D warnings`)
-- [ ] Formatted (`cargo fmt --check`)
+- [x] W26.5.1: write_snapshot updated for v0.4
+- [x] W26.5.2: read_snapshot updated for v0.4
+- [x] W26.5.3: Migration tests pass
+- [x] All existing tests pass (`cargo test`)
+- [x] All new tests pass (`cargo test persistence_v04 migration`)
+- [x] Clippy clean (`cargo clippy -- -D warnings`)
+- [x] Formatted (`cargo fmt --check`)
 
 ## Day 5 Exit Criteria
 
@@ -511,7 +511,7 @@ After completing Day 5, Week 26 delivers:
 - `tests/persistence_v04.rs`
 - `tests/migration_v03_v04.rs`
 
-**Status:** PENDING_HOSTILE_REVIEW
+**Status:** APPROVED (2025-12-21)
 
 **Next:** Week 27 — Binary Quantization implementation
 

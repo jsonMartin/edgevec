@@ -125,12 +125,12 @@ impl HnswIndex {
 
 ## Day 1 Checklist
 
-- [ ] W26.1.1: metadata field added to HnswIndex
-- [ ] W26.1.2: insert_with_metadata() implemented
-- [ ] All existing tests pass (`cargo test`)
-- [ ] New tests pass (`cargo test metadata_insert`)
-- [ ] Clippy clean (`cargo clippy -- -D warnings`)
-- [ ] Formatted (`cargo fmt --check`)
+- [x] W26.1.1: metadata field added to HnswIndex
+- [x] W26.1.2: insert_with_metadata() implemented
+- [x] All existing tests pass (`cargo test`)
+- [x] New tests pass (`cargo test metadata_insert`)
+- [x] Clippy clean (`cargo clippy -- -D warnings`)
+- [x] Formatted (`cargo fmt --check`)
 
 ## Day 1 Exit Criteria
 
@@ -150,11 +150,11 @@ After completing Day 1:
 - Modified `src/hnsw/operations.rs` (insert_with_metadata)
 - New `tests/metadata_insert.rs`
 
-**Status:** PENDING_DAY_2
+**Status:** APPROVED (2025-12-21)
 
 **Next:** Day 2 — soft_delete cleanup + compact + search_filtered
 
 ---
 
 *Agent: RUST_ENGINEER*
-*Status: [PROPOSED]*
+*Status: [APPROVED]*

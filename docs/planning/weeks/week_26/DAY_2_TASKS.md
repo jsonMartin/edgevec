@@ -132,13 +132,13 @@ impl HnswIndex {
 
 ## Day 2 Checklist
 
-- [ ] W26.2.1: soft_delete() calls metadata.remove()
-- [ ] W26.2.2: compact() removes metadata for compacted IDs
-- [ ] W26.2.3: search_filtered() implemented with post-filtering
-- [ ] All existing tests pass (`cargo test`)
-- [ ] New tests pass (`cargo test metadata_delete metadata_compact metadata_search`)
-- [ ] Clippy clean (`cargo clippy -- -D warnings`)
-- [ ] Formatted (`cargo fmt --check`)
+- [x] W26.2.1: soft_delete() calls metadata.remove()
+- [x] W26.2.2: compact() removes metadata for compacted IDs
+- [x] W26.2.3: search_filtered() implemented with post-filtering
+- [x] All existing tests pass (`cargo test`)
+- [x] New tests pass (`cargo test metadata_delete metadata_compact metadata_search`)
+- [x] Clippy clean (`cargo clippy -- -D warnings`)
+- [x] Formatted (`cargo fmt --check`)
 
 ## Day 2 Exit Criteria
 
@@ -160,11 +160,11 @@ After completing Day 2:
 - New `tests/metadata_compact.rs`
 - New `tests/metadata_search.rs`
 
-**Status:** PENDING_DAY_3
+**Status:** APPROVED (2025-12-21)
 
 **Next:** Day 3 — Selectivity estimation + comprehensive unit tests
 
 ---
 
 *Agent: RUST_ENGINEER*
-*Status: [PROPOSED]*
+*Status: [APPROVED]*

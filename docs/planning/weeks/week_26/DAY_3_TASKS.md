@@ -225,12 +225,12 @@ mod selectivity {
 
 ## Day 3 Checklist
 
-- [ ] W26.3.1: Selectivity estimation implemented
-- [ ] W26.3.2: Comprehensive unit tests written
-- [ ] All existing tests pass (`cargo test`)
-- [ ] All new tests pass (`cargo test selectivity metadata_`)
-- [ ] Clippy clean (`cargo clippy -- -D warnings`)
-- [ ] Formatted (`cargo fmt --check`)
+- [x] W26.3.1: Selectivity estimation implemented
+- [x] W26.3.2: Comprehensive unit tests written
+- [x] All existing tests pass (`cargo test`)
+- [x] All new tests pass (`cargo test selectivity metadata_`)
+- [x] Clippy clean (`cargo clippy -- -D warnings`)
+- [x] Formatted (`cargo fmt --check`)
 
 ## Day 3 Exit Criteria
 
@@ -251,11 +251,11 @@ After completing Day 3:
 - Extended `tests/metadata_*.rs`
 - New `tests/selectivity.rs`
 
-**Status:** PENDING_DAY_4
+**Status:** APPROVED (2025-12-21)
 
 **Next:** Day 4 — Persistence v0.4 format (MetadataSectionHeader + Postcard)
 
 ---
 
 *Agent: RUST_ENGINEER + TEST_ENGINEER*
-*Status: [PROPOSED]*
+*Status: [APPROVED]*
