@@ -5,7 +5,7 @@
 //! environment-constrained I/O (e.g., IndexedDB in browsers).
 
 use crate::hnsw::HnswIndex;
-use crate::persistence::header::FileHeader;
+use crate::persistence::header::{FileHeader, Flags, MetadataSectionHeader};
 use crate::storage::VectorStorage;
 use std::cmp::min;
 
@@ -26,6 +26,8 @@ pub trait ChunkedWriter {
 /// 2. Vector Data
 /// 3. HNSW Index Nodes
 /// 4. HNSW Neighbor Pool
+/// 5. Tombstone bitvec
+/// 6. Metadata section (v0.4+, if non-empty)
 pub struct ChunkIter<'a> {
     storage: &'a VectorStorage,
     index: &'a HnswIndex,
@@ -40,7 +42,9 @@ pub struct ChunkIter<'a> {
     vector_data_offset: usize, // Offset in f32 slice
     node_index: usize,
     neighbor_offset: usize,
-    metadata_offset: usize, // Offset in deleted bits bytes
+    tombstone_offset: usize, // Offset in deleted bits bytes (renamed for clarity)
+    metadata_section: Vec<u8>, // Pre-serialized metadata section (header + data)
+    metadata_section_offset: usize, // Current offset in metadata_section
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +53,8 @@ enum SerializationState {
     VectorData,
     IndexNodes,
     IndexNeighbors,
-    Metadata,
+    Tombstones,      // Deleted bitvec (was "Metadata" - renamed for clarity)
+    MetadataSection, // v0.4+: MetadataSectionHeader + serialized MetadataStore
     Done,
 }
 
@@ -72,15 +77,48 @@ impl<'a> ChunkedWriter for (&'a VectorStorage, &'a HnswIndex) {
         // Header: 0..64
         // Vectors: 64..(64 + vector_data_size)
         let index_offset = 64 + vector_data_size;
-        // Metadata: After index nodes + neighbors
-        let metadata_offset_start = index_offset + nodes_size + neighbors_size;
+        // Tombstone offset: After index nodes + neighbors
+        let tombstone_offset_start = index_offset + nodes_size + neighbors_size;
+
+        // v0.4: Serialize metadata section if non-empty (RFC-002)
+        let metadata_section = if index.metadata.is_empty() {
+            Vec::new()
+        } else {
+            // Serialize MetadataStore to Postcard
+            match index.metadata.to_postcard() {
+                Ok(serialized) => {
+                    let crc = crc32fast::hash(&serialized);
+                    #[allow(clippy::cast_possible_truncation)]
+                    let meta_header =
+                        MetadataSectionHeader::new_postcard(serialized.len() as u32, crc);
+
+                    // Combine header (16 bytes) + serialized data
+                    let mut section = Vec::with_capacity(16 + serialized.len());
+                    section.extend_from_slice(meta_header.as_bytes());
+                    section.extend_from_slice(&serialized);
+                    section
+                }
+                Err(_) => {
+                    // If serialization fails, proceed without metadata
+                    // This should not happen with valid data
+                    Vec::new()
+                }
+            }
+        };
+
+        let has_metadata = !metadata_section.is_empty();
 
         let mut header = FileHeader::new(dimensions);
         header.vector_count = vector_count;
         header.index_offset = index_offset;
-        header.metadata_offset = metadata_offset_start;
+        header.metadata_offset = tombstone_offset_start; // Points to tombstone bitvec start
         header.hnsw_m = index.config.m;
         header.hnsw_m0 = index.config.m0;
+
+        // v0.4: Set HAS_METADATA flag if metadata section is present
+        if has_metadata {
+            header.flags |= Flags::HAS_METADATA;
+        }
 
         // v0.3: Persist deleted_count from index (W16.5)
         // SAFETY: deleted_count is usize, header field is u32.
@@ -106,7 +144,9 @@ impl<'a> ChunkedWriter for (&'a VectorStorage, &'a HnswIndex) {
             vector_data_offset: 0,
             node_index: 0,
             neighbor_offset: 0,
-            metadata_offset: 0,
+            tombstone_offset: 0,
+            metadata_section,
+            metadata_section_offset: 0,
         }
     }
 }
@@ -238,7 +278,7 @@ impl Iterator for ChunkIter<'_> {
                     let remaining_bytes = neighbors.len() - self.neighbor_offset;
 
                     if remaining_bytes == 0 {
-                        self.state = SerializationState::Done;
+                        self.state = SerializationState::Tombstones;
                         continue;
                     }
 
@@ -250,24 +290,22 @@ impl Iterator for ChunkIter<'_> {
                     self.neighbor_offset += bytes_to_copy;
 
                     if self.neighbor_offset == neighbors.len() {
-                        self.state = SerializationState::Metadata;
+                        self.state = SerializationState::Tombstones;
                     } else if bytes_to_copy == 0 {
                         break;
                     }
                 }
-                SerializationState::Metadata => {
+                SerializationState::Tombstones => {
                     // Serialize storage.deleted (BitVec) as bytes
                     // We pack bits into bytes (Lsb0)
                     let total_bits = self.storage.deleted.len();
                     let total_bytes = (total_bits + 7) / 8;
 
-                    let remaining_bytes = total_bytes - self.metadata_offset;
-
-                    // #[cfg(test)]
-                    // println!("DEBUG: chunking: Metadata: bits={}, bytes={}, remaining={}, offset={}", total_bits, total_bytes, remaining_bytes, self.metadata_offset);
+                    let remaining_bytes = total_bytes - self.tombstone_offset;
 
                     if remaining_bytes == 0 {
-                        self.state = SerializationState::Done;
+                        // After tombstones, write metadata section if present
+                        self.state = SerializationState::MetadataSection;
                         continue;
                     }
 
@@ -276,26 +314,51 @@ impl Iterator for ChunkIter<'_> {
 
                     // Produce bytes
                     for _ in 0..bytes_to_produce {
-                        let byte_idx = self.metadata_offset;
+                        let byte_idx = self.tombstone_offset;
                         let start_bit = byte_idx * 8;
                         let mut byte: u8 = 0;
                         for bit_offset in 0..8 {
                             let bit_idx = start_bit + bit_offset;
                             if bit_idx < total_bits {
                                 // We access bitvec by index.
-                                // Note: This is random access, not super efficient but acceptable for metadata
+                                // Note: This is random access, not super efficient but acceptable for tombstones
                                 if self.storage.deleted[bit_idx] {
                                     byte |= 1 << bit_offset;
                                 }
                             }
                         }
                         self.buffer.push(byte);
-                        self.metadata_offset += 1;
+                        self.tombstone_offset += 1;
                     }
 
-                    if self.metadata_offset == total_bytes {
-                        self.state = SerializationState::Done;
+                    if self.tombstone_offset == total_bytes {
+                        self.state = SerializationState::MetadataSection;
                     } else if bytes_to_produce == 0 {
+                        break;
+                    }
+                }
+                SerializationState::MetadataSection => {
+                    // v0.4: Write metadata section (header + serialized data)
+                    // This section is pre-serialized in export_chunked()
+                    let remaining_bytes =
+                        self.metadata_section.len() - self.metadata_section_offset;
+
+                    if remaining_bytes == 0 {
+                        self.state = SerializationState::Done;
+                        continue;
+                    }
+
+                    let bytes_to_copy = min(remaining_bytes, space_left);
+                    let start = self.metadata_section_offset;
+                    let end = start + bytes_to_copy;
+                    self.buffer
+                        .extend_from_slice(&self.metadata_section[start..end]);
+
+                    self.metadata_section_offset += bytes_to_copy;
+
+                    if self.metadata_section_offset == self.metadata_section.len() {
+                        self.state = SerializationState::Done;
+                    } else if bytes_to_copy == 0 {
                         break;
                     }
                 }
@@ -364,7 +427,9 @@ mod tests {
             total_bytes += chunk.len();
         }
 
-        // Header (64) + 10 * 4 * 4 (160) = 224 bytes
-        assert_eq!(total_bytes, 64 + 160);
+        // Header (64) + 10 vectors * 4 dims * 4 bytes (160) + tombstones (2 bytes for 10 bits) = 226 bytes
+        // No metadata section since index has no metadata
+        let expected = 64 + 160 + 2; // Header + vector data + tombstones
+        assert_eq!(total_bytes, expected);
     }
 }

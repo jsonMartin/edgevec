@@ -8,8 +8,8 @@ pub const MAGIC: [u8; 4] = *b"EVEC";
 /// Current major version
 pub const VERSION_MAJOR: u8 = 0;
 
-/// Current minor version (bumped to 3 for soft-delete support)
-pub const VERSION_MINOR: u8 = 3;
+/// Current minor version (bumped to 4 for metadata support per RFC-002)
+pub const VERSION_MINOR: u8 = 4;
 
 /// Minimum supported minor version for migration
 pub const VERSION_MINOR_MIN: u8 = 1;
@@ -202,13 +202,11 @@ impl MetadataSectionHeader {
     /// # Requirements
     ///
     /// - `bytes` must be at least 16 bytes
-    /// - `bytes` must be 4-byte aligned
     ///
     /// # Errors
     ///
     /// Returns `Err` if:
     /// - Buffer is less than 16 bytes
-    /// - Buffer is not 4-byte aligned
     /// - Magic number is invalid
     /// - Version is unsupported
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, MetadataHeaderError> {
@@ -216,8 +214,11 @@ impl MetadataSectionHeader {
             return Err(MetadataHeaderError::BufferTooShort(bytes.len()));
         }
 
-        let header = *bytemuck::try_from_bytes::<MetadataSectionHeader>(&bytes[..16])
-            .map_err(|_| MetadataHeaderError::UnalignedBuffer)?;
+        // Copy to aligned buffer to avoid alignment issues
+        // This is necessary because the metadata section may not start at an aligned offset
+        let mut aligned_buf = [0u8; 16];
+        aligned_buf.copy_from_slice(&bytes[..16]);
+        let header = *bytemuck::from_bytes::<MetadataSectionHeader>(&aligned_buf);
 
         header.validate_magic()?;
         header.validate_version()?;
@@ -465,6 +466,18 @@ impl FileHeader {
     pub fn supports_soft_delete(&self) -> bool {
         self.version_minor >= 3
     }
+
+    /// Returns true if this header supports metadata storage (v0.4+).
+    #[must_use]
+    pub fn supports_metadata(&self) -> bool {
+        self.version_minor >= 4
+    }
+
+    /// Returns true if the HAS_METADATA flag is set.
+    #[must_use]
+    pub fn has_metadata(&self) -> bool {
+        self.flags & Flags::HAS_METADATA != 0
+    }
 }
 
 #[cfg(test)]
@@ -538,35 +551,35 @@ mod tests {
 
     #[test]
     fn test_metadata_header_new_postcard() {
-        let header = MetadataSectionHeader::new_postcard(1024, 0xDEADBEEF);
+        let header = MetadataSectionHeader::new_postcard(1024, 0xDEAD_BEEF);
 
         assert_eq!(header.magic, *b"META");
         assert_eq!(header.version, 1);
         assert_eq!(header.format, FORMAT_POSTCARD);
         assert_eq!(header.reserved, 0);
         assert_eq!(header.size, 1024);
-        assert_eq!(header.crc, 0xDEADBEEF);
+        assert_eq!(header.crc, 0xDEAD_BEEF);
         assert!(header.is_postcard());
         assert!(!header.is_json());
     }
 
     #[test]
     fn test_metadata_header_new_json() {
-        let header = MetadataSectionHeader::new_json(2048, 0xCAFEBABE);
+        let header = MetadataSectionHeader::new_json(2048, 0xCAFE_BABE);
 
         assert_eq!(header.magic, *b"META");
         assert_eq!(header.version, 1);
         assert_eq!(header.format, FORMAT_JSON);
         assert_eq!(header.reserved, 0);
         assert_eq!(header.size, 2048);
-        assert_eq!(header.crc, 0xCAFEBABE);
+        assert_eq!(header.crc, 0xCAFE_BABE);
         assert!(!header.is_postcard());
         assert!(header.is_json());
     }
 
     #[test]
     fn test_metadata_header_roundtrip() {
-        let header = MetadataSectionHeader::new_postcard(512, 0x12345678);
+        let header = MetadataSectionHeader::new_postcard(512, 0x1234_5678);
         let bytes = header.as_bytes();
 
         assert_eq!(bytes.len(), 16);

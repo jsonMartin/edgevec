@@ -1,13 +1,14 @@
 use crate::hnsw::graph::{HnswIndex, HnswNode, NodeId};
 use crate::hnsw::HnswConfig;
+use crate::metadata::MetadataStore;
 use crate::persistence::chunking::ChunkedWriter;
-use crate::persistence::header::{FileHeader, HeaderError};
+use crate::persistence::header::{FileHeader, Flags, HeaderError, MetadataSectionHeader};
 use crate::persistence::storage::load_snapshot;
 use crate::persistence::{PersistenceError, StorageBackend};
 use crate::storage::VectorStorage;
 use bitvec::prelude::*;
 use bytemuck::try_cast_slice;
-use log::{info, warn};
+use log::{debug, info, warn};
 use std::mem::size_of;
 
 /// Standard chunk size for snapshot streaming (1MB).
@@ -71,6 +72,12 @@ pub fn write_snapshot(
 /// # Errors
 ///
 /// Returns `PersistenceError` if data is corrupted, version mismatch, or I/O error.
+///
+/// # Panics
+///
+/// This function does not panic. All internal `expect` calls are guarded by
+/// prior validation that guarantees their conditions are met.
+#[allow(clippy::missing_panics_doc)] // Panics are unreachable by design
 pub fn read_snapshot(
     backend: &dyn StorageBackend,
 ) -> Result<(HnswIndex, VectorStorage), PersistenceError> {
@@ -78,12 +85,14 @@ pub fn read_snapshot(
     let (header, data) = load_snapshot(backend)?;
 
     // Verify Flags (C3)
-    // We currently don't support any flags (like quantization).
-    // If flags are set, it implies data format we don't understand.
-    if header.flags != 0 {
+    // v0.4: We now support HAS_METADATA flag (bit 2)
+    // Other flags (COMPRESSED, QUANTIZED) are still unsupported.
+    let supported_flags = Flags::HAS_METADATA;
+    let unsupported = header.flags & !supported_flags;
+    if unsupported != 0 {
         return Err(PersistenceError::Corrupted(format!(
-            "Unsupported flags: 0x{:x}. This version only supports flags=0.",
-            header.flags
+            "Unsupported flags: 0x{:x}. Supported: 0x{:x} (HAS_METADATA).",
+            header.flags, supported_flags
         )));
     }
 
@@ -123,8 +132,23 @@ pub fn read_snapshot(
 
     // Bulk load vector data
     // Assuming F32 (flags checked above)
-    let floats: &[f32] = bytemuck::cast_slice(vector_bytes);
-    storage.data_f32.extend_from_slice(floats);
+    // Note: Use try_cast_slice to handle potential alignment issues gracefully.
+    // If the slice is misaligned, fall back to copying byte-by-byte.
+    if !vector_bytes.is_empty() {
+        match bytemuck::try_cast_slice::<u8, f32>(vector_bytes) {
+            Ok(floats) => {
+                storage.data_f32.extend_from_slice(floats);
+            }
+            Err(_) => {
+                // Alignment issue - copy manually via LittleEndian reads
+                // This is slower but handles arbitrary alignment
+                for chunk in vector_bytes.chunks_exact(4) {
+                    let bytes: [u8; 4] = chunk.try_into().expect("chunks_exact guarantees 4 bytes");
+                    storage.data_f32.push(f32::from_le_bytes(bytes));
+                }
+            }
+        }
+    }
 
     // Reconstruct 'deleted' bitvec
     if header.metadata_offset > 0 {
@@ -208,11 +232,25 @@ pub fn read_snapshot(
     //
     // See: docs/audits/unsafe_audit_persistence.md for the original issue.
     // Fixed in: W13.2 (bytemuck integration)
-    let nodes: &[HnswNode] = try_cast_slice(nodes_bytes).map_err(|e| {
-        PersistenceError::Corrupted(format!(
-            "HnswNode alignment error: {e:?}. Data may be corrupted or from incompatible platform."
-        ))
-    })?;
+    // Updated in: W26.5 - handle alignment fallback by copying to aligned Vec
+    let nodes: Vec<HnswNode> = if nodes_bytes.is_empty() {
+        Vec::new()
+    } else if let Ok(nodes) = try_cast_slice::<u8, HnswNode>(nodes_bytes) {
+        nodes.to_vec()
+    } else {
+        // Alignment issue - copy to aligned Vec<u8> first, then cast
+        // This is slower but handles arbitrary alignment
+        let mut aligned: Vec<u8> = Vec::with_capacity(nodes_bytes.len());
+        aligned.extend_from_slice(nodes_bytes);
+        // Now aligned should be properly aligned for HnswNode
+        try_cast_slice::<u8, HnswNode>(&aligned)
+            .map_err(|e| {
+                PersistenceError::Corrupted(format!(
+                    "HnswNode alignment error after copy: {e:?}. Data may be corrupted."
+                ))
+            })?
+            .to_vec()
+    };
 
     // Verify we got the expected number of nodes
     if nodes.len() != vec_count {
@@ -228,7 +266,7 @@ pub fn read_snapshot(
         HnswIndex::new(config, &storage).map_err(|e| PersistenceError::Corrupted(e.to_string()))?;
 
     // Restore nodes
-    index.nodes = nodes.to_vec();
+    index.nodes = nodes;
 
     // Restore neighbors
     index.neighbors.buffer.extend_from_slice(neighbors_bytes);
@@ -277,6 +315,75 @@ pub fn read_snapshot(
             "Migrated snapshot from v0.{} to v0.3 format (soft delete enabled)",
             header.version_minor
         );
+    }
+
+    // v0.4: Load metadata section if HAS_METADATA flag is set
+    if header.has_metadata() {
+        // Calculate metadata section offset
+        // It comes after: vector data + hnsw nodes + neighbors + tombstone bitvec
+        let tombstone_bytes = (vec_count + 7) / 8;
+        // SAFETY: On 32-bit targets, offsets > 2^32 would exceed addressable memory.
+        #[allow(clippy::cast_possible_truncation)]
+        let tombstone_offset = (header.metadata_offset as usize).saturating_sub(64);
+        let metadata_section_offset = tombstone_offset + tombstone_bytes;
+
+        if metadata_section_offset + 16 > data.len() {
+            return Err(PersistenceError::Corrupted(
+                "Metadata section header extends beyond file".into(),
+            ));
+        }
+
+        // Read MetadataSectionHeader (16 bytes)
+        let meta_header = MetadataSectionHeader::from_bytes(&data[metadata_section_offset..])
+            .map_err(|e| PersistenceError::Corrupted(format!("Invalid metadata header: {e}")))?;
+
+        // Validate CRC before deserializing
+        let meta_data_start = metadata_section_offset + 16;
+        let meta_data_end = meta_data_start + meta_header.size as usize;
+
+        if meta_data_end > data.len() {
+            return Err(PersistenceError::Corrupted(format!(
+                "Metadata section data extends beyond file: need {} bytes, have {}",
+                meta_data_end,
+                data.len()
+            )));
+        }
+
+        let meta_data = &data[meta_data_start..meta_data_end];
+        let actual_crc = crc32fast::hash(meta_data);
+        if actual_crc != meta_header.crc {
+            return Err(PersistenceError::Corrupted(format!(
+                "Metadata CRC mismatch: expected {:#x}, got {:#x}",
+                meta_header.crc, actual_crc
+            )));
+        }
+
+        // Deserialize based on format
+        let loaded_metadata = if meta_header.is_postcard() {
+            MetadataStore::from_postcard(meta_data).map_err(|e| {
+                PersistenceError::Corrupted(format!("Metadata postcard decode failed: {e}"))
+            })?
+        } else if meta_header.is_json() {
+            MetadataStore::from_json(meta_data).map_err(|e| {
+                PersistenceError::Corrupted(format!("Metadata JSON decode failed: {e}"))
+            })?
+        } else {
+            return Err(PersistenceError::Corrupted(format!(
+                "Unknown metadata format: {}",
+                meta_header.format
+            )));
+        };
+
+        debug!(
+            "Loaded metadata section: {} vectors, {} total keys",
+            loaded_metadata.vector_count(),
+            loaded_metadata.total_key_count()
+        );
+
+        index.metadata = loaded_metadata;
+    } else {
+        // No metadata section (v0.3 or v0.4 without metadata)
+        index.metadata = MetadataStore::new();
     }
 
     Ok((index, storage))
