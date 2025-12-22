@@ -47,6 +47,35 @@ pub fn init_logging() {
     let _ = console_log::init_with_level(log::Level::Info);
 }
 
+/// Vector storage type for EdgeVec.
+///
+/// Determines how vectors are stored and processed.
+#[wasm_bindgen]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VectorType {
+    /// Standard 32-bit floating point vectors.
+    Float32 = 0,
+    /// Binary vectors (1-bit per dimension, packed into bytes).
+    /// Use with `metric = "hamming"`.
+    Binary = 1,
+}
+
+/// Distance metric type for EdgeVec.
+///
+/// Determines how vector similarity is calculated.
+#[wasm_bindgen]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MetricType {
+    /// L2 Squared (Euclidean) distance.
+    L2 = 0,
+    /// Cosine similarity (converted to distance).
+    Cosine = 1,
+    /// Dot product (converted to distance).
+    Dot = 2,
+    /// Hamming distance (for binary vectors).
+    Hamming = 3,
+}
+
 /// Configuration for EdgeVec database.
 #[wasm_bindgen]
 pub struct EdgeVecConfig {
@@ -57,6 +86,7 @@ pub struct EdgeVecConfig {
     ef_construction: Option<u32>,
     ef_search: Option<u32>,
     metric: Option<String>,
+    vector_type: Option<VectorType>,
 }
 
 #[wasm_bindgen]
@@ -72,6 +102,7 @@ impl EdgeVecConfig {
             ef_construction: None,
             ef_search: None,
             metric: None,
+            vector_type: None,
         }
     }
 
@@ -99,10 +130,55 @@ impl EdgeVecConfig {
         self.ef_search = Some(ef);
     }
 
-    /// Set distance metric ("l2", "cosine", "dot").
+    /// Set distance metric ("l2", "cosine", "dot", "hamming").
     #[wasm_bindgen(setter)]
     pub fn set_metric(&mut self, metric: String) {
         self.metric = Some(metric);
+    }
+
+    /// Set distance metric using typed enum.
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(768);
+    /// config.setMetricType(MetricType.Cosine);
+    /// ```
+    #[wasm_bindgen(js_name = "setMetricType")]
+    pub fn set_metric_type(&mut self, metric_type: MetricType) {
+        let metric_str = match metric_type {
+            MetricType::L2 => "l2",
+            MetricType::Cosine => "cosine",
+            MetricType::Dot => "dot",
+            MetricType::Hamming => "hamming",
+        };
+        self.metric = Some(metric_str.to_string());
+    }
+
+    /// Set vector storage type.
+    ///
+    /// Use `VectorType.Binary` with `MetricType.Hamming` for binary vectors.
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(1024);
+    /// config.setVectorType(VectorType.Binary);
+    /// config.setMetricType(MetricType.Hamming);
+    /// ```
+    #[wasm_bindgen(setter)]
+    pub fn set_vector_type(&mut self, vt: VectorType) {
+        self.vector_type = Some(vt);
+        // Auto-set hamming metric for binary vectors if not already set
+        if vt == VectorType::Binary && self.metric.is_none() {
+            self.metric = Some("hamming".to_string());
+        }
+    }
+
+    /// Get the configured vector type.
+    #[wasm_bindgen(getter)]
+    pub fn vector_type(&self) -> Option<VectorType> {
+        self.vector_type
     }
 }
 
@@ -188,8 +264,12 @@ impl EdgeVec {
         // Initialize storage (in-memory for now)
         let mut storage = VectorStorage::new(&hnsw_config, None);
 
-        // For Hamming metric, set up binary storage
-        if metric_code == HnswConfig::METRIC_HAMMING {
+        // Set up binary storage if:
+        // 1. Explicit VectorType::Binary is specified, OR
+        // 2. Metric is Hamming (implies binary vectors)
+        if config.vector_type == Some(VectorType::Binary)
+            || metric_code == HnswConfig::METRIC_HAMMING
+        {
             storage.set_storage_type(crate::storage::StorageType::Binary(config.dimensions));
         }
 
@@ -479,6 +559,169 @@ impl EdgeVec {
         }
 
         Ok(arr.into())
+    }
+
+    /// Searches binary vectors with optional metadata filtering.
+    ///
+    /// Combines binary vector search (Hamming distance) with metadata filtering.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Binary query vector as Uint8Array (packed bits, ceil(dimensions/8) bytes)
+    /// * `k` - Maximum number of results to return
+    /// * `options_json` - JSON string with search options:
+    ///   - `filter`: Optional SQL-like filter expression (e.g., `"category = \"gpu\""`)
+    ///   - `strategy`: Filter strategy - `"auto"`, `"pre"`, `"post"`, or `"hybrid"`
+    ///   - `oversample_factor`: Oversample factor for post/hybrid strategies (default: 3.0)
+    ///   - `include_metadata`: Whether to include metadata in results (default: false)
+    ///
+    /// # Returns
+    ///
+    /// JSON string containing search results with Hamming distances.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Storage is not in Binary mode (metric != "hamming")
+    /// - Query byte length doesn't match expected dimensions
+    /// - Options JSON is invalid
+    /// - Filter expression parsing fails
+    /// - Search fails
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const queryBinary = new Uint8Array(128); // 1024 bits
+    /// const result = JSON.parse(db.searchBinaryFiltered(queryBinary, 10, JSON.stringify({
+    ///   filter: 'category = "gpu"',
+    ///   strategy: 'auto',
+    ///   include_metadata: true
+    /// })));
+    /// console.log(`Found ${result.results.length} binary matches with filter`);
+    /// ```
+    #[wasm_bindgen(js_name = "searchBinaryFiltered")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_binary_filtered(
+        &mut self,
+        query: Uint8Array,
+        k: usize,
+        options_json: &str,
+    ) -> Result<String, JsValue> {
+        use crate::filter::{parse, FilterStrategy, FilteredSearcher};
+
+        // Start total timing
+        let total_start = web_sys::window()
+            .and_then(|w| w.performance())
+            .map(|p| p.now());
+
+        // Validate metric is Hamming
+        if self.inner.config.metric != HnswConfig::METRIC_HAMMING {
+            return Err(EdgeVecError::Validation(
+                "searchBinaryFiltered requires metric='hamming'. Current metric is not Hamming."
+                    .to_string(),
+            )
+            .into());
+        }
+
+        // Validate query dimensions
+        let expected_bytes = ((self.inner.config.dimensions + 7) / 8) as usize;
+        let len = query.length() as usize;
+
+        if len != expected_bytes {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: expected_bytes,
+                actual: len,
+            })
+            .into());
+        }
+
+        let query_vec = query.to_vec();
+
+        // Parse options
+        let options: SearchFilteredOptions = serde_json::from_str(options_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid options JSON: {e}")))?;
+
+        // Parse filter if provided (and time it)
+        let filter_start = web_sys::window()
+            .and_then(|w| w.performance())
+            .map(|p| p.now());
+
+        let filter = match &options.filter {
+            Some(filter_str) => {
+                Some(parse(filter_str).map_err(|e| filter::filter_error_to_jsvalue(&e))?)
+            }
+            None => None,
+        };
+
+        // Convert strategy
+        let strategy = match options.strategy.as_deref() {
+            Some("pre") => FilterStrategy::PreFilter,
+            Some("post") => FilterStrategy::PostFilter {
+                oversample: options.oversample_factor.unwrap_or(3.0),
+            },
+            Some("hybrid") => FilterStrategy::Hybrid {
+                oversample_min: 1.5,
+                oversample_max: options.oversample_factor.unwrap_or(10.0),
+            },
+            _ => FilterStrategy::Auto,
+        };
+
+        // Create metadata store adapter
+        let metadata_adapter = EdgeVecMetadataAdapter::new(&self.metadata, self.inner.len());
+
+        // Execute filtered binary search
+        let mut searcher = FilteredSearcher::new(&self.inner, &self.storage, &metadata_adapter);
+        let result = searcher
+            .search_binary_filtered(&query_vec, k, filter.as_ref(), strategy)
+            .map_err(|e| JsValue::from_str(&format!("Binary filtered search failed: {e}")))?;
+
+        // Calculate filter time (includes parsing + evaluation)
+        let filter_time_ms = match (
+            filter_start,
+            web_sys::window().and_then(|w| w.performance()),
+        ) {
+            (Some(start), Some(perf)) => perf.now() - start,
+            _ => 0.0,
+        };
+
+        // Check if metadata should be included
+        let include_metadata = options.include_metadata.unwrap_or(false);
+
+        // Build response (similar structure to searchFiltered, but no vector field since binary)
+        let response = SearchFilteredResult {
+            results: result
+                .results
+                .iter()
+                .map(|r| {
+                    let id = r.vector_id.0 as u32;
+                    SearchFilteredItem {
+                        id,
+                        score: r.distance,
+                        metadata: if include_metadata {
+                            self.metadata
+                                .get_all(id)
+                                .and_then(|m| serde_json::to_value(m).ok())
+                        } else {
+                            None
+                        },
+                        vector: None, // Binary vectors not returned (different format)
+                    }
+                })
+                .collect(),
+            complete: result.complete,
+            observed_selectivity: result.observed_selectivity,
+            strategy_used: strategy_to_string(&result.strategy_used),
+            vectors_evaluated: result.vectors_evaluated,
+            filter_time_ms,
+            total_time_ms: match (total_start, web_sys::window().and_then(|w| w.performance())) {
+                (Some(start), Some(perf)) => perf.now() - start,
+                _ => 0.0,
+            },
+        };
+
+        serde_json::to_string(&response)
+            .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
     }
 
     /// Inserts a batch of vectors into the index (flat array format).

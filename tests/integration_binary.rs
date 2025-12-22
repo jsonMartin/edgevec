@@ -297,7 +297,9 @@ fn test_binary_with_regular_search() {
     let mut index = HnswIndex::new(config, &storage).unwrap();
 
     // Insert using f32 vectors (should auto-quantize to binary)
-    let f32_vec: Vec<f32> = (0..dimensions).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+    let f32_vec: Vec<f32> = (0..dimensions)
+        .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
     let id = index.insert(&f32_vec, &mut storage).unwrap();
     assert_eq!(id.0, 1);
 
