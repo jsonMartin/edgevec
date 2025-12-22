@@ -164,6 +164,7 @@ impl EdgeVec {
             Some("cosine") => HnswConfig::METRIC_COSINE,
             Some("dot") => HnswConfig::METRIC_DOT_PRODUCT,
             Some("l2") | None => HnswConfig::METRIC_L2_SQUARED,
+            Some("hamming") => HnswConfig::METRIC_HAMMING,
             Some(other) => {
                 return Err(EdgeVecError::Validation(format!("Unknown metric: {other}")).into())
             }
@@ -185,7 +186,12 @@ impl EdgeVec {
         hnsw_config.metric = metric_code;
 
         // Initialize storage (in-memory for now)
-        let storage = VectorStorage::new(&hnsw_config, None);
+        let mut storage = VectorStorage::new(&hnsw_config, None);
+
+        // For Hamming metric, set up binary storage
+        if metric_code == HnswConfig::METRIC_HAMMING {
+            storage.set_storage_type(crate::storage::StorageType::Binary(config.dimensions));
+        }
 
         let index = HnswIndex::new(hnsw_config, &storage).map_err(EdgeVecError::from)?;
 
@@ -244,6 +250,235 @@ impl EdgeVec {
             return Err(EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into());
         }
         Ok(id.0 as u32)
+    }
+
+    // =========================================================================
+    // BINARY VECTOR API (v0.6.0)
+    // =========================================================================
+
+    /// Inserts a pre-packed binary vector into the index.
+    ///
+    /// This method is for binary vectors (1-bit quantized) using Hamming distance.
+    /// Use this when you have pre-quantized data (e.g., from Turso's `f1bit_blob`).
+    ///
+    /// # Arguments
+    ///
+    /// * `vector` - A Uint8Array containing packed binary data. Length must equal
+    ///   `ceil(dimensions / 8)` bytes.
+    ///
+    /// # Returns
+    ///
+    /// The assigned Vector ID (u32).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Storage is not in Binary mode (metric != "hamming")
+    /// - Byte length doesn't match expected bytes for dimensions
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(1024); // 1024 bits = 128 bytes
+    /// config.metric = 'hamming';
+    /// const db = new EdgeVec(config);
+    ///
+    /// // Direct binary insertion (e.g., from Turso f1bit_blob)
+    /// const binaryVector = new Uint8Array(128); // 1024 bits packed
+    /// const id = db.insertBinary(binaryVector);
+    /// ```
+    #[wasm_bindgen(js_name = "insertBinary")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn insert_binary(&mut self, vector: Uint8Array) -> Result<u32, JsValue> {
+        // Validate metric is Hamming
+        if self.inner.config.metric != HnswConfig::METRIC_HAMMING {
+            return Err(EdgeVecError::Validation(
+                "insertBinary requires metric='hamming'. Current metric is not Hamming."
+                    .to_string(),
+            )
+            .into());
+        }
+
+        let expected_bytes = ((self.inner.config.dimensions + 7) / 8) as usize;
+        let len = vector.length() as usize;
+
+        if len != expected_bytes {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: expected_bytes,
+                actual: len,
+            })
+            .into());
+        }
+
+        let vec = vector.to_vec();
+
+        let id = self
+            .inner
+            .insert_binary(&vec, &mut self.storage)
+            .map_err(EdgeVecError::from)?;
+
+        if id.0 > u64::from(u32::MAX) {
+            return Err(EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into());
+        }
+        Ok(id.0 as u32)
+    }
+
+    /// Inserts an f32 vector with automatic binary quantization.
+    ///
+    /// The vector is converted to binary (1 bit per dimension) using sign quantization:
+    /// - Positive values → 1
+    /// - Non-positive values → 0
+    ///
+    /// # Arguments
+    ///
+    /// * `vector` - A Float32Array containing the vector data (must match dimensions).
+    ///
+    /// # Returns
+    ///
+    /// The assigned Vector ID (u32).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Storage is not in Binary mode (metric != "hamming")
+    /// - Dimensions don't match
+    /// - Vector contains NaNs
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(1024);
+    /// config.metric = 'hamming';
+    /// const db = new EdgeVec(config);
+    ///
+    /// // Insert f32 vector with automatic binary quantization
+    /// const f32Vector = new Float32Array(1024).fill(0.5); // Gets quantized to all 1s
+    /// const id = db.insertWithBq(f32Vector);
+    /// ```
+    #[wasm_bindgen(js_name = "insertWithBq")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn insert_with_bq(&mut self, vector: Float32Array) -> Result<u32, JsValue> {
+        // Validate metric is Hamming
+        if self.inner.config.metric != HnswConfig::METRIC_HAMMING {
+            return Err(EdgeVecError::Validation(
+                "insertWithBq requires metric='hamming'. Current metric is not Hamming."
+                    .to_string(),
+            )
+            .into());
+        }
+
+        let len = vector.length();
+        if len != self.inner.config.dimensions {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: self.inner.config.dimensions as usize,
+                actual: len as usize,
+            })
+            .into());
+        }
+
+        let vec = vector.to_vec();
+
+        #[cfg(debug_assertions)]
+        if vec.iter().any(|v| !v.is_finite()) {
+            return Err(
+                EdgeVecError::Validation("Vector contains non-finite values".to_string()).into(),
+            );
+        }
+
+        let id = self
+            .inner
+            .insert_with_bq(&vec, &mut self.storage)
+            .map_err(EdgeVecError::from)?;
+
+        if id.0 > u64::from(u32::MAX) {
+            return Err(EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into());
+        }
+        Ok(id.0 as u32)
+    }
+
+    /// Searches for nearest neighbors using a binary query vector.
+    ///
+    /// Uses Hamming distance to find the K most similar binary vectors.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - A Uint8Array containing the binary query vector.
+    /// * `k` - The number of neighbors to return.
+    ///
+    /// # Returns
+    ///
+    /// An array of objects: `[{ id: u32, score: f32 }, ...]` where `score` is
+    /// the Hamming distance (number of differing bits).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Storage is not in Binary mode (metric != "hamming")
+    /// - Query byte length doesn't match expected
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(1024);
+    /// config.metric = 'hamming';
+    /// const db = new EdgeVec(config);
+    ///
+    /// // ... insert binary vectors ...
+    ///
+    /// const queryBinary = new Uint8Array(128);
+    /// const results = db.searchBinary(queryBinary, 10);
+    /// results.forEach(r => console.log(`ID: ${r.id}, Hamming Distance: ${r.score}`));
+    /// ```
+    #[wasm_bindgen(js_name = "searchBinary")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_binary(&self, query: Uint8Array, k: usize) -> Result<JsValue, JsValue> {
+        // Validate metric is Hamming
+        if self.inner.config.metric != HnswConfig::METRIC_HAMMING {
+            return Err(EdgeVecError::Validation(
+                "searchBinary requires metric='hamming'. Current metric is not Hamming."
+                    .to_string(),
+            )
+            .into());
+        }
+
+        let expected_bytes = ((self.inner.config.dimensions + 7) / 8) as usize;
+        let len = query.length() as usize;
+
+        if len != expected_bytes {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: expected_bytes,
+                actual: len,
+            })
+            .into());
+        }
+
+        let vec = query.to_vec();
+
+        let results = self
+            .inner
+            .search_binary(&vec, k, &self.storage)
+            .map_err(EdgeVecError::from)?;
+
+        let arr = Array::new_with_length(results.len() as u32);
+        for (i, result) in results.iter().enumerate() {
+            let obj = Object::new();
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("id"),
+                &JsValue::from(result.vector_id.0 as u32),
+            )?;
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("score"),
+                &JsValue::from(result.distance),
+            )?;
+            arr.set(i as u32, obj.into());
+        }
+
+        Ok(arr.into())
     }
 
     /// Inserts a batch of vectors into the index (flat array format).
