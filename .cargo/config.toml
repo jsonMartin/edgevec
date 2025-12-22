@@ -11,6 +11,16 @@ rustflags = [
     "-C", "llvm-args=-enable-no-nans-fp-math",  # Aggressive float optimizations
 ]
 
+# =============================================================================
+# WASM TARGET CONFIGURATION
+# =============================================================================
+# Enable SIMD128 for WebAssembly builds - critical for performance!
+# Without this, distance calculations fall back to slow scalar loops.
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "-C", "target-feature=+simd128",  # Enable WASM SIMD for vectorized operations
+]
+
 [profile.release]
 # Additional release optimizations
 lto = "fat"            # Full LTO for maximum performance

@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeVec Binary Vector Benchmark</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Additional styles for binary test */
+        input[type="number"] {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.6rem 0.8rem;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            width: 100%;
+        }
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .stat-card {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            padding: 1rem;
+        }
+        .stat-value {
+            font-family: var(--font-mono);
+            font-size: 1.5rem;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
+        }
+        .stat-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 0.3rem;
+        }
+        .benchmark-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .benchmark-row:last-child {
+            border-bottom: none;
+        }
+        .benchmark-label {
+            color: var(--text-muted);
+        }
+        .benchmark-value {
+            font-family: var(--font-mono);
+            color: var(--neon-green);
+        }
+        .memory-bar {
+            height: 20px;
+            background: #1a1a1a;
+            border: 1px solid var(--border-color);
+            margin-top: 0.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .memory-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--neon-purple), var(--neon-cyan));
+            transition: width 0.3s ease;
+        }
+        .memory-text {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: #fff;
+            text-shadow: 0 0 5px #000;
+        }
+        select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.6rem 0.8rem;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            width: 100%;
+            cursor: pointer;
+        }
+        select:focus {
+            outline: none;
+            border-color: var(--neon-cyan);
+        }
+        .divider {
+            border-top: 1px solid var(--border-color);
+            margin: 1rem 0;
+        }
+        /* Override log scrolling */
+        .terminal-container {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 80px);
+        }
+        #log {
+            flex: 1;
+            min-height: 0;
+            overflow-y: scroll !important;
+        }
+        #log::-webkit-scrollbar {
+            width: 10px;
+        }
+        #log::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        #log::-webkit-scrollbar-thumb {
+            background: var(--neon-cyan);
+            border-radius: 4px;
+        }
+        #log::-webkit-scrollbar-thumb:hover {
+            background: var(--neon-purple);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>EdgeVec</h1>
+            <span class="subtitle">Binary Vector Benchmark</span>
+        </div>
+        <div style="font-family: var(--font-mono); color: var(--text-muted);">
+            <span class="status-indicator" id="statusIndicator"></span>
+            <span id="statusText">Initializing...</span>
+        </div>
+    </header>
+
+    <div class="dashboard">
+        <aside class="controls">
+            <div class="control-group">
+                <label>Dimensions (bits)</label>
+                <select id="dimensions">
+                    <option value="128">128 (16 bytes)</option>
+                    <option value="256">256 (32 bytes)</option>
+                    <option value="512">512 (64 bytes)</option>
+                    <option value="768">768 (96 bytes)</option>
+                    <option value="1024" selected>1024 (128 bytes)</option>
+                    <option value="2048">2048 (256 bytes)</option>
+                    <option value="4096">4096 (512 bytes)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Number of Vectors</label>
+                <input type="number" id="numVectors" value="10000" min="100" max="1000000" step="1000">
+            </div>
+
+            <div class="control-group">
+                <label>Batch Size</label>
+                <input type="number" id="batchSize" value="1000" min="100" max="10000" step="100">
+            </div>
+
+            <button id="btnInit" onclick="initDatabase()">Initialize Database</button>
+            <button id="btnTestOne" onclick="testSingleInsert()" disabled>Test Single Insert</button>
+            <button id="btnInsert" onclick="insertVectors()" disabled>Insert Vectors</button>
+
+            <div class="divider"></div>
+
+            <div class="control-group">
+                <label>Search K (neighbors)</label>
+                <input type="number" id="searchK" value="10" min="1" max="100">
+            </div>
+
+            <button id="btnSearch" onclick="runSearch()" disabled>Run Search Benchmark</button>
+            <button id="btnSearchFiltered" onclick="runFilteredSearch()" disabled>Search with Filter</button>
+
+            <div class="divider"></div>
+
+            <button class="danger" id="btnClear" onclick="clearDatabase()" disabled>Clear Database</button>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="statVectors">0</div>
+                    <div class="stat-label">Vectors</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statDimensions">-</div>
+                    <div class="stat-label">Dimensions</div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Estimated Memory</label>
+                <div class="memory-bar">
+                    <div class="memory-fill" id="memoryFill" style="width: 0%"></div>
+                    <span class="memory-text" id="memoryText">0 MB</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="terminal-container">
+            <div class="terminal-header">
+                <span>benchmark_output.log</span>
+                <span id="timestamp"></span>
+            </div>
+            <div id="log"></div>
+        </main>
+    </div>
+
+    <script type="module">
+        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, getSimdBackend, benchmarkHamming } from '../../pkg/edgevec.js';
+
+        let db = null;
+        let isReady = false;
+        let vectorCount = 0;
+        let currentDimensions = 0;
+
+        // Expose functions to window for onclick handlers
+        window.initDatabase = initDatabase;
+        window.testSingleInsert = testSingleInsert;
+        window.insertVectors = insertVectors;
+        window.runSearch = runSearch;
+        window.runFilteredSearch = runFilteredSearch;
+        window.clearDatabase = clearDatabase;
+
+        // Initialize WASM
+        async function initialize() {
+            try {
+                await init();
+                setStatus('active', 'WASM Ready');
+                log('EdgeVec WASM module loaded', 'cyan');
+
+                // Check SIMD backend
+                const simdBackend = getSimdBackend();
+                log(`SIMD Backend: ${simdBackend}`, simdBackend === 'wasm_simd128' ? 'green' : 'red');
+
+                // Microbenchmark Hamming distance
+                const hammingTime = benchmarkHamming(128, 10000); // 128 bytes, 10K iterations
+                log(`Hamming distance (128 bytes): ${hammingTime.toFixed(3)} μs/call`, 'purple');
+
+                log(`VectorType enum: Float32=${VectorType.Float32}, Binary=${VectorType.Binary}`, 'purple');
+                log(`MetricType enum: L2=${MetricType.L2}, Cosine=${MetricType.Cosine}, Dot=${MetricType.Dot}, Hamming=${MetricType.Hamming}`, 'purple');
+                document.getElementById('btnInit').disabled = false;
+                isReady = true;
+            } catch (e) {
+                setStatus('', 'Error');
+                log(`Failed to load WASM: ${e.message}`, 'red');
+                console.error(e);
+            }
+        }
+
+        function initDatabase() {
+            const dimensions = parseInt(document.getElementById('dimensions').value);
+            currentDimensions = dimensions;
+
+            log(`Initializing binary database with ${dimensions} dimensions...`, 'cyan');
+            const start = performance.now();
+
+            try {
+                const config = new EdgeVecConfig(dimensions);
+                config.vector_type = VectorType.Binary;
+                config.setMetricType(MetricType.Hamming);
+                config.m = 16;
+                config.m0 = 32;
+                config.ef_construction = 100;
+
+                db = new EdgeVec(config);
+                vectorCount = 0;
+
+                const elapsed = (performance.now() - start).toFixed(2);
+                log(`Database initialized in ${elapsed}ms`, 'green');
+                log(`Config: M=16, M0=32, ef_construction=100, metric=Hamming`, 'purple');
+
+                updateStats();
+                document.getElementById('btnInsert').disabled = false;
+                document.getElementById('btnTestOne').disabled = false;
+                document.getElementById('btnClear').disabled = false;
+                setStatus('active', 'Database Ready');
+            } catch (e) {
+                log(`Error initializing database: ${e.message}`, 'red');
+                console.error(e);
+            }
+        }
+
+        function testSingleInsert() {
+            if (!db) return;
+
+            const bytesPerVector = currentDimensions / 8;
+            log(`Testing single insert (${bytesPerVector} bytes)...`, 'cyan');
+
+            try {
+                // Create a simple test vector (all zeros)
+                const vector = new Uint8Array(bytesPerVector);
+                log(`Created vector: length=${vector.length}`, 'purple');
+
+                const start = performance.now();
+                log('Calling insertBinary...', 'purple');
+
+                const id = db.insertBinary(vector);
+
+                const elapsed = (performance.now() - start).toFixed(2);
+                log(`SUCCESS! Insert completed in ${elapsed}ms, ID: ${id}`, 'green');
+
+                vectorCount = 1;
+                updateStats();
+
+                // Test search too
+                log('Testing searchBinary...', 'purple');
+                const searchStart = performance.now();
+                const results = db.searchBinary(vector, 1);
+                const searchElapsed = (performance.now() - searchStart).toFixed(2);
+                log(`Search completed in ${searchElapsed}ms, found ${results.length} results`, 'green');
+
+                if (results.length > 0) {
+                    log(`Result: ID=${results[0].id}, distance=${results[0].score}`, 'cyan');
+                }
+
+                document.getElementById('btnSearch').disabled = false;
+            } catch (e) {
+                log(`ERROR: ${e.message}`, 'red');
+                console.error('Full error:', e);
+            }
+        }
+
+        async function insertVectors() {
+            if (!db) return;
+
+            const numVectors = parseInt(document.getElementById('numVectors').value);
+            const batchSize = parseInt(document.getElementById('batchSize').value);
+            const bytesPerVector = currentDimensions / 8;
+
+            log(`Inserting ${numVectors.toLocaleString()} binary vectors (${bytesPerVector} bytes each)...`, 'cyan');
+            setStatus('busy', 'Inserting...');
+            document.getElementById('btnInsert').disabled = true;
+
+            const totalStart = performance.now();
+            let inserted = 0;
+            const batchTimes = [];
+
+            // Process in batches with yielding for UI updates
+            for (let i = 0; i < numVectors; i += batchSize) {
+                const currentBatch = Math.min(batchSize, numVectors - i);
+                const batchStart = performance.now();
+
+                try {
+                    for (let j = 0; j < currentBatch; j++) {
+                        // Generate random binary vector
+                        const vector = new Uint8Array(bytesPerVector);
+                        crypto.getRandomValues(vector);
+
+                        // Debug first insert
+                        if (inserted === 0) {
+                            log(`First vector: ${vector.length} bytes, first bytes: [${Array.from(vector.slice(0, 4)).join(', ')}...]`, 'purple');
+                        }
+
+                        // Insert binary vector
+                        const id = db.insertBinary(vector);
+
+                        if (inserted === 0) {
+                            log(`First insert succeeded, ID: ${id}`, 'green');
+                        }
+
+                        // Add metadata for filtered search demo
+                        try {
+                            const category = (inserted % 3 === 0) ? 'A' : (inserted % 3 === 1) ? 'B' : 'C';
+                            db.setMetadata(id, 'category', JsMetadataValue.fromString(category));
+                            db.setMetadata(id, 'value', JsMetadataValue.fromInteger(inserted % 100));
+                        } catch (metaErr) {
+                            // Metadata is optional, continue without it
+                            if (inserted === 0) {
+                                log(`Note: Metadata error: ${metaErr.message}`, 'purple');
+                            }
+                        }
+                        inserted++;
+                    }
+                } catch (e) {
+                    log(`Error during insert: ${e.message}`, 'red');
+                    console.error(e);
+                    break;
+                }
+
+                const batchElapsed = performance.now() - batchStart;
+                batchTimes.push(batchElapsed);
+
+                vectorCount = inserted;
+                updateStats();
+
+                // Log progress every few batches
+                if (batchTimes.length % 5 === 0 || i + batchSize >= numVectors) {
+                    const avgBatchTime = batchTimes.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, batchTimes.length);
+                    const vecPerSec = (batchSize / avgBatchTime * 1000).toFixed(0);
+                    log(`Progress: ${inserted.toLocaleString()}/${numVectors.toLocaleString()} (${vecPerSec} vec/s)`, 'purple');
+                }
+
+                // Yield to UI
+                await new Promise(r => setTimeout(r, 0));
+            }
+
+            const totalElapsed = performance.now() - totalStart;
+            const avgInsertTime = (totalElapsed / numVectors).toFixed(3);
+            const throughput = (numVectors / totalElapsed * 1000).toFixed(0);
+
+            log('─'.repeat(50), '');
+            log('INSERT BENCHMARK COMPLETE', 'green');
+            log(`Total vectors: ${numVectors.toLocaleString()}`, 'cyan');
+            log(`Total time: ${(totalElapsed / 1000).toFixed(2)}s`, 'cyan');
+            log(`Avg insert time: ${avgInsertTime}ms/vector`, 'cyan');
+            log(`Throughput: ${throughput} vectors/sec`, 'green');
+            log(`Memory estimate: ${formatBytes(numVectors * bytesPerVector)}`, 'purple');
+            log('─'.repeat(50), '');
+
+            document.getElementById('btnInsert').disabled = false;
+            document.getElementById('btnSearch').disabled = false;
+            document.getElementById('btnSearchFiltered').disabled = false;
+            setStatus('active', `${numVectors.toLocaleString()} vectors`);
+        }
+
+        async function runSearch() {
+            if (!db || vectorCount === 0) return;
+
+            const k = parseInt(document.getElementById('searchK').value);
+            const bytesPerVector = currentDimensions / 8;
+            const numQueries = 100;
+
+            log(`Running ${numQueries} search queries (k=${k})...`, 'cyan');
+            setStatus('busy', 'Searching...');
+
+            const queryTimes = [];
+            let results = null;
+
+            for (let i = 0; i < numQueries; i++) {
+                const query = new Uint8Array(bytesPerVector);
+                crypto.getRandomValues(query);
+
+                const start = performance.now();
+                results = db.searchBinary(query, k);
+                queryTimes.push(performance.now() - start);
+            }
+
+            const avgTime = queryTimes.reduce((a, b) => a + b, 0) / numQueries;
+            const minTime = Math.min(...queryTimes);
+            const maxTime = Math.max(...queryTimes);
+            const p50 = queryTimes.sort((a, b) => a - b)[Math.floor(numQueries * 0.5)];
+            const p99 = queryTimes.sort((a, b) => a - b)[Math.floor(numQueries * 0.99)];
+
+            log('─'.repeat(50), '');
+            log('SEARCH BENCHMARK COMPLETE', 'green');
+            log(`Queries: ${numQueries}`, 'cyan');
+            log(`Avg latency: ${avgTime.toFixed(3)}ms`, 'cyan');
+            log(`Min latency: ${minTime.toFixed(3)}ms`, 'cyan');
+            log(`Max latency: ${maxTime.toFixed(3)}ms`, 'cyan');
+            log(`P50 latency: ${p50.toFixed(3)}ms`, 'green');
+            log(`P99 latency: ${p99.toFixed(3)}ms`, 'green');
+            log(`QPS: ${(1000 / avgTime).toFixed(0)} queries/sec`, 'green');
+            log('─'.repeat(50), '');
+
+            // Show sample results
+            if (results && results.length > 0) {
+                log('Sample results (last query):', 'purple');
+                results.slice(0, 5).forEach((r, i) => {
+                    log(`  ${i + 1}. ID: ${r.id}, Hamming Distance: ${r.score}`, '');
+                });
+            }
+
+            setStatus('active', `${vectorCount.toLocaleString()} vectors`);
+        }
+
+        async function runFilteredSearch() {
+            if (!db || vectorCount === 0) return;
+
+            const k = parseInt(document.getElementById('searchK').value);
+            const bytesPerVector = currentDimensions / 8;
+            const numQueries = 50;
+            const filter = 'category = "A"';
+
+            log(`Running ${numQueries} filtered searches (k=${k}, filter: ${filter})...`, 'cyan');
+            setStatus('busy', 'Filtered Search...');
+
+            const queryTimes = [];
+            let lastResult = null;
+
+            for (let i = 0; i < numQueries; i++) {
+                const query = new Uint8Array(bytesPerVector);
+                crypto.getRandomValues(query);
+
+                const start = performance.now();
+                const resultJson = db.searchBinaryFiltered(query, k, JSON.stringify({
+                    filter: filter,
+                    strategy: 'auto',
+                    include_metadata: true
+                }));
+                queryTimes.push(performance.now() - start);
+                lastResult = JSON.parse(resultJson);
+            }
+
+            const avgTime = queryTimes.reduce((a, b) => a + b, 0) / numQueries;
+            const p50 = queryTimes.sort((a, b) => a - b)[Math.floor(numQueries * 0.5)];
+            const p99 = queryTimes.sort((a, b) => a - b)[Math.floor(numQueries * 0.99)];
+
+            log('─'.repeat(50), '');
+            log('FILTERED SEARCH BENCHMARK COMPLETE', 'green');
+            log(`Filter: ${filter}`, 'purple');
+            log(`Queries: ${numQueries}`, 'cyan');
+            log(`Avg latency: ${avgTime.toFixed(3)}ms`, 'cyan');
+            log(`P50 latency: ${p50.toFixed(3)}ms`, 'green');
+            log(`P99 latency: ${p99.toFixed(3)}ms`, 'green');
+            log(`Strategy used: ${lastResult?.strategy_used}`, 'purple');
+            log(`Selectivity: ${(lastResult?.observed_selectivity * 100).toFixed(1)}%`, 'purple');
+            log('─'.repeat(50), '');
+
+            if (lastResult?.results?.length > 0) {
+                log('Sample filtered results:', 'purple');
+                lastResult.results.slice(0, 3).forEach((r, i) => {
+                    log(`  ${i + 1}. ID: ${r.id}, Distance: ${r.score}, Meta: ${JSON.stringify(r.metadata)}`, '');
+                });
+            }
+
+            setStatus('active', `${vectorCount.toLocaleString()} vectors`);
+        }
+
+        function clearDatabase() {
+            db = null;
+            vectorCount = 0;
+            currentDimensions = 0;
+            updateStats();
+            document.getElementById('btnInsert').disabled = true;
+            document.getElementById('btnSearch').disabled = true;
+            document.getElementById('btnSearchFiltered').disabled = true;
+            document.getElementById('btnClear').disabled = true;
+            log('Database cleared', 'red');
+            setStatus('active', 'WASM Ready');
+        }
+
+        function updateStats() {
+            document.getElementById('statVectors').textContent = vectorCount.toLocaleString();
+            document.getElementById('statDimensions').textContent = currentDimensions || '-';
+
+            const bytesPerVector = currentDimensions / 8;
+            const memoryBytes = vectorCount * bytesPerVector;
+            const maxMemory = 100 * 1024 * 1024; // 100 MB scale
+            const percent = Math.min(100, (memoryBytes / maxMemory) * 100);
+
+            document.getElementById('memoryFill').style.width = `${percent}%`;
+            document.getElementById('memoryText').textContent = formatBytes(memoryBytes);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+            return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+        }
+
+        function log(message, color = '') {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `
+                <span class="timestamp">[${time}]</span>
+                <span class="message ${color ? 'highlight-' + color : ''}">${escapeHtml(message)}</span>
+            `;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function setStatus(state, text) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            indicator.className = 'status-indicator ' + state;
+            statusText.textContent = text;
+        }
+
+        // Update timestamp
+        setInterval(() => {
+            document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
+        }, 1000);
+
+        // Start
+        initialize();
+    </script>
+</body>
+</html>

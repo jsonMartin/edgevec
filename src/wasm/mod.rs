@@ -47,6 +47,54 @@ pub fn init_logging() {
     let _ = console_log::init_with_level(log::Level::Info);
 }
 
+/// Get the SIMD backend being used for distance calculations.
+/// Returns: "wasm_simd128", "avx2", or "scalar"
+#[wasm_bindgen(js_name = "getSimdBackend")]
+pub fn get_simd_backend() -> String {
+    cfg_if::cfg_if! {
+        if #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))] {
+            "wasm_simd128".to_string()
+        } else if #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))] {
+            "avx2".to_string()
+        } else {
+            "scalar".to_string()
+        }
+    }
+}
+
+/// Microbenchmark: measure raw Hamming distance speed.
+/// Returns time in microseconds for `iterations` distance calculations.
+#[wasm_bindgen(js_name = "benchmarkHamming")]
+pub fn benchmark_hamming(bytes: usize, iterations: usize) -> f64 {
+    use crate::metric::{Hamming, Metric};
+
+    // Create two random-ish vectors
+    let a: Vec<u8> = (0..bytes).map(|i| (i * 17 + 31) as u8).collect();
+    let b: Vec<u8> = (0..bytes).map(|i| (i * 13 + 47) as u8).collect();
+
+    let start = web_sys::window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now())
+        .unwrap_or(0.0);
+
+    let mut sum: f32 = 0.0;
+    for _ in 0..iterations {
+        sum += Hamming::distance(&a, &b);
+    }
+
+    let end = web_sys::window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now())
+        .unwrap_or(0.0);
+
+    // Prevent optimizer from removing the loop
+    if sum < 0.0 {
+        web_sys::console::log_1(&format!("sum={}", sum).into());
+    }
+
+    (end - start) * 1000.0 / iterations as f64 // Return microseconds per iteration
+}
+
 /// Vector storage type for EdgeVec.
 ///
 /// Determines how vectors are stored and processed.

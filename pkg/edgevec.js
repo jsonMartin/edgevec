@@ -1,4 +1,4 @@
-import { IndexedDbBackend } from './snippets/edgevec-c4203241896ff5ca/src/js/storage.js';
+import { IndexedDbBackend } from './snippets/edgevec-2248952a92ddd6ed/src/js/storage.js';
 
 let wasm;
 
@@ -224,12 +224,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_605(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_605(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1520(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1520(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_863(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_863(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_2060(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_2060(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -282,6 +282,17 @@ export class BatchInsertConfig {
         wasm.__wbg_batchinsertconfig_free(ptr, 0);
     }
     /**
+     * Creates a new `BatchInsertConfig` with default settings.
+     *
+     * Default: `validate_dimensions = true`
+     */
+    constructor() {
+        const ret = wasm.batchinsertconfig_new();
+        this.__wbg_ptr = ret >>> 0;
+        BatchInsertConfigFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
      * Returns whether dimension validation is enabled.
      * @returns {boolean}
      */
@@ -295,17 +306,6 @@ export class BatchInsertConfig {
      */
     set validateDimensions(value) {
         wasm.batchinsertconfig_set_validateDimensions(this.__wbg_ptr, value);
-    }
-    /**
-     * Creates a new `BatchInsertConfig` with default settings.
-     *
-     * Default: `validate_dimensions = true`
-     */
-    constructor() {
-        const ret = wasm.batchinsertconfig_new();
-        this.__wbg_ptr = ret >>> 0;
-        BatchInsertConfigFinalization.register(this, this.__wbg_ptr, this);
-        return this;
     }
 }
 if (Symbol.dispose) BatchInsertConfig.prototype[Symbol.dispose] = BatchInsertConfig.prototype.free;
@@ -335,6 +335,22 @@ export class BatchInsertResult {
         wasm.__wbg_batchinsertresult_free(ptr, 0);
     }
     /**
+     * Returns the number of vectors successfully inserted.
+     * @returns {number}
+     */
+    get inserted() {
+        const ret = wasm.batchinsertresult_inserted(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Returns the total number of vectors attempted (input array length).
+     * @returns {number}
+     */
+    get total() {
+        const ret = wasm.batchinsertresult_total(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * Returns a copy of the IDs of successfully inserted vectors.
      * @returns {BigUint64Array}
      */
@@ -350,22 +366,6 @@ export class BatchInsertResult {
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
-    }
-    /**
-     * Returns the total number of vectors attempted (input array length).
-     * @returns {number}
-     */
-    get total() {
-        const ret = wasm.batchinsertresult_total(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Returns the number of vectors successfully inserted.
-     * @returns {number}
-     */
-    get inserted() {
-        const ret = wasm.batchinsertresult_inserted(this.__wbg_ptr);
-        return ret >>> 0;
     }
 }
 if (Symbol.dispose) BatchInsertResult.prototype[Symbol.dispose] = BatchInsertResult.prototype.free;
@@ -402,325 +402,320 @@ export class EdgeVec {
         wasm.__wbg_edgevec_free(ptr, 0);
     }
     /**
-     * Loads the database from IndexedDB.
-     *
-     * # Arguments
-     *
-     * * `name` - The name of the database file in IndexedDB.
-     *
-     * # Returns
-     *
-     * A Promise that resolves to the loaded EdgeVec instance.
+     * Creates a new EdgeVec database.
      *
      * # Errors
      *
-     * Returns an error if loading fails, deserialization fails, or data is corrupted.
-     * @param {string} name
-     * @returns {Promise<EdgeVec>}
+     * Returns an error if the configuration is invalid (e.g., unknown metric).
+     * @param {EdgeVecConfig} config
      */
-    static load(name) {
-        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.edgevec_load(ptr0, len0);
-        return takeObject(ret);
-    }
-    /**
-     * Saves the database to IndexedDB.
-     *
-     * # Arguments
-     *
-     * * `name` - The name of the database file in IndexedDB.
-     *
-     * # Returns
-     *
-     * A Promise that resolves when saving is complete.
-     *
-     * # Errors
-     *
-     * Returns an error if serialization fails or if the backend write fails.
-     * @param {string} name
-     * @returns {Promise<void>}
-     */
-    save(name) {
-        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.edgevec_save(this.__wbg_ptr, ptr0, len0);
-        return takeObject(ret);
-    }
-    /**
-     * Check if a vector is deleted (tombstoned).
-     *
-     * # Arguments
-     *
-     * * `vector_id` - The ID of the vector to check.
-     *
-     * # Returns
-     *
-     * * `true` if the vector is deleted
-     * * `false` if the vector is live
-     *
-     * # Errors
-     *
-     * Returns an error if the vector ID doesn't exist.
-     * @param {number} vector_id
-     * @returns {boolean}
-     */
-    isDeleted(vector_id) {
+    constructor(config) {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_isDeleted(retptr, this.__wbg_ptr, vector_id);
+            _assertClass(config, EdgeVecConfig);
+            wasm.edgevec_new(retptr, config.__wbg_ptr);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
             if (r2) {
                 throw takeObject(r1);
             }
-            return r0 !== 0;
+            this.__wbg_ptr = r0 >>> 0;
+            EdgeVecFinalization.register(this, this.__wbg_ptr, this);
+            return this;
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
     }
     /**
-     * Get the count of live (non-deleted) vectors.
+     * Inserts a vector into the index.
+     *
+     * # Arguments
+     *
+     * * `vector` - A Float32Array containing the vector data.
      *
      * # Returns
      *
-     * The number of vectors that are currently searchable.
+     * The assigned Vector ID (u32).
+     *
+     * # Errors
+     *
+     * Returns error if dimensions mismatch, vector contains NaNs, or ID overflows.
+     * @param {Float32Array} vector
      * @returns {number}
      */
-    liveCount() {
-        const ret = wasm.edgevec_liveCount(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Creates an iterator to save the database in chunks.
-     *
-     * # Arguments
-     *
-     * * `chunk_size` - Maximum size of each chunk in bytes (default: 10MB).
-     *
-     * # Returns
-     *
-     * A `PersistenceIterator` that yields `Uint8Array` chunks.
-     *
-     * # Safety
-     *
-     * The returned iterator holds a reference to this `EdgeVec` instance.
-     * You MUST ensure `EdgeVec` is not garbage collected or freed while using the iterator.
-     * @param {number | null} [chunk_size]
-     * @returns {PersistenceIterator}
-     */
-    save_stream(chunk_size) {
-        const ret = wasm.edgevec_save_stream(this.__wbg_ptr, isLikeNone(chunk_size) ? 0x100000001 : (chunk_size) >>> 0);
-        return PersistenceIterator.__wrap(ret);
-    }
-    /**
-     * Soft delete a vector by marking it as a tombstone.
-     *
-     * The vector remains in the index but is excluded from search results.
-     * Space is reclaimed via `compact()` when tombstone ratio exceeds threshold.
-     *
-     * # Arguments
-     *
-     * * `vector_id` - The ID of the vector to delete (returned from `insert`).
-     *
-     * # Returns
-     *
-     * * `true` if the vector was deleted
-     * * `false` if the vector was already deleted (idempotent)
-     *
-     * # Errors
-     *
-     * Returns an error if the vector ID doesn't exist.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const id = index.insert(new Float32Array(128).fill(1.0));
-     * const wasDeleted = index.softDelete(id);
-     * console.log(`Deleted: ${wasDeleted}`); // true
-     * console.log(`Is deleted: ${index.isDeleted(id)}`); // true
-     * ```
-     * @param {number} vector_id
-     * @returns {boolean}
-     */
-    softDelete(vector_id) {
+    insert(vector) {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_softDelete(retptr, this.__wbg_ptr, vector_id);
+            wasm.edgevec_insert(retptr, this.__wbg_ptr, addHeapObject(vector));
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
             if (r2) {
                 throw takeObject(r1);
             }
-            return r0 !== 0;
+            return r0 >>> 0;
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
     }
     /**
-     * Gets metadata for a vector.
+     * Inserts a pre-packed binary vector into the index.
+     *
+     * This method is for binary vectors (1-bit quantized) using Hamming distance.
+     * Use this when you have pre-quantized data (e.g., from Turso's `f1bit_blob`).
      *
      * # Arguments
      *
-     * * `vector_id` - The ID of the vector
-     * * `key` - The metadata key to retrieve
+     * * `vector` - A Uint8Array containing packed binary data. Length must equal
+     *   `ceil(dimensions / 8)` bytes.
      *
      * # Returns
      *
-     * The metadata value, or `undefined` if the key or vector doesn't exist.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const title = index.getMetadata(id, 'title');
-     * if (title) {
-     *     console.log('Title:', title.asString());
-     *     console.log('Type:', title.getType());
-     * }
-     * ```
-     * @param {number} vector_id
-     * @param {string} key
-     * @returns {JsMetadataValue | undefined}
-     */
-    getMetadata(vector_id, key) {
-        const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.edgevec_getMetadata(this.__wbg_ptr, vector_id, ptr0, len0);
-        return ret === 0 ? undefined : JsMetadataValue.__wrap(ret);
-    }
-    /**
-     * Checks if a metadata key exists for a vector.
-     *
-     * # Arguments
-     *
-     * * `vector_id` - The ID of the vector
-     * * `key` - The metadata key to check
-     *
-     * # Returns
-     *
-     * `true` if the key exists, `false` otherwise.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * if (index.hasMetadata(id, 'title')) {
-     *     console.log('Vector has title metadata');
-     * }
-     * ```
-     * @param {number} vector_id
-     * @param {string} key
-     * @returns {boolean}
-     */
-    hasMetadata(vector_id, key) {
-        const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.edgevec_hasMetadata(this.__wbg_ptr, vector_id, ptr0, len0);
-        return ret !== 0;
-    }
-    /**
-     * Sets metadata for a vector (upsert operation).
-     *
-     * If the key already exists, its value is overwritten. If the key is new,
-     * it is added (subject to the 64-key-per-vector limit).
-     *
-     * # Arguments
-     *
-     * * `vector_id` - The ID of the vector to attach metadata to
-     * * `key` - The metadata key (alphanumeric + underscore, max 256 chars)
-     * * `value` - The metadata value (created via JsMetadataValue.fromX methods)
+     * The assigned Vector ID (u32).
      *
      * # Errors
      *
-     * Returns an error if:
-     * - Key is empty or contains invalid characters
-     * - Key exceeds 256 characters
-     * - Value validation fails (e.g., NaN float, string too long)
-     * - Vector already has 64 keys and this is a new key
+     * Returns error if:
+     * - Storage is not in Binary mode (metric != "hamming")
+     * - Byte length doesn't match expected bytes for dimensions
      *
      * # Example (JavaScript)
      *
      * ```javascript
-     * const id = index.insert(vector);
-     * index.setMetadata(id, 'title', JsMetadataValue.fromString('My Document'));
-     * index.setMetadata(id, 'page_count', JsMetadataValue.fromInteger(42));
-     * index.setMetadata(id, 'score', JsMetadataValue.fromFloat(0.95));
-     * index.setMetadata(id, 'verified', JsMetadataValue.fromBoolean(true));
+     * const config = new EdgeVecConfig(1024); // 1024 bits = 128 bytes
+     * config.metric = 'hamming';
+     * const db = new EdgeVec(config);
+     *
+     * // Direct binary insertion (e.g., from Turso f1bit_blob)
+     * const binaryVector = new Uint8Array(128); // 1024 bits packed
+     * const id = db.insertBinary(binaryVector);
      * ```
-     * @param {number} vector_id
-     * @param {string} key
-     * @param {JsMetadataValue} value
-     */
-    setMetadata(vector_id, key, value) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-            const len0 = WASM_VECTOR_LEN;
-            _assertClass(value, JsMetadataValue);
-            wasm.edgevec_setMetadata(retptr, this.__wbg_ptr, vector_id, ptr0, len0, value.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            if (r1) {
-                throw takeObject(r0);
-            }
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Get the count of deleted (tombstoned) vectors.
-     *
-     * # Returns
-     *
-     * The number of vectors that have been soft-deleted but not yet compacted.
+     * @param {Uint8Array} vector
      * @returns {number}
      */
-    deletedCount() {
-        const ret = wasm.edgevec_deletedCount(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Deletes a metadata key for a vector.
-     *
-     * This operation is idempotent - deleting a non-existent key is not an error.
-     *
-     * # Arguments
-     *
-     * * `vector_id` - The ID of the vector
-     * * `key` - The metadata key to delete
-     *
-     * # Returns
-     *
-     * `true` if the key existed and was deleted, `false` otherwise.
-     *
-     * # Errors
-     *
-     * Returns an error if the key is invalid (empty or contains invalid characters).
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const wasDeleted = index.deleteMetadata(id, 'title');
-     * console.log(wasDeleted); // true if key existed
-     * ```
-     * @param {number} vector_id
-     * @param {string} key
-     * @returns {boolean}
-     */
-    deleteMetadata(vector_id, key) {
+    insertBinary(vector) {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-            const len0 = WASM_VECTOR_LEN;
-            wasm.edgevec_deleteMetadata(retptr, this.__wbg_ptr, vector_id, ptr0, len0);
+            wasm.edgevec_insertBinary(retptr, this.__wbg_ptr, addHeapObject(vector));
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
             if (r2) {
                 throw takeObject(r1);
             }
-            return r0 !== 0;
+            return r0 >>> 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Inserts an f32 vector with automatic binary quantization.
+     *
+     * The vector is converted to binary (1 bit per dimension) using sign quantization:
+     * - Positive values → 1
+     * - Non-positive values → 0
+     *
+     * # Arguments
+     *
+     * * `vector` - A Float32Array containing the vector data (must match dimensions).
+     *
+     * # Returns
+     *
+     * The assigned Vector ID (u32).
+     *
+     * # Errors
+     *
+     * Returns error if:
+     * - Storage is not in Binary mode (metric != "hamming")
+     * - Dimensions don't match
+     * - Vector contains NaNs
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const config = new EdgeVecConfig(1024);
+     * config.metric = 'hamming';
+     * const db = new EdgeVec(config);
+     *
+     * // Insert f32 vector with automatic binary quantization
+     * const f32Vector = new Float32Array(1024).fill(0.5); // Gets quantized to all 1s
+     * const id = db.insertWithBq(f32Vector);
+     * ```
+     * @param {Float32Array} vector
+     * @returns {number}
+     */
+    insertWithBq(vector) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_insertWithBq(retptr, this.__wbg_ptr, addHeapObject(vector));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 >>> 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Searches for nearest neighbors using a binary query vector.
+     *
+     * Uses Hamming distance to find the K most similar binary vectors.
+     *
+     * # Arguments
+     *
+     * * `query` - A Uint8Array containing the binary query vector.
+     * * `k` - The number of neighbors to return.
+     *
+     * # Returns
+     *
+     * An array of objects: `[{ id: u32, score: f32 }, ...]` where `score` is
+     * the Hamming distance (number of differing bits).
+     *
+     * # Errors
+     *
+     * Returns error if:
+     * - Storage is not in Binary mode (metric != "hamming")
+     * - Query byte length doesn't match expected
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const config = new EdgeVecConfig(1024);
+     * config.metric = 'hamming';
+     * const db = new EdgeVec(config);
+     *
+     * // ... insert binary vectors ...
+     *
+     * const queryBinary = new Uint8Array(128);
+     * const results = db.searchBinary(queryBinary, 10);
+     * results.forEach(r => console.log(`ID: ${r.id}, Hamming Distance: ${r.score}`));
+     * ```
+     * @param {Uint8Array} query
+     * @param {number} k
+     * @returns {any}
+     */
+    searchBinary(query, k) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_searchBinary(retptr, this.__wbg_ptr, addHeapObject(query), k);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Searches binary vectors with optional metadata filtering.
+     *
+     * Combines binary vector search (Hamming distance) with metadata filtering.
+     *
+     * # Arguments
+     *
+     * * `query` - Binary query vector as Uint8Array (packed bits, ceil(dimensions/8) bytes)
+     * * `k` - Maximum number of results to return
+     * * `options_json` - JSON string with search options:
+     *   - `filter`: Optional SQL-like filter expression (e.g., `"category = \"gpu\""`)
+     *   - `strategy`: Filter strategy - `"auto"`, `"pre"`, `"post"`, or `"hybrid"`
+     *   - `oversample_factor`: Oversample factor for post/hybrid strategies (default: 3.0)
+     *   - `include_metadata`: Whether to include metadata in results (default: false)
+     *
+     * # Returns
+     *
+     * JSON string containing search results with Hamming distances.
+     *
+     * # Errors
+     *
+     * Returns error if:
+     * - Storage is not in Binary mode (metric != "hamming")
+     * - Query byte length doesn't match expected dimensions
+     * - Options JSON is invalid
+     * - Filter expression parsing fails
+     * - Search fails
+     *
+     * # Example
+     *
+     * ```javascript
+     * const queryBinary = new Uint8Array(128); // 1024 bits
+     * const result = JSON.parse(db.searchBinaryFiltered(queryBinary, 10, JSON.stringify({
+     *   filter: 'category = "gpu"',
+     *   strategy: 'auto',
+     *   include_metadata: true
+     * })));
+     * console.log(`Found ${result.results.length} binary matches with filter`);
+     * ```
+     * @param {Uint8Array} query
+     * @param {number} k
+     * @param {string} options_json
+     * @returns {string}
+     */
+    searchBinaryFiltered(query, k, options_json) {
+        let deferred3_0;
+        let deferred3_1;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(options_json, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.edgevec_searchBinaryFiltered(retptr, this.__wbg_ptr, addHeapObject(query), k, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            var ptr2 = r0;
+            var len2 = r1;
+            if (r3) {
+                ptr2 = 0; len2 = 0;
+                throw takeObject(r2);
+            }
+            deferred3_0 = ptr2;
+            deferred3_1 = len2;
+            return getStringFromWasm0(ptr2, len2);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+            wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
+        }
+    }
+    /**
+     * Inserts a batch of vectors into the index (flat array format).
+     *
+     * **Note:** This is the legacy API. For the new API, use `insertBatch` which
+     * accepts an Array of Float32Array.
+     *
+     * # Arguments
+     *
+     * * `vectors` - Flat Float32Array containing `count * dimensions` elements.
+     * * `count` - Number of vectors in the batch.
+     *
+     * # Returns
+     *
+     * A Uint32Array containing the assigned Vector IDs.
+     *
+     * # Errors
+     *
+     * Returns error if dimensions mismatch, vector contains NaNs, or ID overflows.
+     * @param {Float32Array} vectors
+     * @param {number} count
+     * @returns {Uint32Array}
+     */
+    insertBatchFlat(vectors, count) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_insertBatchFlat(retptr, this.__wbg_ptr, addHeapObject(vectors), count);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
@@ -789,6 +784,795 @@ export class EdgeVec {
         } finally {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
+    }
+    /**
+     * Batch insert with progress callback (W14.1).
+     *
+     * Inserts multiple vectors while reporting progress to a JavaScript callback.
+     * The callback is invoked at the **start (0%)** and **end (100%)** of the batch
+     * insertion. Intermediate progress during insertion is not currently reported.
+     *
+     * # Arguments
+     *
+     * * `vectors` - JS Array of Float32Array vectors to insert
+     * * `on_progress` - JS function called with (inserted: number, total: number)
+     *
+     * # Returns
+     *
+     * `BatchInsertResult` containing inserted count, total, and IDs.
+     *
+     * # Performance Note
+     *
+     * See [`Self::insert_batch_v2`] for performance characteristics. Batch insert optimizes
+     * JS↔WASM boundary overhead (1.2-1.5x at small scales), but converges with
+     * sequential insertion at larger scales as HNSW graph construction dominates.
+     *
+     * # Callback Behavior
+     *
+     * - The callback is called exactly **twice**: once with `(0, total)` before
+     *   insertion begins, and once with `(total, total)` after completion.
+     * - **Errors in the callback are intentionally ignored** — the batch insert
+     *   will succeed even if the progress callback throws an exception. This
+     *   ensures that UI errors don't break data operations.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const result = index.insertBatchWithProgress(vectors, (done, total) => {
+     *     console.log(`Progress: ${Math.round(done/total*100)}%`);
+     * });
+     * console.log(`Inserted ${result.inserted} vectors`);
+     * ```
+     *
+     * # Errors
+     *
+     * Returns a JS error object with `code` property on failure.
+     * Note: Callback exceptions do NOT cause this function to return an error.
+     * @param {Array<any>} vectors
+     * @param {Function} on_progress
+     * @returns {BatchInsertResult}
+     */
+    insertBatchWithProgress(vectors, on_progress) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_insertBatchWithProgress(retptr, this.__wbg_ptr, addHeapObject(vectors), addHeapObject(on_progress));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return BatchInsertResult.__wrap(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Searches for nearest neighbors.
+     *
+     * # Arguments
+     *
+     * * `query` - The query vector.
+     * * `k` - The number of neighbors to return.
+     *
+     * # Returns
+     *
+     * An array of objects: `[{ id: u32, score: f32 }, ...]`.
+     *
+     * # Errors
+     *
+     * Returns error if dimensions mismatch or vector contains NaNs.
+     * @param {Float32Array} query
+     * @param {number} k
+     * @returns {any}
+     */
+    search(query, k) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_search(retptr, this.__wbg_ptr, addHeapObject(query), k);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Creates an iterator to save the database in chunks.
+     *
+     * # Arguments
+     *
+     * * `chunk_size` - Maximum size of each chunk in bytes (default: 10MB).
+     *
+     * # Returns
+     *
+     * A `PersistenceIterator` that yields `Uint8Array` chunks.
+     *
+     * # Safety
+     *
+     * The returned iterator holds a reference to this `EdgeVec` instance.
+     * You MUST ensure `EdgeVec` is not garbage collected or freed while using the iterator.
+     * @param {number | null} [chunk_size]
+     * @returns {PersistenceIterator}
+     */
+    save_stream(chunk_size) {
+        const ret = wasm.edgevec_save_stream(this.__wbg_ptr, isLikeNone(chunk_size) ? 0x100000001 : (chunk_size) >>> 0);
+        return PersistenceIterator.__wrap(ret);
+    }
+    /**
+     * Saves the database to IndexedDB.
+     *
+     * # Arguments
+     *
+     * * `name` - The name of the database file in IndexedDB.
+     *
+     * # Returns
+     *
+     * A Promise that resolves when saving is complete.
+     *
+     * # Errors
+     *
+     * Returns an error if serialization fails or if the backend write fails.
+     * @param {string} name
+     * @returns {Promise<void>}
+     */
+    save(name) {
+        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.edgevec_save(this.__wbg_ptr, ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Loads the database from IndexedDB.
+     *
+     * # Arguments
+     *
+     * * `name` - The name of the database file in IndexedDB.
+     *
+     * # Returns
+     *
+     * A Promise that resolves to the loaded EdgeVec instance.
+     *
+     * # Errors
+     *
+     * Returns an error if loading fails, deserialization fails, or data is corrupted.
+     * @param {string} name
+     * @returns {Promise<EdgeVec>}
+     */
+    static load(name) {
+        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.edgevec_load(ptr0, len0);
+        return takeObject(ret);
+    }
+    /**
+     * Soft delete a vector by marking it as a tombstone.
+     *
+     * The vector remains in the index but is excluded from search results.
+     * Space is reclaimed via `compact()` when tombstone ratio exceeds threshold.
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector to delete (returned from `insert`).
+     *
+     * # Returns
+     *
+     * * `true` if the vector was deleted
+     * * `false` if the vector was already deleted (idempotent)
+     *
+     * # Errors
+     *
+     * Returns an error if the vector ID doesn't exist.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const id = index.insert(new Float32Array(128).fill(1.0));
+     * const wasDeleted = index.softDelete(id);
+     * console.log(`Deleted: ${wasDeleted}`); // true
+     * console.log(`Is deleted: ${index.isDeleted(id)}`); // true
+     * ```
+     * @param {number} vector_id
+     * @returns {boolean}
+     */
+    softDelete(vector_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_softDelete(retptr, this.__wbg_ptr, vector_id);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 !== 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Check if a vector is deleted (tombstoned).
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector to check.
+     *
+     * # Returns
+     *
+     * * `true` if the vector is deleted
+     * * `false` if the vector is live
+     *
+     * # Errors
+     *
+     * Returns an error if the vector ID doesn't exist.
+     * @param {number} vector_id
+     * @returns {boolean}
+     */
+    isDeleted(vector_id) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_isDeleted(retptr, this.__wbg_ptr, vector_id);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 !== 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Get the count of deleted (tombstoned) vectors.
+     *
+     * # Returns
+     *
+     * The number of vectors that have been soft-deleted but not yet compacted.
+     * @returns {number}
+     */
+    deletedCount() {
+        const ret = wasm.edgevec_deletedCount(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get the count of live (non-deleted) vectors.
+     *
+     * # Returns
+     *
+     * The number of vectors that are currently searchable.
+     * @returns {number}
+     */
+    liveCount() {
+        const ret = wasm.edgevec_liveCount(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get the ratio of deleted to total vectors.
+     *
+     * # Returns
+     *
+     * A value between 0.0 and 1.0 representing the tombstone ratio.
+     * 0.0 means no deletions, 1.0 means all vectors deleted.
+     * @returns {number}
+     */
+    tombstoneRatio() {
+        const ret = wasm.edgevec_tombstoneRatio(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Check if compaction is recommended.
+     *
+     * Returns `true` when `tombstoneRatio()` exceeds the compaction threshold
+     * (default: 30%). Use `compact()` to reclaim space from deleted vectors.
+     *
+     * # Returns
+     *
+     * * `true` if compaction is recommended
+     * * `false` if tombstone ratio is below threshold
+     * @returns {boolean}
+     */
+    needsCompaction() {
+        const ret = wasm.edgevec_needsCompaction(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Get the current compaction threshold.
+     *
+     * # Returns
+     *
+     * The threshold ratio (0.0 to 1.0) above which `needsCompaction()` returns true.
+     * Default is 0.3 (30%).
+     * @returns {number}
+     */
+    compactionThreshold() {
+        const ret = wasm.edgevec_compactionThreshold(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Set the compaction threshold.
+     *
+     * # Arguments
+     *
+     * * `ratio` - The new threshold (clamped to 0.01 - 0.99).
+     * @param {number} ratio
+     */
+    setCompactionThreshold(ratio) {
+        wasm.edgevec_setCompactionThreshold(this.__wbg_ptr, ratio);
+    }
+    /**
+     * Get a warning message if compaction is recommended.
+     *
+     * # Returns
+     *
+     * * A warning string if `needsCompaction()` is true
+     * * `null` if compaction is not needed
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const warning = index.compactionWarning();
+     * if (warning) {
+     *     console.warn(warning);
+     *     index.compact();
+     * }
+     * ```
+     * @returns {string | undefined}
+     */
+    compactionWarning() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_compactionWarning(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            let v1;
+            if (r0 !== 0) {
+                v1 = getStringFromWasm0(r0, r1).slice();
+                wasm.__wbindgen_export4(r0, r1 * 1, 1);
+            }
+            return v1;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Compact the index by rebuilding without tombstones.
+     *
+     * This operation:
+     * 1. Creates a new index with only live vectors
+     * 2. Re-inserts vectors preserving IDs
+     * 3. Replaces the current index
+     *
+     * **WARNING:** This is a blocking operation. For indices with >10k vectors,
+     * consider running during idle time or warning the user about potential delays.
+     *
+     * # Returns
+     *
+     * A `CompactionResult` object containing:
+     * * `tombstonesRemoved` - Number of deleted vectors removed
+     * * `newSize` - Size of the index after compaction
+     * * `durationMs` - Time taken in milliseconds
+     *
+     * # Errors
+     *
+     * Returns an error if compaction fails (e.g., memory allocation error).
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * if (index.needsCompaction()) {
+     *     const result = index.compact();
+     *     console.log(`Removed ${result.tombstonesRemoved} tombstones`);
+     *     console.log(`New size: ${result.newSize}`);
+     *     console.log(`Took ${result.durationMs}ms`);
+     * }
+     * ```
+     * @returns {WasmCompactionResult}
+     */
+    compact() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_compact(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return WasmCompactionResult.__wrap(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Soft-delete multiple vectors using BigUint64Array (modern browsers).
+     *
+     * Efficiently deletes multiple vectors in a single operation. More efficient
+     * than calling `softDelete()` N times due to reduced FFI overhead and
+     * deduplication of input IDs.
+     *
+     * **Browser Compatibility:** Requires BigUint64Array support (Chrome 67+,
+     * Firefox 68+, Safari 15+). For Safari 14 compatibility, use
+     * `softDeleteBatchCompat()` instead.
+     *
+     * # Arguments
+     *
+     * * `ids` - A Uint32Array of vector IDs to delete
+     *
+     * # Returns
+     *
+     * A `WasmBatchDeleteResult` object containing:
+     * * `deleted` - Number of vectors successfully deleted
+     * * `alreadyDeleted` - Number of vectors that were already deleted
+     * * `invalidIds` - Number of IDs not found in the index
+     * * `total` - Total IDs in input (including duplicates)
+     * * `uniqueCount` - Number of unique IDs after deduplication
+     *
+     * # Behavior
+     *
+     * * **Deduplication:** Duplicate IDs in input are processed only once
+     * * **Idempotent:** Re-deleting an already-deleted vector returns `alreadyDeleted`
+     * * **Atomic:** Two-phase validation ensures all-or-nothing semantics
+     *
+     * # Errors
+     *
+     * Returns an error if the batch size exceeds the maximum (10M IDs).
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const ids = new Uint32Array([1, 3, 5, 7, 9, 11]);
+     * const result = index.softDeleteBatch(ids);
+     *
+     * console.log(`Deleted: ${result.deleted}`);
+     * console.log(`Already deleted: ${result.alreadyDeleted}`);
+     * console.log(`Invalid IDs: ${result.invalidIds}`);
+     * console.log(`All valid: ${result.allValid()}`);
+     * ```
+     * @param {Uint32Array} ids
+     * @returns {WasmBatchDeleteResult}
+     */
+    softDeleteBatch(ids) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_softDeleteBatch(retptr, this.__wbg_ptr, addHeapObject(ids));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return WasmBatchDeleteResult.__wrap(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Soft-delete multiple vectors using number array (Safari 14 compatible).
+     *
+     * This method provides Safari 14 compatibility by accepting a regular JavaScript
+     * Array of numbers instead of BigUint64Array. IDs must be less than 2^53
+     * (Number.MAX_SAFE_INTEGER) to avoid precision loss.
+     *
+     * **Note:** For modern browsers, prefer `softDeleteBatch()` which uses typed arrays.
+     *
+     * # Arguments
+     *
+     * * `ids` - A JavaScript Array or Float64Array of vector IDs
+     *
+     * # Returns
+     *
+     * Same as `softDeleteBatch()` - see that method for details.
+     *
+     * # Errors
+     *
+     * Returns an error if the batch size exceeds the maximum (10M IDs) or if
+     * any ID exceeds Number.MAX_SAFE_INTEGER.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * // Safari 14 compatible
+     * const ids = [1, 3, 5, 7, 9, 11];
+     * const result = index.softDeleteBatchCompat(ids);
+     * console.log(`Deleted: ${result.deleted}`);
+     * ```
+     * @param {Float64Array} ids
+     * @returns {WasmBatchDeleteResult}
+     */
+    softDeleteBatchCompat(ids) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_softDeleteBatchCompat(retptr, this.__wbg_ptr, addHeapObject(ids));
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return WasmBatchDeleteResult.__wrap(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Sets metadata for a vector (upsert operation).
+     *
+     * If the key already exists, its value is overwritten. If the key is new,
+     * it is added (subject to the 64-key-per-vector limit).
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector to attach metadata to
+     * * `key` - The metadata key (alphanumeric + underscore, max 256 chars)
+     * * `value` - The metadata value (created via JsMetadataValue.fromX methods)
+     *
+     * # Errors
+     *
+     * Returns an error if:
+     * - Key is empty or contains invalid characters
+     * - Key exceeds 256 characters
+     * - Value validation fails (e.g., NaN float, string too long)
+     * - Vector already has 64 keys and this is a new key
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const id = index.insert(vector);
+     * index.setMetadata(id, 'title', JsMetadataValue.fromString('My Document'));
+     * index.setMetadata(id, 'page_count', JsMetadataValue.fromInteger(42));
+     * index.setMetadata(id, 'score', JsMetadataValue.fromFloat(0.95));
+     * index.setMetadata(id, 'verified', JsMetadataValue.fromBoolean(true));
+     * ```
+     * @param {number} vector_id
+     * @param {string} key
+     * @param {JsMetadataValue} value
+     */
+    setMetadata(vector_id, key, value) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            _assertClass(value, JsMetadataValue);
+            wasm.edgevec_setMetadata(retptr, this.__wbg_ptr, vector_id, ptr0, len0, value.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Gets metadata for a vector.
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector
+     * * `key` - The metadata key to retrieve
+     *
+     * # Returns
+     *
+     * The metadata value, or `undefined` if the key or vector doesn't exist.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const title = index.getMetadata(id, 'title');
+     * if (title) {
+     *     console.log('Title:', title.asString());
+     *     console.log('Type:', title.getType());
+     * }
+     * ```
+     * @param {number} vector_id
+     * @param {string} key
+     * @returns {JsMetadataValue | undefined}
+     */
+    getMetadata(vector_id, key) {
+        const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.edgevec_getMetadata(this.__wbg_ptr, vector_id, ptr0, len0);
+        return ret === 0 ? undefined : JsMetadataValue.__wrap(ret);
+    }
+    /**
+     * Gets all metadata for a vector as a JavaScript object.
+     *
+     * Returns a plain JavaScript object where keys are metadata keys and
+     * values are JavaScript-native types (string, number, boolean, string[]).
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector
+     *
+     * # Returns
+     *
+     * A JavaScript object mapping keys to values, or `undefined` if the vector
+     * has no metadata.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const metadata = index.getAllMetadata(id);
+     * if (metadata) {
+     *     console.log(metadata.title);     // 'My Document'
+     *     console.log(metadata.page_count); // 42
+     *     console.log(Object.keys(metadata)); // ['title', 'page_count', ...]
+     * }
+     * ```
+     * @param {number} vector_id
+     * @returns {any}
+     */
+    getAllMetadata(vector_id) {
+        const ret = wasm.edgevec_getAllMetadata(this.__wbg_ptr, vector_id);
+        return takeObject(ret);
+    }
+    /**
+     * Deletes a metadata key for a vector.
+     *
+     * This operation is idempotent - deleting a non-existent key is not an error.
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector
+     * * `key` - The metadata key to delete
+     *
+     * # Returns
+     *
+     * `true` if the key existed and was deleted, `false` otherwise.
+     *
+     * # Errors
+     *
+     * Returns an error if the key is invalid (empty or contains invalid characters).
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const wasDeleted = index.deleteMetadata(id, 'title');
+     * console.log(wasDeleted); // true if key existed
+     * ```
+     * @param {number} vector_id
+     * @param {string} key
+     * @returns {boolean}
+     */
+    deleteMetadata(vector_id, key) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+            const len0 = WASM_VECTOR_LEN;
+            wasm.edgevec_deleteMetadata(retptr, this.__wbg_ptr, vector_id, ptr0, len0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 !== 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Deletes all metadata for a vector.
+     *
+     * This operation is idempotent - deleting metadata for a vector without
+     * metadata is not an error.
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector
+     *
+     * # Returns
+     *
+     * `true` if the vector had metadata that was deleted, `false` otherwise.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const hadMetadata = index.deleteAllMetadata(id);
+     * console.log(hadMetadata); // true if vector had any metadata
+     * ```
+     * @param {number} vector_id
+     * @returns {boolean}
+     */
+    deleteAllMetadata(vector_id) {
+        const ret = wasm.edgevec_deleteAllMetadata(this.__wbg_ptr, vector_id);
+        return ret !== 0;
+    }
+    /**
+     * Checks if a metadata key exists for a vector.
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector
+     * * `key` - The metadata key to check
+     *
+     * # Returns
+     *
+     * `true` if the key exists, `false` otherwise.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * if (index.hasMetadata(id, 'title')) {
+     *     console.log('Vector has title metadata');
+     * }
+     * ```
+     * @param {number} vector_id
+     * @param {string} key
+     * @returns {boolean}
+     */
+    hasMetadata(vector_id, key) {
+        const ptr0 = passStringToWasm0(key, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.edgevec_hasMetadata(this.__wbg_ptr, vector_id, ptr0, len0);
+        return ret !== 0;
+    }
+    /**
+     * Returns the number of metadata keys for a vector.
+     *
+     * # Arguments
+     *
+     * * `vector_id` - The ID of the vector
+     *
+     * # Returns
+     *
+     * The number of metadata keys, or 0 if the vector has no metadata.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const count = index.metadataKeyCount(id);
+     * console.log(`Vector has ${count} metadata keys`);
+     * ```
+     * @param {number} vector_id
+     * @returns {number}
+     */
+    metadataKeyCount(vector_id) {
+        const ret = wasm.edgevec_metadataKeyCount(this.__wbg_ptr, vector_id);
+        return ret >>> 0;
+    }
+    /**
+     * Returns the total number of vectors with metadata.
+     *
+     * # Returns
+     *
+     * The count of vectors that have at least one metadata key.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const count = index.metadataVectorCount();
+     * console.log(`${count} vectors have metadata`);
+     * ```
+     * @returns {number}
+     */
+    metadataVectorCount() {
+        const ret = wasm.edgevec_metadataVectorCount(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Returns the total number of metadata key-value pairs across all vectors.
+     *
+     * # Returns
+     *
+     * The total count of metadata entries.
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * const total = index.totalMetadataCount();
+     * console.log(`${total} total metadata entries`);
+     * ```
+     * @returns {number}
+     */
+    totalMetadataCount() {
+        const ret = wasm.edgevec_totalMetadataCount(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * Execute a filtered search on the index.
@@ -874,566 +1658,6 @@ export class EdgeVec {
             wasm.__wbindgen_export4(deferred3_0, deferred3_1, 1);
         }
     }
-    /**
-     * Get the ratio of deleted to total vectors.
-     *
-     * # Returns
-     *
-     * A value between 0.0 and 1.0 representing the tombstone ratio.
-     * 0.0 means no deletions, 1.0 means all vectors deleted.
-     * @returns {number}
-     */
-    tombstoneRatio() {
-        const ret = wasm.edgevec_tombstoneRatio(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Gets all metadata for a vector as a JavaScript object.
-     *
-     * Returns a plain JavaScript object where keys are metadata keys and
-     * values are JavaScript-native types (string, number, boolean, string[]).
-     *
-     * # Arguments
-     *
-     * * `vector_id` - The ID of the vector
-     *
-     * # Returns
-     *
-     * A JavaScript object mapping keys to values, or `undefined` if the vector
-     * has no metadata.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const metadata = index.getAllMetadata(id);
-     * if (metadata) {
-     *     console.log(metadata.title);     // 'My Document'
-     *     console.log(metadata.page_count); // 42
-     *     console.log(Object.keys(metadata)); // ['title', 'page_count', ...]
-     * }
-     * ```
-     * @param {number} vector_id
-     * @returns {any}
-     */
-    getAllMetadata(vector_id) {
-        const ret = wasm.edgevec_getAllMetadata(this.__wbg_ptr, vector_id);
-        return takeObject(ret);
-    }
-    /**
-     * Check if compaction is recommended.
-     *
-     * Returns `true` when `tombstoneRatio()` exceeds the compaction threshold
-     * (default: 30%). Use `compact()` to reclaim space from deleted vectors.
-     *
-     * # Returns
-     *
-     * * `true` if compaction is recommended
-     * * `false` if tombstone ratio is below threshold
-     * @returns {boolean}
-     */
-    needsCompaction() {
-        const ret = wasm.edgevec_needsCompaction(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    /**
-     * Inserts a batch of vectors into the index (flat array format).
-     *
-     * **Note:** This is the legacy API. For the new API, use `insertBatch` which
-     * accepts an Array of Float32Array.
-     *
-     * # Arguments
-     *
-     * * `vectors` - Flat Float32Array containing `count * dimensions` elements.
-     * * `count` - Number of vectors in the batch.
-     *
-     * # Returns
-     *
-     * A Uint32Array containing the assigned Vector IDs.
-     *
-     * # Errors
-     *
-     * Returns error if dimensions mismatch, vector contains NaNs, or ID overflows.
-     * @param {Float32Array} vectors
-     * @param {number} count
-     * @returns {Uint32Array}
-     */
-    insertBatchFlat(vectors, count) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_insertBatchFlat(retptr, this.__wbg_ptr, addHeapObject(vectors), count);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            return takeObject(r0);
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Soft-delete multiple vectors using BigUint64Array (modern browsers).
-     *
-     * Efficiently deletes multiple vectors in a single operation. More efficient
-     * than calling `softDelete()` N times due to reduced FFI overhead and
-     * deduplication of input IDs.
-     *
-     * **Browser Compatibility:** Requires BigUint64Array support (Chrome 67+,
-     * Firefox 68+, Safari 15+). For Safari 14 compatibility, use
-     * `softDeleteBatchCompat()` instead.
-     *
-     * # Arguments
-     *
-     * * `ids` - A Uint32Array of vector IDs to delete
-     *
-     * # Returns
-     *
-     * A `WasmBatchDeleteResult` object containing:
-     * * `deleted` - Number of vectors successfully deleted
-     * * `alreadyDeleted` - Number of vectors that were already deleted
-     * * `invalidIds` - Number of IDs not found in the index
-     * * `total` - Total IDs in input (including duplicates)
-     * * `uniqueCount` - Number of unique IDs after deduplication
-     *
-     * # Behavior
-     *
-     * * **Deduplication:** Duplicate IDs in input are processed only once
-     * * **Idempotent:** Re-deleting an already-deleted vector returns `alreadyDeleted`
-     * * **Atomic:** Two-phase validation ensures all-or-nothing semantics
-     *
-     * # Errors
-     *
-     * Returns an error if the batch size exceeds the maximum (10M IDs).
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const ids = new Uint32Array([1, 3, 5, 7, 9, 11]);
-     * const result = index.softDeleteBatch(ids);
-     *
-     * console.log(`Deleted: ${result.deleted}`);
-     * console.log(`Already deleted: ${result.alreadyDeleted}`);
-     * console.log(`Invalid IDs: ${result.invalidIds}`);
-     * console.log(`All valid: ${result.allValid()}`);
-     * ```
-     * @param {Uint32Array} ids
-     * @returns {WasmBatchDeleteResult}
-     */
-    softDeleteBatch(ids) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_softDeleteBatch(retptr, this.__wbg_ptr, addHeapObject(ids));
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            return WasmBatchDeleteResult.__wrap(r0);
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Get a warning message if compaction is recommended.
-     *
-     * # Returns
-     *
-     * * A warning string if `needsCompaction()` is true
-     * * `null` if compaction is not needed
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const warning = index.compactionWarning();
-     * if (warning) {
-     *     console.warn(warning);
-     *     index.compact();
-     * }
-     * ```
-     * @returns {string | undefined}
-     */
-    compactionWarning() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_compactionWarning(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            let v1;
-            if (r0 !== 0) {
-                v1 = getStringFromWasm0(r0, r1).slice();
-                wasm.__wbindgen_export4(r0, r1 * 1, 1);
-            }
-            return v1;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Returns the number of metadata keys for a vector.
-     *
-     * # Arguments
-     *
-     * * `vector_id` - The ID of the vector
-     *
-     * # Returns
-     *
-     * The number of metadata keys, or 0 if the vector has no metadata.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const count = index.metadataKeyCount(id);
-     * console.log(`Vector has ${count} metadata keys`);
-     * ```
-     * @param {number} vector_id
-     * @returns {number}
-     */
-    metadataKeyCount(vector_id) {
-        const ret = wasm.edgevec_metadataKeyCount(this.__wbg_ptr, vector_id);
-        return ret >>> 0;
-    }
-    /**
-     * Deletes all metadata for a vector.
-     *
-     * This operation is idempotent - deleting metadata for a vector without
-     * metadata is not an error.
-     *
-     * # Arguments
-     *
-     * * `vector_id` - The ID of the vector
-     *
-     * # Returns
-     *
-     * `true` if the vector had metadata that was deleted, `false` otherwise.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const hadMetadata = index.deleteAllMetadata(id);
-     * console.log(hadMetadata); // true if vector had any metadata
-     * ```
-     * @param {number} vector_id
-     * @returns {boolean}
-     */
-    deleteAllMetadata(vector_id) {
-        const ret = wasm.edgevec_deleteAllMetadata(this.__wbg_ptr, vector_id);
-        return ret !== 0;
-    }
-    /**
-     * Get the current compaction threshold.
-     *
-     * # Returns
-     *
-     * The threshold ratio (0.0 to 1.0) above which `needsCompaction()` returns true.
-     * Default is 0.3 (30%).
-     * @returns {number}
-     */
-    compactionThreshold() {
-        const ret = wasm.edgevec_compactionThreshold(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Returns the total number of metadata key-value pairs across all vectors.
-     *
-     * # Returns
-     *
-     * The total count of metadata entries.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const total = index.totalMetadataCount();
-     * console.log(`${total} total metadata entries`);
-     * ```
-     * @returns {number}
-     */
-    totalMetadataCount() {
-        const ret = wasm.edgevec_totalMetadataCount(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Returns the total number of vectors with metadata.
-     *
-     * # Returns
-     *
-     * The count of vectors that have at least one metadata key.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const count = index.metadataVectorCount();
-     * console.log(`${count} vectors have metadata`);
-     * ```
-     * @returns {number}
-     */
-    metadataVectorCount() {
-        const ret = wasm.edgevec_metadataVectorCount(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Set the compaction threshold.
-     *
-     * # Arguments
-     *
-     * * `ratio` - The new threshold (clamped to 0.01 - 0.99).
-     * @param {number} ratio
-     */
-    setCompactionThreshold(ratio) {
-        wasm.edgevec_setCompactionThreshold(this.__wbg_ptr, ratio);
-    }
-    /**
-     * Soft-delete multiple vectors using number array (Safari 14 compatible).
-     *
-     * This method provides Safari 14 compatibility by accepting a regular JavaScript
-     * Array of numbers instead of BigUint64Array. IDs must be less than 2^53
-     * (Number.MAX_SAFE_INTEGER) to avoid precision loss.
-     *
-     * **Note:** For modern browsers, prefer `softDeleteBatch()` which uses typed arrays.
-     *
-     * # Arguments
-     *
-     * * `ids` - A JavaScript Array or Float64Array of vector IDs
-     *
-     * # Returns
-     *
-     * Same as `softDeleteBatch()` - see that method for details.
-     *
-     * # Errors
-     *
-     * Returns an error if the batch size exceeds the maximum (10M IDs) or if
-     * any ID exceeds Number.MAX_SAFE_INTEGER.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * // Safari 14 compatible
-     * const ids = [1, 3, 5, 7, 9, 11];
-     * const result = index.softDeleteBatchCompat(ids);
-     * console.log(`Deleted: ${result.deleted}`);
-     * ```
-     * @param {Float64Array} ids
-     * @returns {WasmBatchDeleteResult}
-     */
-    softDeleteBatchCompat(ids) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_softDeleteBatchCompat(retptr, this.__wbg_ptr, addHeapObject(ids));
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            return WasmBatchDeleteResult.__wrap(r0);
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Batch insert with progress callback (W14.1).
-     *
-     * Inserts multiple vectors while reporting progress to a JavaScript callback.
-     * The callback is invoked at the **start (0%)** and **end (100%)** of the batch
-     * insertion. Intermediate progress during insertion is not currently reported.
-     *
-     * # Arguments
-     *
-     * * `vectors` - JS Array of Float32Array vectors to insert
-     * * `on_progress` - JS function called with (inserted: number, total: number)
-     *
-     * # Returns
-     *
-     * `BatchInsertResult` containing inserted count, total, and IDs.
-     *
-     * # Performance Note
-     *
-     * See [`Self::insert_batch_v2`] for performance characteristics. Batch insert optimizes
-     * JS↔WASM boundary overhead (1.2-1.5x at small scales), but converges with
-     * sequential insertion at larger scales as HNSW graph construction dominates.
-     *
-     * # Callback Behavior
-     *
-     * - The callback is called exactly **twice**: once with `(0, total)` before
-     *   insertion begins, and once with `(total, total)` after completion.
-     * - **Errors in the callback are intentionally ignored** — the batch insert
-     *   will succeed even if the progress callback throws an exception. This
-     *   ensures that UI errors don't break data operations.
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * const result = index.insertBatchWithProgress(vectors, (done, total) => {
-     *     console.log(`Progress: ${Math.round(done/total*100)}%`);
-     * });
-     * console.log(`Inserted ${result.inserted} vectors`);
-     * ```
-     *
-     * # Errors
-     *
-     * Returns a JS error object with `code` property on failure.
-     * Note: Callback exceptions do NOT cause this function to return an error.
-     * @param {Array<any>} vectors
-     * @param {Function} on_progress
-     * @returns {BatchInsertResult}
-     */
-    insertBatchWithProgress(vectors, on_progress) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_insertBatchWithProgress(retptr, this.__wbg_ptr, addHeapObject(vectors), addHeapObject(on_progress));
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            return BatchInsertResult.__wrap(r0);
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Creates a new EdgeVec database.
-     *
-     * # Errors
-     *
-     * Returns an error if the configuration is invalid (e.g., unknown metric).
-     * @param {EdgeVecConfig} config
-     */
-    constructor(config) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            _assertClass(config, EdgeVecConfig);
-            wasm.edgevec_new(retptr, config.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            this.__wbg_ptr = r0 >>> 0;
-            EdgeVecFinalization.register(this, this.__wbg_ptr, this);
-            return this;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Inserts a vector into the index.
-     *
-     * # Arguments
-     *
-     * * `vector` - A Float32Array containing the vector data.
-     *
-     * # Returns
-     *
-     * The assigned Vector ID (u32).
-     *
-     * # Errors
-     *
-     * Returns error if dimensions mismatch, vector contains NaNs, or ID overflows.
-     * @param {Float32Array} vector
-     * @returns {number}
-     */
-    insert(vector) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_insert(retptr, this.__wbg_ptr, addHeapObject(vector));
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            return r0 >>> 0;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Searches for nearest neighbors.
-     *
-     * # Arguments
-     *
-     * * `query` - The query vector.
-     * * `k` - The number of neighbors to return.
-     *
-     * # Returns
-     *
-     * An array of objects: `[{ id: u32, score: f32 }, ...]`.
-     *
-     * # Errors
-     *
-     * Returns error if dimensions mismatch or vector contains NaNs.
-     * @param {Float32Array} query
-     * @param {number} k
-     * @returns {any}
-     */
-    search(query, k) {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_search(retptr, this.__wbg_ptr, addHeapObject(query), k);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            return takeObject(r0);
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Compact the index by rebuilding without tombstones.
-     *
-     * This operation:
-     * 1. Creates a new index with only live vectors
-     * 2. Re-inserts vectors preserving IDs
-     * 3. Replaces the current index
-     *
-     * **WARNING:** This is a blocking operation. For indices with >10k vectors,
-     * consider running during idle time or warning the user about potential delays.
-     *
-     * # Returns
-     *
-     * A `CompactionResult` object containing:
-     * * `tombstonesRemoved` - Number of deleted vectors removed
-     * * `newSize` - Size of the index after compaction
-     * * `durationMs` - Time taken in milliseconds
-     *
-     * # Errors
-     *
-     * Returns an error if compaction fails (e.g., memory allocation error).
-     *
-     * # Example (JavaScript)
-     *
-     * ```javascript
-     * if (index.needsCompaction()) {
-     *     const result = index.compact();
-     *     console.log(`Removed ${result.tombstonesRemoved} tombstones`);
-     *     console.log(`New size: ${result.newSize}`);
-     *     console.log(`Took ${result.durationMs}ms`);
-     * }
-     * ```
-     * @returns {WasmCompactionResult}
-     */
-    compact() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.edgevec_compact(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
-            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
-            if (r2) {
-                throw takeObject(r1);
-            }
-            return WasmCompactionResult.__wrap(r0);
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
 }
 if (Symbol.dispose) EdgeVec.prototype[Symbol.dispose] = EdgeVec.prototype.free;
 
@@ -1467,29 +1691,6 @@ export class EdgeVecConfig {
         wasm.__wbg_set_edgevecconfig_dimensions(this.__wbg_ptr, arg0);
     }
     /**
-     * Set distance metric ("l2", "cosine", "dot").
-     * @param {string} metric
-     */
-    set metric(metric) {
-        const ptr0 = passStringToWasm0(metric, wasm.__wbindgen_export, wasm.__wbindgen_export2);
-        const len0 = WASM_VECTOR_LEN;
-        wasm.edgevecconfig_set_metric(this.__wbg_ptr, ptr0, len0);
-    }
-    /**
-     * Set ef_search parameter.
-     * @param {number} ef
-     */
-    set ef_search(ef) {
-        wasm.edgevecconfig_set_ef_search(this.__wbg_ptr, ef);
-    }
-    /**
-     * Set ef_construction parameter.
-     * @param {number} ef
-     */
-    set ef_construction(ef) {
-        wasm.edgevecconfig_set_ef_construction(this.__wbg_ptr, ef);
-    }
-    /**
      * Create a new configuration with required dimensions.
      * @param {number} dimensions
      */
@@ -1512,6 +1713,68 @@ export class EdgeVecConfig {
      */
     set m0(m0) {
         wasm.edgevecconfig_set_m0(this.__wbg_ptr, m0);
+    }
+    /**
+     * Set ef_construction parameter.
+     * @param {number} ef
+     */
+    set ef_construction(ef) {
+        wasm.edgevecconfig_set_ef_construction(this.__wbg_ptr, ef);
+    }
+    /**
+     * Set ef_search parameter.
+     * @param {number} ef
+     */
+    set ef_search(ef) {
+        wasm.edgevecconfig_set_ef_search(this.__wbg_ptr, ef);
+    }
+    /**
+     * Set distance metric ("l2", "cosine", "dot", "hamming").
+     * @param {string} metric
+     */
+    set metric(metric) {
+        const ptr0 = passStringToWasm0(metric, wasm.__wbindgen_export, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.edgevecconfig_set_metric(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * Set distance metric using typed enum.
+     *
+     * # Example
+     *
+     * ```javascript
+     * const config = new EdgeVecConfig(768);
+     * config.setMetricType(MetricType.Cosine);
+     * ```
+     * @param {MetricType} metric_type
+     */
+    setMetricType(metric_type) {
+        wasm.edgevecconfig_setMetricType(this.__wbg_ptr, metric_type);
+    }
+    /**
+     * Set vector storage type.
+     *
+     * Use `VectorType.Binary` with `MetricType.Hamming` for binary vectors.
+     *
+     * # Example
+     *
+     * ```javascript
+     * const config = new EdgeVecConfig(1024);
+     * config.setVectorType(VectorType.Binary);
+     * config.setMetricType(MetricType.Hamming);
+     * ```
+     * @param {VectorType} vt
+     */
+    set vector_type(vt) {
+        wasm.edgevecconfig_set_vector_type(this.__wbg_ptr, vt);
+    }
+    /**
+     * Get the configured vector type.
+     * @returns {VectorType | undefined}
+     */
+    get vector_type() {
+        const ret = wasm.edgevecconfig_vector_type(this.__wbg_ptr);
+        return ret === 2 ? undefined : ret;
     }
 }
 if (Symbol.dispose) EdgeVecConfig.prototype[Symbol.dispose] = EdgeVecConfig.prototype.free;
@@ -1555,63 +1818,6 @@ export class JsMetadataValue {
         wasm.__wbg_jsmetadatavalue_free(ptr, 0);
     }
     /**
-     * Gets the value as a boolean.
-     *
-     * @returns The boolean value, or undefined if not a boolean
-     * @returns {boolean | undefined}
-     */
-    asBoolean() {
-        const ret = wasm.jsmetadatavalue_asBoolean(this.__wbg_ptr);
-        return ret === 0xFFFFFF ? undefined : ret !== 0;
-    }
-    /**
-     * Gets the value as an integer.
-     *
-     * Note: Returns as f64 for JavaScript compatibility. Safe for integers up to ±2^53.
-     *
-     * @returns The integer value as a number, or undefined if not an integer
-     * @returns {number | undefined}
-     */
-    asInteger() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.jsmetadatavalue_asInteger(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r2 = getDataViewMemory0().getFloat64(retptr + 8 * 1, true);
-            return r0 === 0 ? undefined : r2;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
-     * Creates a float metadata value.
-     *
-     * @param value - The float value (must not be NaN or Infinity)
-     * @returns A new JsMetadataValue containing a float
-     * @param {number} value
-     * @returns {JsMetadataValue}
-     */
-    static fromFloat(value) {
-        const ret = wasm.jsmetadatavalue_fromFloat(value);
-        return JsMetadataValue.__wrap(ret);
-    }
-    /**
-     * Checks if this value is a boolean.
-     * @returns {boolean}
-     */
-    isBoolean() {
-        const ret = wasm.jsmetadatavalue_isBoolean(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    /**
-     * Checks if this value is an integer.
-     * @returns {boolean}
-     */
-    isInteger() {
-        const ret = wasm.jsmetadatavalue_isInteger(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    /**
      * Creates a string metadata value.
      *
      * @param value - The string value
@@ -1623,18 +1829,6 @@ export class JsMetadataValue {
         const ptr0 = passStringToWasm0(value, wasm.__wbindgen_export, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.jsmetadatavalue_fromString(ptr0, len0);
-        return JsMetadataValue.__wrap(ret);
-    }
-    /**
-     * Creates a boolean metadata value.
-     *
-     * @param value - The boolean value
-     * @returns A new JsMetadataValue containing a boolean
-     * @param {boolean} value
-     * @returns {JsMetadataValue}
-     */
-    static fromBoolean(value) {
-        const ret = wasm.jsmetadatavalue_fromBoolean(value);
         return JsMetadataValue.__wrap(ret);
     }
     /**
@@ -1672,22 +1866,28 @@ export class JsMetadataValue {
         }
     }
     /**
-     * Gets the value as a string array.
+     * Creates a float metadata value.
      *
-     * @returns The string array, or undefined if not a string array
-     * @returns {any}
+     * @param value - The float value (must not be NaN or Infinity)
+     * @returns A new JsMetadataValue containing a float
+     * @param {number} value
+     * @returns {JsMetadataValue}
      */
-    asStringArray() {
-        const ret = wasm.jsmetadatavalue_asStringArray(this.__wbg_ptr);
-        return takeObject(ret);
+    static fromFloat(value) {
+        const ret = wasm.jsmetadatavalue_fromFloat(value);
+        return JsMetadataValue.__wrap(ret);
     }
     /**
-     * Checks if this value is a string array.
-     * @returns {boolean}
+     * Creates a boolean metadata value.
+     *
+     * @param value - The boolean value
+     * @returns A new JsMetadataValue containing a boolean
+     * @param {boolean} value
+     * @returns {JsMetadataValue}
      */
-    isStringArray() {
-        const ret = wasm.jsmetadatavalue_isStringArray(this.__wbg_ptr);
-        return ret !== 0;
+    static fromBoolean(value) {
+        const ret = wasm.jsmetadatavalue_fromBoolean(value);
+        return JsMetadataValue.__wrap(ret);
     }
     /**
      * Creates a string array metadata value.
@@ -1717,39 +1917,6 @@ export class JsMetadataValue {
         }
     }
     /**
-     * Converts to a JavaScript-native value.
-     *
-     * Returns:
-     * - `string` for String values
-     * - `number` for Integer and Float values
-     * - `boolean` for Boolean values
-     * - `string[]` for StringArray values
-     *
-     * @returns The JavaScript-native value
-     * @returns {any}
-     */
-    toJS() {
-        const ret = wasm.jsmetadatavalue_toJS(this.__wbg_ptr);
-        return takeObject(ret);
-    }
-    /**
-     * Gets the value as a float.
-     *
-     * @returns The float value, or undefined if not a float
-     * @returns {number | undefined}
-     */
-    asFloat() {
-        try {
-            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-            wasm.jsmetadatavalue_asFloat(retptr, this.__wbg_ptr);
-            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
-            var r2 = getDataViewMemory0().getFloat64(retptr + 8 * 1, true);
-            return r0 === 0 ? undefined : r2;
-        } finally {
-            wasm.__wbindgen_add_to_stack_pointer(16);
-        }
-    }
-    /**
      * Returns the type of this value.
      *
      * @returns One of: 'string', 'integer', 'float', 'boolean', 'string_array'
@@ -1772,11 +1939,43 @@ export class JsMetadataValue {
         }
     }
     /**
+     * Checks if this value is a string.
+     * @returns {boolean}
+     */
+    isString() {
+        const ret = wasm.jsmetadatavalue_isString(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Checks if this value is an integer.
+     * @returns {boolean}
+     */
+    isInteger() {
+        const ret = wasm.jsmetadatavalue_isInteger(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
      * Checks if this value is a float.
      * @returns {boolean}
      */
     isFloat() {
         const ret = wasm.jsmetadatavalue_isFloat(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Checks if this value is a boolean.
+     * @returns {boolean}
+     */
+    isBoolean() {
+        const ret = wasm.jsmetadatavalue_isBoolean(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Checks if this value is a string array.
+     * @returns {boolean}
+     */
+    isStringArray() {
+        const ret = wasm.jsmetadatavalue_isStringArray(this.__wbg_ptr);
         return ret !== 0;
     }
     /**
@@ -1802,15 +2001,104 @@ export class JsMetadataValue {
         }
     }
     /**
-     * Checks if this value is a string.
-     * @returns {boolean}
+     * Gets the value as an integer.
+     *
+     * Note: Returns as f64 for JavaScript compatibility. Safe for integers up to ±2^53.
+     *
+     * @returns The integer value as a number, or undefined if not an integer
+     * @returns {number | undefined}
      */
-    isString() {
-        const ret = wasm.jsmetadatavalue_isString(this.__wbg_ptr);
-        return ret !== 0;
+    asInteger() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.jsmetadatavalue_asInteger(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r2 = getDataViewMemory0().getFloat64(retptr + 8 * 1, true);
+            return r0 === 0 ? undefined : r2;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Gets the value as a float.
+     *
+     * @returns The float value, or undefined if not a float
+     * @returns {number | undefined}
+     */
+    asFloat() {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.jsmetadatavalue_asFloat(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r2 = getDataViewMemory0().getFloat64(retptr + 8 * 1, true);
+            return r0 === 0 ? undefined : r2;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Gets the value as a boolean.
+     *
+     * @returns The boolean value, or undefined if not a boolean
+     * @returns {boolean | undefined}
+     */
+    asBoolean() {
+        const ret = wasm.jsmetadatavalue_asBoolean(this.__wbg_ptr);
+        return ret === 0xFFFFFF ? undefined : ret !== 0;
+    }
+    /**
+     * Gets the value as a string array.
+     *
+     * @returns The string array, or undefined if not a string array
+     * @returns {any}
+     */
+    asStringArray() {
+        const ret = wasm.jsmetadatavalue_asStringArray(this.__wbg_ptr);
+        return takeObject(ret);
+    }
+    /**
+     * Converts to a JavaScript-native value.
+     *
+     * Returns:
+     * - `string` for String values
+     * - `number` for Integer and Float values
+     * - `boolean` for Boolean values
+     * - `string[]` for StringArray values
+     *
+     * @returns The JavaScript-native value
+     * @returns {any}
+     */
+    toJS() {
+        const ret = wasm.jsmetadatavalue_toJS(this.__wbg_ptr);
+        return takeObject(ret);
     }
 }
 if (Symbol.dispose) JsMetadataValue.prototype[Symbol.dispose] = JsMetadataValue.prototype.free;
+
+/**
+ * Distance metric type for EdgeVec.
+ *
+ * Determines how vector similarity is calculated.
+ * @enum {0 | 1 | 2 | 3}
+ */
+export const MetricType = Object.freeze({
+    /**
+     * L2 Squared (Euclidean) distance.
+     */
+    L2: 0, "0": "L2",
+    /**
+     * Cosine similarity (converted to distance).
+     */
+    Cosine: 1, "1": "Cosine",
+    /**
+     * Dot product (converted to distance).
+     */
+    Dot: 2, "2": "Dot",
+    /**
+     * Hamming distance (for binary vectors).
+     */
+    Hamming: 3, "3": "Hamming",
+});
 
 /**
  * Iterator for saving the database in chunks.
@@ -1865,6 +2153,24 @@ export class PersistenceIterator {
 if (Symbol.dispose) PersistenceIterator.prototype[Symbol.dispose] = PersistenceIterator.prototype.free;
 
 /**
+ * Vector storage type for EdgeVec.
+ *
+ * Determines how vectors are stored and processed.
+ * @enum {0 | 1}
+ */
+export const VectorType = Object.freeze({
+    /**
+     * Standard 32-bit floating point vectors.
+     */
+    Float32: 0, "0": "Float32",
+    /**
+     * Binary vectors (1-bit per dimension, packed into bytes).
+     * Use with `metric = "hamming"`.
+     */
+    Binary: 1, "1": "Binary",
+});
+
+/**
  * Result of a batch delete operation (W18.4/W18.5).
  *
  * Returned by `EdgeVec.softDeleteBatch()` and `EdgeVec.softDeleteBatchCompat()`
@@ -1889,29 +2195,11 @@ export class WasmBatchDeleteResult {
         wasm.__wbg_wasmbatchdeleteresult_free(ptr, 0);
     }
     /**
-     * Check if any deletions occurred in this operation.
-     *
-     * Returns `true` if at least one vector was newly deleted.
-     * @returns {boolean}
-     */
-    anyDeleted() {
-        const ret = wasm.wasmbatchdeleteresult_anyDeleted(this.__wbg_ptr);
-        return ret !== 0;
-    }
-    /**
-     * Number of invalid IDs (not found in the index).
+     * Number of vectors successfully deleted in this operation.
      * @returns {number}
      */
-    get invalidIds() {
-        const ret = wasm.wasmbatchdeleteresult_invalidIds(this.__wbg_ptr);
-        return ret >>> 0;
-    }
-    /**
-     * Number of unique vector IDs after deduplication.
-     * @returns {number}
-     */
-    get uniqueCount() {
-        const ret = wasm.batchinsertresult_total(this.__wbg_ptr);
+    get deleted() {
+        const ret = wasm.wasmbatchdeleteresult_deleted(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -1923,19 +2211,27 @@ export class WasmBatchDeleteResult {
         return ret >>> 0;
     }
     /**
+     * Number of invalid IDs (not found in the index).
+     * @returns {number}
+     */
+    get invalidIds() {
+        const ret = wasm.wasmbatchdeleteresult_invalidIds(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
      * Total number of vector IDs provided in the input (including duplicates).
      * @returns {number}
      */
     get total() {
-        const ret = wasm.batchinsertresult_inserted(this.__wbg_ptr);
+        const ret = wasm.wasmbatchdeleteresult_total(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
-     * Number of vectors successfully deleted in this operation.
+     * Number of unique vector IDs after deduplication.
      * @returns {number}
      */
-    get deleted() {
-        const ret = wasm.wasmbatchdeleteresult_deleted(this.__wbg_ptr);
+    get uniqueCount() {
+        const ret = wasm.wasmbatchdeleteresult_uniqueCount(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -1946,6 +2242,16 @@ export class WasmBatchDeleteResult {
      */
     allValid() {
         const ret = wasm.wasmbatchdeleteresult_allValid(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Check if any deletions occurred in this operation.
+     *
+     * Returns `true` if at least one vector was newly deleted.
+     * @returns {boolean}
+     */
+    anyDeleted() {
+        const ret = wasm.wasmbatchdeleteresult_anyDeleted(this.__wbg_ptr);
         return ret !== 0;
     }
 }
@@ -2000,6 +2306,40 @@ export class WasmCompactionResult {
     }
 }
 if (Symbol.dispose) WasmCompactionResult.prototype[Symbol.dispose] = WasmCompactionResult.prototype.free;
+
+/**
+ * Microbenchmark: measure raw Hamming distance speed.
+ * Returns time in microseconds for `iterations` distance calculations.
+ * @param {number} bytes
+ * @param {number} iterations
+ * @returns {number}
+ */
+export function benchmarkHamming(bytes, iterations) {
+    const ret = wasm.benchmarkHamming(bytes, iterations);
+    return ret;
+}
+
+/**
+ * Get the SIMD backend being used for distance calculations.
+ * Returns: "wasm_simd128", "avx2", or "scalar"
+ * @returns {string}
+ */
+export function getSimdBackend() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        wasm.getSimdBackend(retptr);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred1_0 = r0;
+        deferred1_1 = r1;
+        return getStringFromWasm0(r0, r1);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+    }
+}
 
 /**
  * Get filter information (complexity, fields, operators).
@@ -2240,6 +2580,15 @@ function __wbg_get_imports() {
         const ret = typeof(getObject(arg0)) === 'function';
         return ret;
     };
+    imports.wbg.__wbg___wbindgen_is_object_ce774f3490692386 = function(arg0) {
+        const val = getObject(arg0);
+        const ret = typeof(val) === 'object' && val !== null;
+        return ret;
+    };
+    imports.wbg.__wbg___wbindgen_is_string_704ef9c8fc131030 = function(arg0) {
+        const ret = typeof(getObject(arg0)) === 'string';
+        return ret;
+    };
     imports.wbg.__wbg___wbindgen_is_undefined_f6b95eab589e0269 = function(arg0) {
         const ret = getObject(arg0) === undefined;
         return ret;
@@ -2270,6 +2619,10 @@ function __wbg_get_imports() {
         const ret = getObject(arg0).call(getObject(arg1), getObject(arg2), getObject(arg3));
         return addHeapObject(ret);
     }, arguments) };
+    imports.wbg.__wbg_crypto_574e78ad8b13b65f = function(arg0) {
+        const ret = getObject(arg0).crypto;
+        return addHeapObject(ret);
+    };
     imports.wbg.__wbg_debug_9d0c87ddda3dc485 = function(arg0) {
         console.debug(getObject(arg0));
     };
@@ -2291,6 +2644,9 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_error_7bc7d576a6aaf855 = function(arg0) {
         console.error(getObject(arg0));
     };
+    imports.wbg.__wbg_getRandomValues_b8f5dbd5f3995a9e = function() { return handleError(function (arg0, arg1) {
+        getObject(arg0).getRandomValues(getObject(arg1));
+    }, arguments) };
     imports.wbg.__wbg_get_6b7bd52aca3f9671 = function(arg0, arg1) {
         const ret = getObject(arg0)[arg1 >>> 0];
         return addHeapObject(ret);
@@ -2331,6 +2687,10 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_log_1d990106d99dacb7 = function(arg0) {
         console.log(getObject(arg0));
     };
+    imports.wbg.__wbg_msCrypto_a61aeb35a24c1329 = function(arg0) {
+        const ret = getObject(arg0).msCrypto;
+        return addHeapObject(ret);
+    };
     imports.wbg.__wbg_new_1ba21ce319a06297 = function() {
         const ret = new Object();
         return addHeapObject(ret);
@@ -2354,7 +2714,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_863(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_2060(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -2381,6 +2741,14 @@ function __wbg_get_imports() {
         const ret = new Array(arg0 >>> 0);
         return addHeapObject(ret);
     };
+    imports.wbg.__wbg_new_with_length_aa5eaf41d35235e5 = function(arg0) {
+        const ret = new Uint8Array(arg0 >>> 0);
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbg_node_905d3e251edff8a2 = function(arg0) {
+        const ret = getObject(arg0).node;
+        return addHeapObject(ret);
+    };
     imports.wbg.__wbg_now_8cf15d6e317793e1 = function(arg0) {
         const ret = getObject(arg0).now();
         return ret;
@@ -2388,6 +2756,10 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_performance_c77a440eff2efd9b = function(arg0) {
         const ret = getObject(arg0).performance;
         return isLikeNone(ret) ? 0 : addHeapObject(ret);
+    };
+    imports.wbg.__wbg_process_dc0fbacc7c1c06f7 = function(arg0) {
+        const ret = getObject(arg0).process;
+        return addHeapObject(ret);
     };
     imports.wbg.__wbg_prototypesetcall_6a0ca140cebe5ef8 = function(arg0, arg1, arg2) {
         Uint32Array.prototype.set.call(getArrayU32FromWasm0(arg0, arg1), getObject(arg2));
@@ -2412,8 +2784,15 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_queueMicrotask_fca69f5bfad613a5 = function(arg0) {
         queueMicrotask(getObject(arg0));
     };
-    imports.wbg.__wbg_read_710db9befb94d7f5 = function() { return handleError(function (arg0, arg1) {
+    imports.wbg.__wbg_randomFillSync_ac0988aba3254290 = function() { return handleError(function (arg0, arg1) {
+        getObject(arg0).randomFillSync(takeObject(arg1));
+    }, arguments) };
+    imports.wbg.__wbg_read_a68635a97e5352a0 = function() { return handleError(function (arg0, arg1) {
         const ret = IndexedDbBackend.read(getStringFromWasm0(arg0, arg1));
+        return addHeapObject(ret);
+    }, arguments) };
+    imports.wbg.__wbg_require_60cc747a6bc5215a = function() { return handleError(function () {
+        const ret = module.require;
         return addHeapObject(ret);
     }, arguments) };
     imports.wbg.__wbg_resolve_fd5bfbaa4ce36e1e = function(arg0) {
@@ -2450,6 +2829,10 @@ function __wbg_get_imports() {
         const ret = typeof window === 'undefined' ? null : window;
         return isLikeNone(ret) ? 0 : addHeapObject(ret);
     };
+    imports.wbg.__wbg_subarray_845f2f5bce7d061a = function(arg0, arg1, arg2) {
+        const ret = getObject(arg0).subarray(arg1 >>> 0, arg2 >>> 0);
+        return addHeapObject(ret);
+    };
     imports.wbg.__wbg_then_429f7caf1026411d = function(arg0, arg1, arg2) {
         const ret = getObject(arg0).then(getObject(arg1), getObject(arg2));
         return addHeapObject(ret);
@@ -2458,21 +2841,30 @@ function __wbg_get_imports() {
         const ret = getObject(arg0).then(getObject(arg1));
         return addHeapObject(ret);
     };
+    imports.wbg.__wbg_versions_c01dfd4722a88165 = function(arg0) {
+        const ret = getObject(arg0).versions;
+        return addHeapObject(ret);
+    };
     imports.wbg.__wbg_warn_6e567d0d926ff881 = function(arg0) {
         console.warn(getObject(arg0));
     };
-    imports.wbg.__wbg_write_b60005356a2f68e0 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+    imports.wbg.__wbg_write_a46dfda682f6e473 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
         const ret = IndexedDbBackend.write(getStringFromWasm0(arg0, arg1), getArrayU8FromWasm0(arg2, arg3));
         return addHeapObject(ret);
     }, arguments) };
-    imports.wbg.__wbindgen_cast_1e9af41a93765cab = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 88, function: Function { arguments: [Externref], shim_idx: 89, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_598, __wasm_bindgen_func_elem_605);
-        return addHeapObject(ret);
-    };
     imports.wbg.__wbindgen_cast_2241b6af4c4b2941 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(String) -> Externref`.
         const ret = getStringFromWasm0(arg0, arg1);
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_cast_336ddcf56cf45ed6 = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 113, function: Function { arguments: [Externref], shim_idx: 114, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1505, __wasm_bindgen_func_elem_1520);
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {
+        // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
+        const ret = getArrayU8FromWasm0(arg0, arg1);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {
