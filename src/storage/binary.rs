@@ -547,6 +547,7 @@ impl fmt::Debug for BinaryVectorStorage {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_precision_loss)]
 mod tests {
     use super::*;
 

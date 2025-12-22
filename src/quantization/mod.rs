@@ -6,7 +6,8 @@
 //! # Available Quantizers
 //!
 //! - [`ScalarQuantizer`]: SQ8 quantization (f32 -> u8), 4x compression
-//! - [`BinaryQuantizer`]: Binary quantization (f32 -> bit), 32x compression
+//! - [`BinaryQuantizer`]: Binary quantization (f32 -> bit), 32x compression (fixed 768D)
+//! - [`BinaryVector`]: Variable-dimension binary quantization (any dimension divisible by 8)
 //!
 //! # Example
 //!
@@ -19,6 +20,18 @@
 //!
 //! // 768 f32 values (3072 bytes) -> 96 bytes
 //! assert_eq!(quantized.data().len(), 96);
+//! ```
+//!
+//! # Variable Dimension Example
+//!
+//! ```
+//! use edgevec::quantization::variable::BinaryVector;
+//!
+//! // Works with any dimension divisible by 8
+//! let vector = vec![1.0f32; 128];
+//! let bv = BinaryVector::quantize(&vector).unwrap();
+//! assert_eq!(bv.dimension(), 128);
+//! assert_eq!(bv.bytes(), 16);
 //! ```
 
 /// Binary quantization (sign-based) implementation.
@@ -44,7 +57,14 @@ pub mod scalar;
 /// - Performance analysis
 pub mod simd;
 
+/// Variable-dimension binary quantization.
+///
+/// This module provides [`BinaryVector`] which supports any dimension
+/// divisible by 8, unlike the fixed 768D [`BinaryQuantizer`].
+pub mod variable;
+
 pub use binary::{
     BinaryQuantizer, QuantizedVector, BINARY_QUANTIZATION_DIM, QUANTIZED_VECTOR_SIZE,
 };
 pub use scalar::{QuantizerConfig, ScalarQuantizer};
+pub use variable::{BinaryVector, QuantizationError};

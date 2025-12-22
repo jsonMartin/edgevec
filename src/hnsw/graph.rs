@@ -7,6 +7,8 @@
 use super::config::HnswConfig;
 use super::neighbor::NeighborPool;
 use crate::metadata::{MetadataError, MetadataStore, MetadataValue};
+use crate::quantization::variable::BinaryVector;
+use crate::storage::binary::BinaryVectorStorage;
 use crate::storage::VectorStorage;
 use bytemuck::{Pod, Zeroable};
 use rand::{Rng, SeedableRng};
@@ -130,6 +132,18 @@ pub enum GraphError {
     /// Returned when a filter expression evaluation fails at runtime.
     #[error("filter evaluation error: {0}")]
     FilterEval(String),
+
+    /// Binary quantization is not enabled (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// Returned when attempting BQ operations on an index without BQ storage.
+    #[error("binary quantization is not enabled; use with_bq() or enable_bq() first")]
+    BqNotEnabled,
+
+    /// Binary quantization failed (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// Returned when vector quantization fails during BQ operations.
+    #[error("quantization error: {0}")]
+    Quantization(String),
 }
 
 /// Result of a compaction operation.
@@ -253,6 +267,17 @@ pub struct HnswIndex {
     /// the existing pattern for other HnswIndex operations.
     #[serde(default)]
     pub(crate) metadata: MetadataStore,
+
+    /// Binary quantization storage (v0.7.0 - RFC-002 Phase 2)
+    ///
+    /// Optional storage for binary quantized vectors. When enabled, vectors
+    /// are stored in both F32 and binary format. BQ provides 32x memory
+    /// reduction and 3-5x search speedup at the cost of some recall.
+    ///
+    /// Use `with_bq()` to create an index with BQ enabled, or `enable_bq()`
+    /// to add BQ support to an existing index.
+    #[serde(skip)]
+    pub(crate) bq_storage: Option<BinaryVectorStorage>,
 }
 
 /// Default compaction threshold (30%)
@@ -388,6 +413,7 @@ impl HnswIndex {
             deleted_count: 0, // v0.3.0: No deleted nodes initially
             compaction_threshold: default_compaction_threshold(), // v0.3.0: Default 30%
             metadata: MetadataStore::new(), // v0.6.0 RFC-002: Empty metadata store
+            bq_storage: None, // v0.7.0 RFC-002 Phase 2: BQ disabled by default
         })
     }
 
@@ -468,7 +494,134 @@ impl HnswIndex {
             deleted_count: 0,
             compaction_threshold: default_compaction_threshold(),
             metadata, // Use provided metadata
+            bq_storage: None,
         })
+    }
+
+    /// Creates a new index with binary quantization enabled (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// BQ provides 32x memory reduction and 3-5x search speedup at the cost of
+    /// some recall (which can be recovered via rescoring).
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - HNSW configuration parameters.
+    /// * `storage` - Vector storage to validate against.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if dimension is not divisible by 8 (required for binary packing).
+    /// Returns `GraphError::ConfigMismatch` if storage dimensions differ from config.
+    /// Returns `GraphError::InvalidConfig` if configuration parameters are invalid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::storage::VectorStorage;
+    ///
+    /// let config = HnswConfig::new(128); // 128D, divisible by 8
+    /// let storage = VectorStorage::new(&config, None);
+    /// let index = HnswIndex::with_bq(config, &storage).unwrap();
+    ///
+    /// assert!(index.has_bq());
+    /// ```
+    pub fn with_bq(config: HnswConfig, storage: &VectorStorage) -> Result<Self, GraphError> {
+        let dimension = config.dimensions as usize;
+
+        // Validate dimension is compatible with BQ (divisible by 8)
+        if dimension % 8 != 0 {
+            return Err(GraphError::InvalidConfig(format!(
+                "dimension must be divisible by 8 for binary quantization, got {dimension}"
+            )));
+        }
+
+        let mut index = Self::new(config, storage)?;
+
+        index.bq_storage = Some(
+            BinaryVectorStorage::new(dimension).map_err(|e| GraphError::Storage(e.to_string()))?,
+        );
+
+        Ok(index)
+    }
+
+    /// Enables binary quantization on an existing index (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// This creates a new BQ storage and quantizes all existing vectors.
+    /// Time complexity: O(n × d) where n = vector count, d = dimension.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - The F32 vector storage containing vectors to quantize.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if dimension is not divisible by 8.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::storage::VectorStorage;
+    ///
+    /// let config = HnswConfig::new(128);
+    /// let mut storage = VectorStorage::new(&config, None);
+    /// let mut index = HnswIndex::new(config, &storage).unwrap();
+    ///
+    /// // Insert some vectors
+    /// index.insert(&vec![1.0f32; 128], &mut storage).unwrap();
+    ///
+    /// // Enable BQ later
+    /// index.enable_bq(&storage).unwrap();
+    /// assert!(index.has_bq());
+    /// ```
+    pub fn enable_bq(&mut self, storage: &VectorStorage) -> Result<(), GraphError> {
+        let dimension = self.config.dimensions as usize;
+
+        if dimension % 8 != 0 {
+            return Err(GraphError::InvalidConfig(format!(
+                "dimension must be divisible by 8 for binary quantization, got {dimension}"
+            )));
+        }
+
+        let mut bq_storage =
+            BinaryVectorStorage::new(dimension).map_err(|e| GraphError::Storage(e.to_string()))?;
+
+        // Quantize all existing non-deleted vectors
+        for node in &self.nodes {
+            if node.deleted != 0 {
+                // Insert placeholder for deleted nodes to maintain ID alignment
+                let zeros = vec![0u8; dimension / 8];
+                bq_storage
+                    .insert_raw(&zeros)
+                    .map_err(|e| GraphError::Storage(e.to_string()))?;
+                continue;
+            }
+
+            let vector = storage.get_vector(node.vector_id);
+            let bv = BinaryVector::quantize(&vector)
+                .map_err(|e| GraphError::Quantization(e.to_string()))?;
+            bq_storage
+                .insert(&bv)
+                .map_err(|e| GraphError::Storage(e.to_string()))?;
+        }
+
+        self.bq_storage = Some(bq_storage);
+        Ok(())
+    }
+
+    /// Returns true if binary quantization is enabled.
+    #[must_use]
+    #[inline]
+    pub fn has_bq(&self) -> bool {
+        self.bq_storage.is_some()
+    }
+
+    /// Returns a reference to the BQ storage, if enabled.
+    #[must_use]
+    #[inline]
+    pub fn bq_storage(&self) -> Option<&BinaryVectorStorage> {
+        self.bq_storage.as_ref()
     }
 
     /// Generates a random level for a new node.

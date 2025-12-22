@@ -8,8 +8,12 @@ pub mod graph;
 pub mod insert;
 /// Neighbor management.
 pub mod neighbor;
+/// F32 rescoring for BQ search results (v0.7.0 - RFC-002 Phase 2).
+pub mod rescore;
 /// Search algorithms.
 pub mod search;
+/// Binary quantization search algorithms (v0.7.0 - RFC-002 Phase 2).
+pub mod search_bq;
 
 pub use config::HnswConfig;
 pub use graph::{

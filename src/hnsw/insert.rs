@@ -4,6 +4,7 @@ use super::search::{Candidate, SearchContext, Searcher};
 use crate::hnsw::neighbor::NeighborPool;
 use crate::metric::simd::l2_squared_u8;
 use crate::metric::{DotProduct, L2Squared, Metric};
+use crate::quantization::variable::BinaryVector;
 use crate::storage::VectorStorage;
 
 // Helper: Skip VByte encoded integer
@@ -106,6 +107,72 @@ impl HnswIndex {
                 self.config.metric
             ))),
         }
+    }
+
+    /// Inserts a vector with automatic binary quantization (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// If BQ is enabled, the vector is stored in both F32 and BQ format.
+    /// If BQ is disabled, this behaves identically to `insert()`.
+    ///
+    /// # Arguments
+    ///
+    /// * `vector` - The vector to insert.
+    /// * `storage` - The F32 vector storage.
+    ///
+    /// # Returns
+    ///
+    /// The assigned vector ID.
+    ///
+    /// # Errors
+    ///
+    /// - `GraphError::DimensionMismatch` if vector dimension is wrong.
+    /// - `GraphError::Quantization` if BQ quantization fails.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::storage::VectorStorage;
+    ///
+    /// let config = HnswConfig::new(128);
+    /// let mut storage = VectorStorage::new(&config, None);
+    /// let mut index = HnswIndex::with_bq(config, &storage).unwrap();
+    ///
+    /// let v = vec![1.0f32; 128];
+    /// let id = index.insert_bq(&v, &mut storage).unwrap();
+    ///
+    /// assert!(index.has_bq());
+    /// assert_eq!(index.bq_storage().unwrap().len(), 1);
+    /// ```
+    pub fn insert_bq(
+        &mut self,
+        vector: &[f32],
+        storage: &mut VectorStorage,
+    ) -> Result<VectorId, GraphError> {
+        // Step 1: Validate dimension
+        let expected_dim = self.config.dimensions as usize;
+        if vector.len() != expected_dim {
+            return Err(GraphError::DimensionMismatch {
+                expected: expected_dim,
+                actual: vector.len(),
+            });
+        }
+
+        // Step 2: Insert into F32 storage and HNSW graph
+        let vector_id = self.insert(vector, storage)?;
+
+        // Step 3: If BQ enabled, quantize and insert
+        if let Some(ref mut bq_storage) = self.bq_storage {
+            let bv = BinaryVector::quantize(vector)
+                .map_err(|e| GraphError::Quantization(e.to_string()))?;
+
+            // BQ storage uses same ID scheme as F32 storage
+            bq_storage
+                .insert(&bv)
+                .map_err(|e| GraphError::Storage(e.to_string()))?;
+        }
+
+        Ok(vector_id)
     }
 
     /// Generic implementation of insert for a specific metric.
