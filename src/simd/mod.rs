@@ -36,11 +36,18 @@
 
 pub mod detect;
 
+/// SIMD-accelerated popcount for Hamming distance computation.
+///
+/// Provides hardware-accelerated XOR + popcount for variable-length
+/// binary vectors. Supports AVX2, native popcnt, and NEON.
+pub mod popcount;
+
 // NEON module - conditionally compiled for ARM64
 #[cfg(target_arch = "aarch64")]
 pub mod neon;
 
 pub use detect::{capabilities, warn_if_suboptimal, SimdCapabilities};
+pub use popcount::{scalar_popcount_xor, simd_popcount_xor};
 
 /// Available SIMD backends for runtime dispatch.
 ///

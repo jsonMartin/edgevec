@@ -18,7 +18,7 @@ use thiserror::Error;
 /// let error = MetadataError::KeyTooLong { length: 300, max: 256 };
 /// assert!(error.to_string().contains("300"));
 /// ```
-#[derive(Error, Debug, Clone, PartialEq)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum MetadataError {
     /// Metadata key cannot be empty.
     #[error("metadata key cannot be empty")]

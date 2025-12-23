@@ -6,12 +6,16 @@
 
 use super::config::HnswConfig;
 use super::neighbor::NeighborPool;
+use crate::metadata::{MetadataError, MetadataStore, MetadataValue};
+use crate::quantization::variable::BinaryVector;
+use crate::storage::binary::BinaryVectorStorage;
 use crate::storage::VectorStorage;
 use bytemuck::{Pod, Zeroable};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::vec::Vec;
 use thiserror::Error;
@@ -109,6 +113,37 @@ pub enum GraphError {
     /// Invalid configuration parameter.
     #[error("invalid config: {0}")]
     InvalidConfig(String),
+
+    /// Metadata validation failed (v0.6.0 - RFC-002).
+    ///
+    /// Returned when metadata fails validation during `insert_with_metadata()`.
+    /// The index remains unchanged when this error occurs.
+    #[error("metadata validation failed: {0}")]
+    MetadataValidation(#[from] MetadataError),
+
+    /// Filter parsing failed (v0.6.0 - RFC-002).
+    ///
+    /// Returned when a filter expression string cannot be parsed.
+    #[error("filter parse error: {0}")]
+    FilterParse(String),
+
+    /// Filter evaluation failed (v0.6.0 - RFC-002).
+    ///
+    /// Returned when a filter expression evaluation fails at runtime.
+    #[error("filter evaluation error: {0}")]
+    FilterEval(String),
+
+    /// Binary quantization is not enabled (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// Returned when attempting BQ operations on an index without BQ storage.
+    #[error("binary quantization is not enabled; use with_bq() or enable_bq() first")]
+    BqNotEnabled,
+
+    /// Binary quantization failed (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// Returned when vector quantization fails during BQ operations.
+    #[error("quantization error: {0}")]
+    Quantization(String),
 }
 
 /// Result of a compaction operation.
@@ -222,6 +257,27 @@ pub struct HnswIndex {
     /// Default: 0.3 (30% tombstones triggers compaction recommendation)
     #[serde(default = "default_compaction_threshold")]
     compaction_threshold: f64,
+
+    /// Integrated metadata storage (v0.6.0 - RFC-002)
+    ///
+    /// Stores key-value metadata attached to vectors. Thread-safe when all
+    /// contained types are `Send + Sync` (which they are for String/MetadataValue).
+    ///
+    /// Concurrent modification requires external synchronization, matching
+    /// the existing pattern for other HnswIndex operations.
+    #[serde(default)]
+    pub(crate) metadata: MetadataStore,
+
+    /// Binary quantization storage (v0.7.0 - RFC-002 Phase 2)
+    ///
+    /// Optional storage for binary quantized vectors. When enabled, vectors
+    /// are stored in both F32 and binary format. BQ provides 32x memory
+    /// reduction and 3-5x search speedup at the cost of some recall.
+    ///
+    /// Use `with_bq()` to create an index with BQ enabled, or `enable_bq()`
+    /// to add BQ support to an existing index.
+    #[serde(skip)]
+    pub(crate) bq_storage: Option<BinaryVectorStorage>,
 }
 
 /// Default compaction threshold (30%)
@@ -356,7 +412,216 @@ impl HnswIndex {
             rng,
             deleted_count: 0, // v0.3.0: No deleted nodes initially
             compaction_threshold: default_compaction_threshold(), // v0.3.0: Default 30%
+            metadata: MetadataStore::new(), // v0.6.0 RFC-002: Empty metadata store
+            bq_storage: None, // v0.7.0 RFC-002 Phase 2: BQ disabled by default
         })
+    }
+
+    /// Creates a new HNSW graph with pre-populated metadata (v0.6.0 - RFC-002).
+    ///
+    /// This constructor allows initializing the index with existing metadata,
+    /// useful for deserialization or migration scenarios.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - HNSW configuration parameters.
+    /// * `storage` - Vector storage to validate against.
+    /// * `metadata` - Pre-populated metadata store.
+    ///
+    /// # Errors
+    ///
+    /// Returns `GraphError::ConfigMismatch` if storage dimensions differ from config.
+    /// Returns `GraphError::InvalidConfig` if configuration parameters are invalid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::metadata::{MetadataStore, MetadataValue};
+    /// use edgevec::storage::VectorStorage;
+    ///
+    /// let config = HnswConfig::new(4);
+    /// let storage = VectorStorage::new(&config, None);
+    ///
+    /// let mut metadata = MetadataStore::new();
+    /// metadata.insert(1, "key", MetadataValue::String("value".into())).unwrap();
+    ///
+    /// let index = HnswIndex::with_metadata(config, &storage, metadata).unwrap();
+    /// assert!(index.metadata().has_key(1, "key"));
+    /// ```
+    pub fn with_metadata(
+        config: HnswConfig,
+        storage: &VectorStorage,
+        metadata: MetadataStore,
+    ) -> Result<Self, GraphError> {
+        if config.dimensions != storage.dimensions() {
+            return Err(GraphError::ConfigMismatch {
+                expected: storage.dimensions(),
+                actual: config.dimensions,
+            });
+        }
+
+        if config.m <= 1 {
+            return Err(GraphError::InvalidConfig(format!(
+                "m must be > 1, got {}",
+                config.m
+            )));
+        }
+        if config.m0 < config.m {
+            return Err(GraphError::InvalidConfig(format!(
+                "m0 must be >= m, got {} < {}",
+                config.m0, config.m
+            )));
+        }
+
+        let m_float = config.m as f32;
+        let level_mult = if m_float > 1.0 {
+            1.0 / m_float.ln()
+        } else {
+            0.0
+        };
+
+        let rng = ChaCha8Rng::seed_from_u64(42);
+
+        Ok(Self {
+            config,
+            nodes: Vec::new(),
+            neighbors: NeighborPool::new(),
+            entry_point: None,
+            max_layer: 0,
+            level_mult,
+            rng,
+            deleted_count: 0,
+            compaction_threshold: default_compaction_threshold(),
+            metadata, // Use provided metadata
+            bq_storage: None,
+        })
+    }
+
+    /// Creates a new index with binary quantization enabled (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// BQ provides 32x memory reduction and 3-5x search speedup at the cost of
+    /// some recall (which can be recovered via rescoring).
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - HNSW configuration parameters.
+    /// * `storage` - Vector storage to validate against.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if dimension is not divisible by 8 (required for binary packing).
+    /// Returns `GraphError::ConfigMismatch` if storage dimensions differ from config.
+    /// Returns `GraphError::InvalidConfig` if configuration parameters are invalid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::storage::VectorStorage;
+    ///
+    /// let config = HnswConfig::new(128); // 128D, divisible by 8
+    /// let storage = VectorStorage::new(&config, None);
+    /// let index = HnswIndex::with_bq(config, &storage).unwrap();
+    ///
+    /// assert!(index.has_bq());
+    /// ```
+    pub fn with_bq(config: HnswConfig, storage: &VectorStorage) -> Result<Self, GraphError> {
+        let dimension = config.dimensions as usize;
+
+        // Validate dimension is compatible with BQ (divisible by 8)
+        if dimension % 8 != 0 {
+            return Err(GraphError::InvalidConfig(format!(
+                "dimension must be divisible by 8 for binary quantization, got {dimension}"
+            )));
+        }
+
+        let mut index = Self::new(config, storage)?;
+
+        index.bq_storage = Some(
+            BinaryVectorStorage::new(dimension).map_err(|e| GraphError::Storage(e.to_string()))?,
+        );
+
+        Ok(index)
+    }
+
+    /// Enables binary quantization on an existing index (v0.7.0 - RFC-002 Phase 2).
+    ///
+    /// This creates a new BQ storage and quantizes all existing vectors.
+    /// Time complexity: O(n × d) where n = vector count, d = dimension.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - The F32 vector storage containing vectors to quantize.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if dimension is not divisible by 8.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::storage::VectorStorage;
+    ///
+    /// let config = HnswConfig::new(128);
+    /// let mut storage = VectorStorage::new(&config, None);
+    /// let mut index = HnswIndex::new(config, &storage).unwrap();
+    ///
+    /// // Insert some vectors
+    /// index.insert(&vec![1.0f32; 128], &mut storage).unwrap();
+    ///
+    /// // Enable BQ later
+    /// index.enable_bq(&storage).unwrap();
+    /// assert!(index.has_bq());
+    /// ```
+    pub fn enable_bq(&mut self, storage: &VectorStorage) -> Result<(), GraphError> {
+        let dimension = self.config.dimensions as usize;
+
+        if dimension % 8 != 0 {
+            return Err(GraphError::InvalidConfig(format!(
+                "dimension must be divisible by 8 for binary quantization, got {dimension}"
+            )));
+        }
+
+        let mut bq_storage =
+            BinaryVectorStorage::new(dimension).map_err(|e| GraphError::Storage(e.to_string()))?;
+
+        // Quantize all existing non-deleted vectors
+        for node in &self.nodes {
+            if node.deleted != 0 {
+                // Insert placeholder for deleted nodes to maintain ID alignment
+                let zeros = vec![0u8; dimension / 8];
+                bq_storage
+                    .insert_raw(&zeros)
+                    .map_err(|e| GraphError::Storage(e.to_string()))?;
+                continue;
+            }
+
+            let vector = storage.get_vector(node.vector_id);
+            let bv = BinaryVector::quantize(&vector)
+                .map_err(|e| GraphError::Quantization(e.to_string()))?;
+            bq_storage
+                .insert(&bv)
+                .map_err(|e| GraphError::Storage(e.to_string()))?;
+        }
+
+        self.bq_storage = Some(bq_storage);
+        Ok(())
+    }
+
+    /// Returns true if binary quantization is enabled.
+    #[must_use]
+    #[inline]
+    pub fn has_bq(&self) -> bool {
+        self.bq_storage.is_some()
+    }
+
+    /// Returns a reference to the BQ storage, if enabled.
+    #[must_use]
+    #[inline]
+    pub fn bq_storage(&self) -> Option<&BinaryVectorStorage> {
+        self.bq_storage.as_ref()
     }
 
     /// Generates a random level for a new node.
@@ -529,6 +794,294 @@ impl HnswIndex {
     }
 
     // ============================================================================
+    // Metadata API (v0.6.0 - RFC-002)
+    // ============================================================================
+
+    /// Returns an immutable reference to the metadata store.
+    ///
+    /// The metadata store contains key-value pairs attached to vectors.
+    /// Use this method to query metadata without modifying it.
+    ///
+    /// # Thread Safety
+    ///
+    /// `MetadataStore` is `Send + Sync` when all contained types are `Send + Sync`.
+    /// `String` and `MetadataValue` are both `Send + Sync`, so this is safe.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::storage::VectorStorage;
+    ///
+    /// let config = HnswConfig::new(4);
+    /// let storage = VectorStorage::new(&config, None);
+    /// let index = HnswIndex::new(config, &storage).unwrap();
+    ///
+    /// assert!(index.metadata().is_empty());
+    /// ```
+    #[must_use]
+    pub fn metadata(&self) -> &MetadataStore {
+        &self.metadata
+    }
+
+    /// Returns a mutable reference to the metadata store.
+    ///
+    /// Use this method to modify metadata attached to vectors.
+    ///
+    /// # Thread Safety
+    ///
+    /// Concurrent modification requires external synchronization (e.g., `Mutex`),
+    /// matching the existing pattern for other `HnswIndex` operations.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::metadata::MetadataValue;
+    /// use edgevec::storage::VectorStorage;
+    ///
+    /// let config = HnswConfig::new(4);
+    /// let storage = VectorStorage::new(&config, None);
+    /// let mut index = HnswIndex::new(config, &storage).unwrap();
+    ///
+    /// index.metadata_mut()
+    ///     .insert(1, "category", MetadataValue::String("books".into()))
+    ///     .unwrap();
+    ///
+    /// assert!(index.metadata().has_key(1, "category"));
+    /// ```
+    pub fn metadata_mut(&mut self) -> &mut MetadataStore {
+        &mut self.metadata
+    }
+
+    /// Inserts a vector with metadata atomically (v0.6.0 - RFC-002).
+    ///
+    /// This method validates metadata BEFORE inserting the vector, ensuring
+    /// that either both the vector and metadata are stored, or neither is.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - The vector storage to insert into.
+    /// * `vector` - The vector data (must match configured dimensions).
+    /// * `metadata` - Key-value metadata pairs to attach to the vector.
+    ///
+    /// # Returns
+    ///
+    /// The assigned `VectorId` on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns `GraphError::MetadataValidation` if metadata fails validation:
+    /// - More than 64 keys
+    /// - Key longer than 256 bytes
+    /// - String value longer than 64KB
+    /// - String array with more than 1024 elements
+    /// - Invalid key format (must be alphanumeric + underscore)
+    /// - Invalid float (NaN or Infinity)
+    ///
+    /// On error, the index remains unchanged (no partial state).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::metadata::MetadataValue;
+    /// use edgevec::storage::VectorStorage;
+    /// use std::collections::HashMap;
+    ///
+    /// let config = HnswConfig::new(4);
+    /// let mut storage = VectorStorage::new(&config, None);
+    /// let mut index = HnswIndex::new(config, &storage).unwrap();
+    ///
+    /// let mut metadata = HashMap::new();
+    /// metadata.insert("category".to_string(), MetadataValue::String("books".into()));
+    /// metadata.insert("price".to_string(), MetadataValue::Float(29.99));
+    ///
+    /// let vector_id = index.insert_with_metadata(
+    ///     &mut storage,
+    ///     &[1.0, 2.0, 3.0, 4.0],
+    ///     metadata,
+    /// ).unwrap();
+    ///
+    /// // Note: VectorId is u64, but metadata uses u32 IDs
+    /// #[allow(clippy::cast_possible_truncation)]
+    /// let meta_id = vector_id.0 as u32;
+    /// assert!(index.metadata().has_key(meta_id, "category"));
+    /// ```
+    pub fn insert_with_metadata(
+        &mut self,
+        storage: &mut VectorStorage,
+        vector: &[f32],
+        metadata: HashMap<String, MetadataValue>,
+    ) -> Result<VectorId, GraphError> {
+        use crate::metadata::validation::{validate_key_value, MAX_KEYS_PER_VECTOR};
+
+        // Step 1: Validate metadata BEFORE any mutation
+        // Check key count limit
+        if metadata.len() > MAX_KEYS_PER_VECTOR {
+            return Err(GraphError::MetadataValidation(MetadataError::TooManyKeys {
+                vector_id: 0, // Unknown yet
+                count: metadata.len(),
+                max: MAX_KEYS_PER_VECTOR,
+            }));
+        }
+
+        // Validate each key-value pair
+        for (key, value) in &metadata {
+            validate_key_value(key, value)?;
+        }
+
+        // Step 2: Insert vector (this is atomic — either succeeds or fails)
+        let vector_id = self.insert(vector, storage)?;
+
+        // Step 3: Store metadata for the newly inserted vector
+        // This cannot fail because we pre-validated everything
+        // Note: VectorId is u64 but MetadataStore uses u32. In practice,
+        // vector IDs won't exceed u32::MAX (4B vectors).
+        #[allow(clippy::cast_possible_truncation)]
+        let metadata_id = vector_id.0 as u32;
+
+        for (key, value) in metadata {
+            // We've already validated, so insert should succeed
+            self.metadata
+                .insert(metadata_id, &key, value)
+                .expect("pre-validated metadata should not fail");
+        }
+
+        Ok(vector_id)
+    }
+
+    // ============================================================================
+    // Filtered Search API (W26.2.3 - RFC-002)
+    // ============================================================================
+
+    /// Search with post-filtering using metadata expressions.
+    ///
+    /// Performs a vector similarity search and filters results based on a
+    /// metadata filter expression. Uses adaptive overfetch to ensure enough
+    /// results pass the filter.
+    ///
+    /// # Arguments
+    ///
+    /// * `storage` - The vector storage
+    /// * `query` - The query vector
+    /// * `filter` - Filter expression (e.g., `"category = \"books\" AND price < 100"`)
+    /// * `k` - Number of results to return
+    ///
+    /// # Returns
+    ///
+    /// Up to `k` results that pass the filter, sorted by distance (ascending).
+    /// May return fewer than `k` results if not enough vectors pass the filter.
+    ///
+    /// # Errors
+    ///
+    /// * `GraphError::FilterParse` - Invalid filter syntax
+    /// * `GraphError::FilterEval` - Filter evaluation failed
+    /// * Other `GraphError` variants from underlying search
+    ///
+    /// # Algorithm (RFC-002 §3.2)
+    ///
+    /// 1. Parse filter expression
+    /// 2. Use default selectivity = 0.50 (refined in W26.3.1)
+    /// 3. Calculate overfetch_factor = min(10, max(2, 1 / selectivity))
+    /// 4. Search with `k * overfetch_factor` candidates
+    /// 5. Post-filter results using metadata evaluation
+    /// 6. Return top-k passing results
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::hnsw::{HnswConfig, HnswIndex};
+    /// use edgevec::storage::VectorStorage;
+    /// use edgevec::metadata::MetadataValue;
+    /// use std::collections::HashMap;
+    ///
+    /// let config = HnswConfig::new(4);
+    /// let mut storage = VectorStorage::new(&config, None);
+    /// let mut index = HnswIndex::new(config, &storage).unwrap();
+    ///
+    /// // Insert vectors with metadata
+    /// let mut meta = HashMap::new();
+    /// meta.insert("category".to_string(), MetadataValue::String("books".into()));
+    /// meta.insert("price".to_string(), MetadataValue::Integer(25));
+    /// let _ = index.insert_with_metadata(&mut storage, &[1.0, 0.0, 0.0, 0.0], meta);
+    ///
+    /// // Search with filter
+    /// let results = index.search_filtered(
+    ///     &storage,
+    ///     &[1.0, 0.0, 0.0, 0.0],
+    ///     "category = \"books\" AND price < 100",
+    ///     5,
+    /// ).unwrap();
+    /// ```
+    pub fn search_filtered(
+        &self,
+        storage: &VectorStorage,
+        query: &[f32],
+        filter: &str,
+        k: usize,
+    ) -> Result<Vec<(VectorId, f32)>, GraphError> {
+        use crate::filter::{
+            estimate_filter_selectivity, evaluate, overfetch_from_selectivity, parse,
+        };
+
+        // Step 1: Parse filter expression
+        let expr = parse(filter).map_err(|e| GraphError::FilterParse(e.to_string()))?;
+
+        // Step 2: Estimate selectivity using heuristics (W26.3.1)
+        let selectivity = estimate_filter_selectivity(&expr);
+
+        // Step 3: Calculate overfetch factor from selectivity
+        let overfetch_factor = overfetch_from_selectivity(selectivity);
+
+        // Step 4: Search with overfetched k
+        let overfetched_k = k.saturating_mul(overfetch_factor);
+        let candidates = self.search(query, overfetched_k, storage)?;
+
+        // Step 5: Post-filter results
+        let mut passing_results = Vec::with_capacity(k);
+
+        for result in candidates {
+            // Get metadata for this vector
+            #[allow(clippy::cast_possible_truncation)]
+            let metadata_id = result.vector_id.0 as u32;
+
+            // Get all metadata for this vector (empty HashMap if none)
+            let metadata = self
+                .metadata
+                .get_all(metadata_id)
+                .cloned()
+                .unwrap_or_default();
+
+            // Evaluate filter
+            match evaluate(&expr, &metadata) {
+                Ok(true) => {
+                    passing_results.push((result.vector_id, result.distance));
+                    if passing_results.len() >= k {
+                        break;
+                    }
+                }
+                Ok(false) => {
+                    // Filter didn't match, skip
+                }
+                Err(e) => {
+                    // Filter evaluation error (e.g., type mismatch)
+                    // Per RFC-002: treat as filter failure, skip this result
+                    // In production, we might want to log this
+                    log::debug!(
+                        "Filter evaluation failed for vector {}: {}",
+                        result.vector_id.0,
+                        e
+                    );
+                }
+            }
+        }
+
+        // Step 6: Return results (already sorted by distance from search)
+        Ok(passing_results)
+    }
+
+    // ============================================================================
     // Soft Delete API (W16.2 - RFC-001)
     // ============================================================================
 
@@ -613,6 +1166,14 @@ impl HnswIndex {
 
         node.deleted = 1;
         self.deleted_count += 1;
+
+        // RFC-002 §2.3: Remove metadata when vector is soft-deleted
+        // Note: VectorId is u64 but MetadataStore uses u32. In practice,
+        // vector IDs won't exceed u32::MAX (4B vectors).
+        #[allow(clippy::cast_possible_truncation)]
+        let metadata_id = vector_id.0 as u32;
+        self.metadata.delete_all(metadata_id);
+
         Ok(true)
     }
 

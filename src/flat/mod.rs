@@ -136,6 +136,12 @@ impl BinaryFlatIndex {
     /// # Returns
     ///
     /// Vector of search results sorted by distance (ascending).
+    ///
+    /// # Panics
+    ///
+    /// Panics if query length doesn't match `bytes_per_vector()`.
+    #[must_use]
+    #[allow(clippy::missing_panics_doc)]
     pub fn search(&self, query: &[u8], k: usize) -> Vec<FlatSearchResult> {
         assert_eq!(
             query.len(),
@@ -194,8 +200,11 @@ impl BinaryFlatIndex {
     ///
     /// The vector bytes, or None if ID is out of bounds.
     #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     pub fn get(&self, id: VectorId) -> Option<&[u8]> {
         // IDs are 1-based, so subtract 1 to get 0-based index
+        // SAFETY: VectorId.0 is u64 but in practice never exceeds usize::MAX
+        // on any supported platform (WASM32 or x86_64).
         let idx = (id.0 as usize).checked_sub(1)?;
         if idx >= self.count {
             return None;

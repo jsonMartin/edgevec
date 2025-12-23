@@ -70,4 +70,7 @@ pub use filtered_search::{
     FilteredSearchError, FilteredSearchResult, FilteredSearcher, VectorMetadataStore,
 };
 pub use parser::parse;
-pub use strategy::{estimate_selectivity, FilterStrategy, MetadataStore, SelectivityEstimate};
+pub use strategy::{
+    estimate_filter_selectivity, estimate_selectivity, overfetch_from_selectivity, FilterStrategy,
+    MetadataStore, SelectivityEstimate,
+};

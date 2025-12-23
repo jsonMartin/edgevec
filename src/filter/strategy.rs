@@ -332,6 +332,176 @@ pub fn select_strategy(selectivity: f32) -> FilterStrategy {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// HEURISTIC SELECTIVITY ESTIMATION (W26.3.1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Selectivity heuristics for common filter patterns.
+///
+/// These are empirically-derived estimates based on typical data distributions.
+mod selectivity_heuristics {
+    /// Equality filter: highly selective (~10% match)
+    pub const EQUALITY: f64 = 0.10;
+    /// Not-equals: inverse of equality (~90% match)
+    pub const NOT_EQUALS: f64 = 0.90;
+    /// Strict range (<, >): moderately selective (~30% match)
+    pub const RANGE_STRICT: f64 = 0.30;
+    /// Inclusive range (<=, >=): slightly less selective (~35% match)
+    pub const RANGE_INCLUSIVE: f64 = 0.35;
+    /// String contains: moderately selective (~20% match)
+    pub const CONTAINS: f64 = 0.20;
+    /// String starts/ends with: moderately selective (~15% match)
+    pub const PREFIX_SUFFIX: f64 = 0.15;
+    /// In array: depends on array size, use moderate (~25% match)
+    pub const IN_ARRAY: f64 = 0.25;
+    /// Between range: moderate (~20% match)
+    pub const BETWEEN: f64 = 0.20;
+    /// Is null check: highly selective (~5% match)
+    pub const IS_NULL: f64 = 0.05;
+    /// Is not null: inverse (~95% match)
+    pub const IS_NOT_NULL: f64 = 0.95;
+    /// Unknown/default: conservative estimate (~50% match)
+    pub const DEFAULT: f64 = 0.50;
+}
+
+/// Estimates filter selectivity based on AST structure (W26.3.1).
+///
+/// This is a **heuristic-based** estimation that analyzes the filter expression
+/// without requiring access to actual data. Useful for quick overfetch calculation.
+///
+/// # Selectivity Semantics
+///
+/// - `0.0` = No vectors pass (very selective, few results)
+/// - `1.0` = All vectors pass (not selective, all results)
+///
+/// # Heuristics
+///
+/// | Filter Type | Selectivity | Rationale |
+/// |:------------|:------------|:----------|
+/// | `=` | 0.10 | Equality highly selective |
+/// | `!=` | 0.90 | Inverse of equality |
+/// | `<`, `>` | 0.30 | Range moderately selective |
+/// | `<=`, `>=` | 0.35 | Inclusive range slightly broader |
+/// | `CONTAINS` | 0.20 | Substring match moderately selective |
+/// | `AND` | product | Independent probabilities multiply |
+/// | `OR` | sum - product | Union formula P(A∪B) = P(A) + P(B) - P(A∩B) |
+/// | `NOT` | 1 - inner | Complement |
+///
+/// # Arguments
+///
+/// * `filter` - The parsed filter expression
+///
+/// # Returns
+///
+/// Estimated selectivity in range [0.0, 1.0]
+///
+/// # Example
+///
+/// ```rust
+/// use edgevec::filter::{parse, strategy::estimate_filter_selectivity};
+///
+/// // Equality is selective (~10%)
+/// let filter = parse("category = \"books\"").unwrap();
+/// assert!((estimate_filter_selectivity(&filter) - 0.10).abs() < 0.01);
+///
+/// // AND multiplies selectivities
+/// let filter = parse("category = \"books\" AND price < 100").unwrap();
+/// let selectivity = estimate_filter_selectivity(&filter);
+/// assert!(selectivity < 0.05); // 0.10 * 0.30 = 0.03
+/// ```
+#[must_use]
+pub fn estimate_filter_selectivity(filter: &FilterExpr) -> f64 {
+    use selectivity_heuristics::{
+        BETWEEN, CONTAINS, DEFAULT, EQUALITY, IN_ARRAY, IS_NOT_NULL, IS_NULL, NOT_EQUALS,
+        PREFIX_SUFFIX, RANGE_INCLUSIVE, RANGE_STRICT,
+    };
+
+    match filter {
+        // Comparison operators
+        FilterExpr::Eq(_, _) => EQUALITY,
+        FilterExpr::Ne(_, _) => NOT_EQUALS,
+        FilterExpr::Lt(_, _) | FilterExpr::Gt(_, _) => RANGE_STRICT,
+        FilterExpr::Le(_, _) | FilterExpr::Ge(_, _) => RANGE_INCLUSIVE,
+
+        // String operators (LIKE is similar to CONTAINS)
+        FilterExpr::Contains(_, _) | FilterExpr::Like(_, _) => CONTAINS,
+        FilterExpr::StartsWith(_, _) | FilterExpr::EndsWith(_, _) => PREFIX_SUFFIX,
+
+        // Array operators (Any/All/None/In have similar selectivity)
+        FilterExpr::In(_, _)
+        | FilterExpr::Any(_, _)
+        | FilterExpr::All(_, _)
+        | FilterExpr::None(_, _) => IN_ARRAY,
+        FilterExpr::NotIn(_, _) => 1.0 - IN_ARRAY,
+
+        // Range operator
+        FilterExpr::Between(_, _, _) => BETWEEN,
+
+        // Null checks
+        FilterExpr::IsNull(_) => IS_NULL,
+        FilterExpr::IsNotNull(_) => IS_NOT_NULL,
+
+        // Logical operators
+        FilterExpr::And(left, right) => {
+            // P(A ∩ B) = P(A) × P(B) (assuming independence)
+            let left_sel = estimate_filter_selectivity(left);
+            let right_sel = estimate_filter_selectivity(right);
+            left_sel * right_sel
+        }
+        FilterExpr::Or(left, right) => {
+            // P(A ∪ B) = P(A) + P(B) - P(A ∩ B)
+            let left_sel = estimate_filter_selectivity(left);
+            let right_sel = estimate_filter_selectivity(right);
+            (left_sel + right_sel - left_sel * right_sel).min(1.0)
+        }
+        FilterExpr::Not(inner) => {
+            // P(¬A) = 1 - P(A)
+            1.0 - estimate_filter_selectivity(inner)
+        }
+
+        // Literals and field references (not real filters, use default)
+        FilterExpr::LiteralString(_)
+        | FilterExpr::LiteralInt(_)
+        | FilterExpr::LiteralFloat(_)
+        | FilterExpr::LiteralBool(_)
+        | FilterExpr::LiteralArray(_)
+        | FilterExpr::Field(_) => DEFAULT,
+    }
+}
+
+/// Calculate overfetch factor from selectivity (W26.3.1).
+///
+/// Formula: `min(10, max(2, ceil(1 / selectivity)))`
+///
+/// # Arguments
+///
+/// * `selectivity` - Estimated fraction of vectors passing (0.0 to 1.0)
+///
+/// # Returns
+///
+/// Overfetch factor as usize, always in range [2, 10].
+///
+/// # Example
+///
+/// ```rust
+/// use edgevec::filter::strategy::overfetch_from_selectivity;
+///
+/// assert_eq!(overfetch_from_selectivity(1.0), 2);   // High selectivity = min overfetch
+/// assert_eq!(overfetch_from_selectivity(0.50), 2);  // 50% = 2x
+/// assert_eq!(overfetch_from_selectivity(0.25), 4);  // 25% = 4x
+/// assert_eq!(overfetch_from_selectivity(0.10), 10); // 10% = 10x (capped)
+/// assert_eq!(overfetch_from_selectivity(0.01), 10); // 1% = capped at 10
+/// ```
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+pub fn overfetch_from_selectivity(selectivity: f64) -> usize {
+    if selectivity <= 0.0 {
+        return 10; // Maximum overfetch for zero selectivity
+    }
+    let factor = (1.0 / selectivity).ceil().clamp(2.0, 10.0);
+    factor as usize
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // METADATA STORE TRAIT
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -16,10 +16,15 @@ use wasm_bindgen::prelude::*;
 mod batch;
 pub mod filter;
 mod iterator;
+mod memory;
 mod metadata;
 
 pub use batch::{BatchInsertConfig, BatchInsertResult};
 pub use iterator::PersistenceIterator;
+pub use memory::{
+    track_batch_insert, track_vector_insert, MemoryConfig, MemoryPressure, MemoryPressureLevel,
+    MemoryRecommendation,
+};
 pub use metadata::JsMetadataValue;
 
 /// Interface to the JavaScript IndexedDB backend.
@@ -124,6 +129,51 @@ pub enum MetricType {
     Hamming = 3,
 }
 
+/// Index type for EdgeVec.
+///
+/// Determines the search algorithm and performance characteristics.
+///
+/// ## Performance Comparison
+///
+/// | Index Type | Insert | Search (1M) | Recall | Best For |
+/// |------------|--------|-------------|--------|----------|
+/// | Flat       | O(1) ~1μs | O(n) ~5-10ms | 100% (exact) | Real-time apps, <1M vectors |
+/// | HNSW       | O(log n) ~2ms | O(log n) ~2ms | 90-95% | Large datasets, batch insert |
+///
+/// ## Example (JavaScript)
+///
+/// ```javascript
+/// import { EdgeVecConfig, IndexType } from 'edgevec';
+///
+/// // Create a flat index for insert-heavy workloads
+/// const config = new EdgeVecConfig(1024);
+/// config.indexType = IndexType.Flat;
+///
+/// // Create an HNSW index for large-scale search (default)
+/// const hnswConfig = new EdgeVecConfig(1024);
+/// hnswConfig.indexType = IndexType.Hnsw; // This is the default
+/// ```
+#[wasm_bindgen]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum JsIndexType {
+    /// Brute force search (O(1) insert, O(n) search).
+    ///
+    /// Best for:
+    /// - Insert-heavy workloads (semantic caching)
+    /// - Datasets < 1M vectors
+    /// - When 100% recall (exact search) is required
+    Flat = 0,
+
+    /// HNSW graph index (O(log n) insert, O(log n) search).
+    ///
+    /// Best for:
+    /// - Large datasets (>1M vectors)
+    /// - Read-heavy workloads
+    /// - When approximate nearest neighbors is acceptable
+    #[default]
+    Hnsw = 1,
+}
+
 /// Configuration for EdgeVec database.
 #[wasm_bindgen]
 pub struct EdgeVecConfig {
@@ -135,6 +185,7 @@ pub struct EdgeVecConfig {
     ef_search: Option<u32>,
     metric: Option<String>,
     vector_type: Option<VectorType>,
+    index_type: Option<JsIndexType>,
 }
 
 #[wasm_bindgen]
@@ -151,6 +202,7 @@ impl EdgeVecConfig {
             ef_search: None,
             metric: None,
             vector_type: None,
+            index_type: None, // Defaults to HNSW
         }
     }
 
@@ -228,6 +280,47 @@ impl EdgeVecConfig {
     pub fn vector_type(&self) -> Option<VectorType> {
         self.vector_type
     }
+
+    /// Set the index type (Flat or HNSW).
+    ///
+    /// - `Flat`: Brute force search (O(1) insert, O(n) search). Best for insert-heavy
+    ///   workloads, datasets < 1M vectors, or when 100% recall is required.
+    /// - `HNSW`: Graph-based search (O(log n) insert, O(log n) search). Best for
+    ///   large datasets and read-heavy workloads.
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// // For insert-heavy workloads (semantic caching)
+    /// const config = new EdgeVecConfig(1024);
+    /// config.indexType = IndexType.Flat;
+    ///
+    /// // For large-scale search (default)
+    /// const config2 = new EdgeVecConfig(1024);
+    /// config2.indexType = IndexType.Hnsw;
+    /// ```
+    #[wasm_bindgen(setter)]
+    pub fn set_index_type(&mut self, index_type: JsIndexType) {
+        self.index_type = Some(index_type);
+    }
+
+    /// Get the configured index type.
+    #[wasm_bindgen(getter)]
+    pub fn index_type(&self) -> JsIndexType {
+        self.index_type.unwrap_or_default()
+    }
+
+    /// Check if this configuration uses a Flat index.
+    #[wasm_bindgen(js_name = "isFlat")]
+    pub fn is_flat(&self) -> bool {
+        matches!(self.index_type, Some(JsIndexType::Flat))
+    }
+
+    /// Check if this configuration uses an HNSW index (default).
+    #[wasm_bindgen(js_name = "isHnsw")]
+    pub fn is_hnsw(&self) -> bool {
+        !self.is_flat()
+    }
 }
 
 /// The main EdgeVec database handle.
@@ -252,6 +345,9 @@ pub struct EdgeVec {
     /// Metadata store for attaching key-value pairs to vectors.
     #[serde(default)]
     metadata: MetadataStore,
+    /// Memory pressure configuration (skipped during serialization).
+    #[serde(skip, default)]
+    memory_config: MemoryConfig,
     /// Safety guard for iterators (skipped during serialization).
     #[serde(skip, default = "default_liveness")]
     liveness: Arc<AtomicBool>,
@@ -327,6 +423,7 @@ impl EdgeVec {
             inner: index,
             storage,
             metadata: MetadataStore::new(),
+            memory_config: MemoryConfig::default(),
             liveness: Arc::new(AtomicBool::new(true)),
         })
     }
@@ -368,10 +465,14 @@ impl EdgeVec {
             );
         }
 
+        // insert() automatically handles BQ storage when enabled (via insert_impl Step 6)
         let id = self
             .inner
             .insert(&vec, &mut self.storage)
             .map_err(EdgeVecError::from)?;
+
+        // Track memory allocation for memory pressure monitoring
+        track_vector_insert(self.inner.config.dimensions);
 
         // Safety: VectorId is u64, we cast to u32 as requested by API.
         if id.0 > u64::from(u32::MAX) {
@@ -783,6 +884,11 @@ impl EdgeVec {
         };
 
         // Convert strategy
+        // NOTE: For binary search, the strategy is always forced to PreFilter internally.
+        // PostFilter and Hybrid could miss top-K results because binary search returns
+        // a fixed candidate set based on Hamming distance. PreFilter ensures all matching
+        // vectors are considered before ranking by Hamming distance.
+        // The strategy parameter is accepted for API compatibility but ignored.
         let strategy = match options.strategy.as_deref() {
             Some("pre") => FilterStrategy::PreFilter,
             Some("post") => FilterStrategy::PostFilter {
@@ -798,7 +904,7 @@ impl EdgeVec {
         // Create metadata store adapter
         let metadata_adapter = EdgeVecMetadataAdapter::new(&self.metadata, self.inner.len());
 
-        // Execute filtered binary search
+        // Execute filtered binary search (always uses PreFilter internally)
         let mut searcher = FilteredSearcher::new(&self.inner, &self.storage, &metadata_adapter);
         let result = searcher
             .search_binary_filtered(&query_vec, k, filter.as_ref(), strategy)
@@ -908,6 +1014,7 @@ impl EdgeVec {
             // Safety: bounds checked by logic above (vec_data len == count * dim)
             let vector_slice = &vec_data[start..end];
 
+            // insert() automatically handles BQ storage when enabled (via insert_impl Step 6)
             let id = self
                 .inner
                 .insert(vector_slice, &mut self.storage)
@@ -920,6 +1027,9 @@ impl EdgeVec {
             }
             ids.push(id.0 as u32);
         }
+
+        // Track memory allocation for the batch
+        track_batch_insert(count, self.inner.config.dimensions);
 
         Ok(Uint32Array::from(&ids[..]))
     }
@@ -1766,6 +1876,654 @@ impl EdgeVec {
     }
 
     // =========================================================================
+    // COMBINED INSERT + METADATA API (v0.6.0 — Week 28 RFC-002)
+    // =========================================================================
+
+    /// Insert a vector with associated metadata in a single operation.
+    ///
+    /// This is a convenience method that combines `insert()` and `setMetadata()`
+    /// into a single atomic operation. The vector is inserted first, then all
+    /// metadata key-value pairs are attached to it.
+    ///
+    /// # Arguments
+    ///
+    /// * `vector` - A Float32Array containing the vector data
+    /// * `metadata` - A JavaScript object with string keys and metadata values
+    ///   - Supported value types: `string`, `number`, `boolean`, `string[]`
+    ///   - Numbers are automatically detected as integer or float
+    ///
+    /// # Returns
+    ///
+    /// The assigned Vector ID (u32).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Vector dimensions mismatch the index configuration
+    /// - Vector contains NaN or Infinity values
+    /// - Metadata key is invalid (empty, too long, or contains invalid characters)
+    /// - Metadata value is invalid (NaN float, string too long, etc.)
+    /// - Too many metadata keys (>64 per vector)
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const id = index.insertWithMetadata(
+    ///     new Float32Array([0.1, 0.2, 0.3, ...]),
+    ///     {
+    ///         category: "news",
+    ///         score: 0.95,
+    ///         active: true,
+    ///         tags: ["featured", "trending"]
+    ///     }
+    /// );
+    /// console.log(`Inserted vector with ID: ${id}`);
+    /// ```
+    #[wasm_bindgen(js_name = "insertWithMetadata")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn insert_with_metadata(
+        &mut self,
+        vector: Float32Array,
+        metadata_js: JsValue,
+    ) -> Result<u32, JsValue> {
+        // Validate vector dimension
+        let len = vector.length();
+        if len != self.inner.config.dimensions {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: self.inner.config.dimensions as usize,
+                actual: len as usize,
+            })
+            .into());
+        }
+
+        let vec = vector.to_vec();
+
+        #[cfg(debug_assertions)]
+        if vec.iter().any(|v| !v.is_finite()) {
+            return Err(
+                EdgeVecError::Validation("Vector contains non-finite values".to_string()).into(),
+            );
+        }
+
+        // Parse JavaScript object into HashMap<String, MetadataValue>
+        let metadata = parse_js_metadata_object(&metadata_js)?;
+
+        // Use the core insert_with_metadata method
+        let id = self
+            .inner
+            .insert_with_metadata(&mut self.storage, &vec, metadata)
+            .map_err(EdgeVecError::from)?;
+
+        // Track memory allocation for memory pressure monitoring
+        track_vector_insert(self.inner.config.dimensions);
+
+        // Safety: VectorId is u64, we cast to u32 as requested by API.
+        if id.0 > u64::from(u32::MAX) {
+            return Err(EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into());
+        }
+        Ok(id.0 as u32)
+    }
+
+    /// Search with metadata filter expression (simplified API).
+    ///
+    /// This is a simplified version of `searchFiltered()` that takes the filter
+    /// expression directly as a string instead of JSON options.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - A Float32Array containing the query vector
+    /// * `filter` - Filter expression string (e.g., 'category == "news" AND score > 0.5')
+    /// * `k` - Number of results to return
+    ///
+    /// # Returns
+    ///
+    /// An array of search result objects: `[{ id: number, distance: number }, ...]`
+    ///
+    /// # Filter Syntax
+    ///
+    /// - Comparison: `field == value`, `field != value`, `field > value`, etc.
+    /// - Logical: `expr AND expr`, `expr OR expr`, `NOT expr`
+    /// - Grouping: `(expr)`
+    /// - Array contains: `field CONTAINS value`
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Query dimensions mismatch
+    /// - Filter expression is invalid
+    /// - k is 0
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const results = index.searchWithFilter(
+    ///     new Float32Array([0.1, 0.2, ...]),
+    ///     'category == "news" AND score > 0.5',
+    ///     10
+    /// );
+    /// for (const r of results) {
+    ///     console.log(`ID: ${r.id}, Distance: ${r.distance}`);
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = "searchWithFilter")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_with_filter(
+        &mut self,
+        query: Float32Array,
+        filter: &str,
+        k: usize,
+    ) -> Result<JsValue, JsValue> {
+        use crate::filter::{parse, FilterStrategy, FilteredSearcher};
+
+        // Validate k
+        if k == 0 {
+            return Err(JsValue::from_str("k must be greater than 0"));
+        }
+
+        // Validate query dimensions
+        let len = query.length();
+        if len != self.inner.config.dimensions {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: self.inner.config.dimensions as usize,
+                actual: len as usize,
+            })
+            .into());
+        }
+
+        let query_vec = query.to_vec();
+        if query_vec.iter().any(|v| !v.is_finite()) {
+            return Err(EdgeVecError::Validation(
+                "Query vector contains non-finite values".to_string(),
+            )
+            .into());
+        }
+
+        // Parse filter expression
+        let filter_expr = parse(filter).map_err(|e| filter::filter_error_to_jsvalue(&e))?;
+
+        // Create metadata store adapter
+        let metadata_adapter = EdgeVecMetadataAdapter::new(&self.metadata, self.inner.len());
+
+        // Execute filtered search with auto strategy
+        let mut searcher = FilteredSearcher::new(&self.inner, &self.storage, &metadata_adapter);
+        let result = searcher
+            .search_filtered(&query_vec, k, Some(&filter_expr), FilterStrategy::Auto)
+            .map_err(|e| JsValue::from_str(&format!("Search failed: {e}")))?;
+
+        // Convert results to JavaScript array
+        let arr = Array::new_with_length(result.results.len() as u32);
+        for (i, r) in result.results.iter().enumerate() {
+            let obj = Object::new();
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("id"),
+                &JsValue::from(r.vector_id.0 as u32),
+            )?;
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("distance"),
+                &JsValue::from(r.distance),
+            )?;
+            arr.set(i as u32, obj.into());
+        }
+
+        Ok(arr.into())
+    }
+
+    /// Get all metadata for a vector by ID (alias for getAllMetadata).
+    ///
+    /// This is an alias for `getAllMetadata()` provided for API consistency
+    /// with the new RFC-002 metadata API.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The vector ID to look up
+    ///
+    /// # Returns
+    ///
+    /// A JavaScript object with all metadata key-value pairs, or `undefined`
+    /// if the vector has no metadata or doesn't exist.
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const id = index.insertWithMetadata(vector, { category: 'news' });
+    /// const meta = index.getVectorMetadata(id);
+    /// console.log(meta.category); // 'news'
+    /// ```
+    #[wasm_bindgen(js_name = "getVectorMetadata")]
+    #[must_use]
+    pub fn get_vector_metadata(&self, id: u32) -> JsValue {
+        metadata::metadata_to_js_object(&self.metadata, id)
+    }
+
+    // =========================================================================
+    // BINARY QUANTIZATION SEARCH API (v0.6.0 — Week 28 RFC-002)
+    // =========================================================================
+
+    /// Search using binary quantization (fast, approximate).
+    ///
+    /// Binary quantization converts vectors to bit arrays (1 bit per dimension)
+    /// and uses Hamming distance for comparison. This provides:
+    /// - ~32x memory reduction
+    /// - ~3-5x faster search
+    /// - ~70-85% recall (use `searchBQRescored` for higher recall)
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - A Float32Array containing the query vector
+    /// * `k` - Number of results to return
+    ///
+    /// # Returns
+    ///
+    /// An array of search result objects: `[{ id: number, distance: number }, ...]`
+    /// where distance is a similarity score (higher is more similar).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Binary quantization is not enabled on this index
+    /// - Query dimensions mismatch
+    /// - k is 0
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// // Fast search, lower recall
+    /// const results = index.searchBQ(new Float32Array([0.1, 0.2, ...]), 10);
+    /// for (const r of results) {
+    ///     console.log(`ID: ${r.id}, Similarity: ${r.distance}`);
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = "searchBQ")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_bq(&self, query: Float32Array, k: usize) -> Result<JsValue, JsValue> {
+        // Validate k
+        if k == 0 {
+            return Err(JsValue::from_str("k must be greater than 0"));
+        }
+
+        // Validate query dimensions
+        let len = query.length();
+        if len != self.inner.config.dimensions {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: self.inner.config.dimensions as usize,
+                actual: len as usize,
+            })
+            .into());
+        }
+
+        let query_vec = query.to_vec();
+        if query_vec.iter().any(|v| !v.is_finite()) {
+            return Err(EdgeVecError::Validation(
+                "Query vector contains non-finite values".to_string(),
+            )
+            .into());
+        }
+
+        // Execute BQ search
+        let results = self
+            .inner
+            .search_bq(&query_vec, k, &self.storage)
+            .map_err(EdgeVecError::from)?;
+
+        // Convert results to JavaScript array
+        let arr = Array::new_with_length(results.len() as u32);
+        for (i, (vector_id, similarity)) in results.iter().enumerate() {
+            let obj = Object::new();
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("id"),
+                &JsValue::from(vector_id.0 as u32),
+            )?;
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("distance"),
+                &JsValue::from(*similarity),
+            )?;
+            arr.set(i as u32, obj.into());
+        }
+
+        Ok(arr.into())
+    }
+
+    /// Search using BQ with F32 rescoring (fast + accurate).
+    ///
+    /// This method combines BQ speed with F32 accuracy:
+    /// 1. Uses BQ to quickly find `k * rescoreFactor` candidates
+    /// 2. Rescores candidates using exact F32 distance
+    /// 3. Returns the final top-k results
+    ///
+    /// This provides near-F32 recall (~95%) with most of the BQ speedup.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - A Float32Array containing the query vector
+    /// * `k` - Number of results to return
+    /// * `rescore_factor` - Overfetch multiplier (3-10 recommended)
+    ///
+    /// # Returns
+    ///
+    /// An array of search result objects: `[{ id: number, distance: number }, ...]`
+    /// where distance is a similarity score (higher is more similar).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Binary quantization is not enabled on this index
+    /// - Query dimensions mismatch
+    /// - k or rescore_factor is 0
+    ///
+    /// # Rescore Factor Guide
+    ///
+    /// | Factor | Recall | Relative Speed |
+    /// |--------|--------|----------------|
+    /// | 1      | ~70%   | 5x             |
+    /// | 3      | ~90%   | 3x             |
+    /// | 5      | ~95%   | 2.5x           |
+    /// | 10     | ~98%   | 2x             |
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// // Fast search with high recall (~95%)
+    /// const results = index.searchBQRescored(
+    ///     new Float32Array([0.1, 0.2, ...]),
+    ///     10,  // k
+    ///     5    // rescore factor
+    /// );
+    /// ```
+    #[wasm_bindgen(js_name = "searchBQRescored")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_bq_rescored(
+        &self,
+        query: Float32Array,
+        k: usize,
+        rescore_factor: usize,
+    ) -> Result<JsValue, JsValue> {
+        // Validate k
+        if k == 0 {
+            return Err(JsValue::from_str("k must be greater than 0"));
+        }
+
+        // Validate rescore_factor
+        if rescore_factor == 0 {
+            return Err(JsValue::from_str("rescoreFactor must be greater than 0"));
+        }
+
+        // Validate query dimensions
+        let len = query.length();
+        if len != self.inner.config.dimensions {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: self.inner.config.dimensions as usize,
+                actual: len as usize,
+            })
+            .into());
+        }
+
+        let query_vec = query.to_vec();
+        if query_vec.iter().any(|v| !v.is_finite()) {
+            return Err(EdgeVecError::Validation(
+                "Query vector contains non-finite values".to_string(),
+            )
+            .into());
+        }
+
+        // Execute BQ rescored search
+        let results = self
+            .inner
+            .search_bq_rescored(&query_vec, k, rescore_factor, &self.storage)
+            .map_err(EdgeVecError::from)?;
+
+        // Convert results to JavaScript array
+        let arr = Array::new_with_length(results.len() as u32);
+        for (i, (vector_id, similarity)) in results.iter().enumerate() {
+            let obj = Object::new();
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("id"),
+                &JsValue::from(vector_id.0 as u32),
+            )?;
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("distance"),
+                &JsValue::from(*similarity),
+            )?;
+            arr.set(i as u32, obj.into());
+        }
+
+        Ok(arr.into())
+    }
+
+    /// Hybrid search combining BQ speed with metadata filtering.
+    ///
+    /// This is the most flexible search method, combining:
+    /// - Binary quantization for speed
+    /// - Metadata filtering for precision
+    /// - Optional F32 rescoring for accuracy
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - A Float32Array containing the query vector
+    /// * `options` - A JavaScript object with search options:
+    ///   - `k` (required): Number of results to return
+    ///   - `filter` (optional): Filter expression string
+    ///   - `useBQ` (optional, default true): Use binary quantization
+    ///   - `rescoreFactor` (optional, default 3): Overfetch multiplier
+    ///
+    /// # Returns
+    ///
+    /// An array of search result objects: `[{ id: number, distance: number }, ...]`
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Options is not a valid object
+    /// - k is 0 or missing
+    /// - Filter expression is invalid
+    /// - Query dimensions mismatch
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const results = index.searchHybrid(
+    ///     new Float32Array([0.1, 0.2, ...]),
+    ///     {
+    ///         k: 10,
+    ///         filter: 'category == "news" AND score > 0.5',
+    ///         useBQ: true,
+    ///         rescoreFactor: 3
+    ///     }
+    /// );
+    /// ```
+    #[wasm_bindgen(js_name = "searchHybrid")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_hybrid(
+        &mut self,
+        query: Float32Array,
+        options: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        use crate::filter::{parse, FilterStrategy, FilteredSearcher};
+
+        // Parse options
+        let opts = parse_hybrid_search_options(&options)?;
+
+        // Validate k
+        if opts.k == 0 {
+            return Err(JsValue::from_str("k must be greater than 0"));
+        }
+
+        // Validate query dimensions
+        let len = query.length();
+        if len != self.inner.config.dimensions {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: self.inner.config.dimensions as usize,
+                actual: len as usize,
+            })
+            .into());
+        }
+
+        let query_vec = query.to_vec();
+        if query_vec.iter().any(|v| !v.is_finite()) {
+            return Err(EdgeVecError::Validation(
+                "Query vector contains non-finite values".to_string(),
+            )
+            .into());
+        }
+
+        // Determine search strategy
+        let use_bq = opts.use_bq && self.inner.bq_storage.is_some();
+        let rescore_factor = opts.rescore_factor.max(1);
+
+        // Execute appropriate search based on options
+        let results: Vec<(crate::hnsw::VectorId, f32)> = if use_bq {
+            if let Some(ref filter_str) = opts.filter {
+                // BQ + filter + rescore: Use filtered search with BQ candidates
+                let filter_expr =
+                    parse(filter_str).map_err(|e| filter::filter_error_to_jsvalue(&e))?;
+
+                // Get BQ candidates with overfetch
+                let overfetch_k = opts.k.saturating_mul(rescore_factor);
+                let bq_candidates = self
+                    .inner
+                    .search_bq(&query_vec, overfetch_k, &self.storage)
+                    .map_err(EdgeVecError::from)?;
+
+                // Filter candidates using metadata
+                let empty_map = std::collections::HashMap::new();
+                let mut filtered: Vec<_> = bq_candidates
+                    .into_iter()
+                    .filter(|(vid, _)| {
+                        let metadata = self.metadata.get_all(vid.0 as u32).unwrap_or(&empty_map);
+                        crate::filter::evaluate(&filter_expr, metadata).unwrap_or(false)
+                    })
+                    .take(opts.k)
+                    .collect();
+
+                // Rescore filtered candidates with F32 if we have enough
+                if !filtered.is_empty() {
+                    use super::hnsw::rescore::rescore_top_k;
+                    let rescored = rescore_top_k(
+                        &filtered,
+                        &query_vec,
+                        &self.storage,
+                        opts.k.min(filtered.len()),
+                    );
+                    filtered = rescored
+                        .into_iter()
+                        .map(|(id, dist)| (id, 1.0 / (1.0 + dist)))
+                        .collect();
+                }
+
+                filtered
+            } else {
+                // BQ only (no filter)
+                self.inner
+                    .search_bq_rescored(&query_vec, opts.k, rescore_factor, &self.storage)
+                    .map_err(EdgeVecError::from)?
+            }
+        } else if let Some(ref filter_str) = opts.filter {
+            // F32 + filter (no BQ)
+            let filter_expr = parse(filter_str).map_err(|e| filter::filter_error_to_jsvalue(&e))?;
+            let metadata_adapter = EdgeVecMetadataAdapter::new(&self.metadata, self.inner.len());
+            let mut searcher = FilteredSearcher::new(&self.inner, &self.storage, &metadata_adapter);
+            let result = searcher
+                .search_filtered(&query_vec, opts.k, Some(&filter_expr), FilterStrategy::Auto)
+                .map_err(|e| JsValue::from_str(&format!("Search failed: {e}")))?;
+            result
+                .results
+                .into_iter()
+                .map(|r| (r.vector_id, r.distance))
+                .collect()
+        } else {
+            // Pure F32 search (no BQ, no filter)
+            let search_results = self
+                .inner
+                .search(&query_vec, opts.k, &self.storage)
+                .map_err(EdgeVecError::from)?;
+            search_results
+                .into_iter()
+                .map(|r| (r.vector_id, r.distance))
+                .collect()
+        };
+
+        // Convert results to JavaScript array
+        let arr = Array::new_with_length(results.len() as u32);
+        for (i, (vector_id, distance)) in results.iter().enumerate() {
+            let obj = Object::new();
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("id"),
+                &JsValue::from(vector_id.0 as u32),
+            )?;
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("distance"),
+                &JsValue::from(*distance),
+            )?;
+            arr.set(i as u32, obj.into());
+        }
+
+        Ok(arr.into())
+    }
+
+    /// Check if binary quantization is enabled on this index.
+    ///
+    /// # Returns
+    ///
+    /// `true` if BQ is enabled and ready for use, `false` otherwise.
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// if (index.hasBQ()) {
+    ///     const results = index.searchBQ(query, 10);
+    /// } else {
+    ///     const results = index.search(query, 10);
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = "hasBQ")]
+    #[must_use]
+    pub fn has_bq(&self) -> bool {
+        self.inner.bq_storage.is_some()
+    }
+
+    /// Enables binary quantization on this index.
+    ///
+    /// Binary quantization reduces memory usage by 32x (from 32 bits to 1 bit per dimension)
+    /// while maintaining ~85-95% recall. BQ is automatically enabled for dimensions divisible by 8.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Dimensions are not divisible by 8 (required for BQ)
+    /// - BQ is already enabled
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const db = new EdgeVec(config);
+    /// db.enableBQ();  // Enable BQ for faster search
+    ///
+    /// // Insert vectors (BQ codes computed automatically)
+    /// db.insert(vector);
+    ///
+    /// // Use BQ search
+    /// const results = db.searchBQ(query, 10);
+    /// ```
+    #[wasm_bindgen(js_name = "enableBQ")]
+    pub fn enable_bq(&mut self) -> Result<(), JsValue> {
+        self.inner
+            .enable_bq(&self.storage)
+            .map_err(|e| EdgeVecError::from(e).into())
+    }
+
+    // =========================================================================
     // FILTERED SEARCH API (v0.5.0 — Week 23)
     // =========================================================================
 
@@ -1945,6 +2703,218 @@ impl EdgeVec {
         serde_json::to_string(&response)
             .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
     }
+
+    // =========================================================================
+    // MEMORY PRESSURE API (v0.6.0 — Week 28 RFC-002)
+    // =========================================================================
+
+    /// Get current memory pressure state.
+    ///
+    /// Returns memory usage statistics and pressure level.
+    /// Use this to implement graceful degradation in your app.
+    ///
+    /// # Returns
+    ///
+    /// MemoryPressure object with:
+    /// - `level`: "normal", "warning", or "critical"
+    /// - `usedBytes`: Bytes currently allocated
+    /// - `totalBytes`: Total WASM heap size
+    /// - `usagePercent`: Usage as percentage (0-100)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails (should not happen in practice).
+    ///
+    /// # Thresholds
+    ///
+    /// - Normal: <80% usage
+    /// - Warning: 80-95% usage (consider reducing data)
+    /// - Critical: >95% usage (risk of OOM, stop inserts)
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const pressure = index.getMemoryPressure();
+    /// if (pressure.level === 'warning') {
+    ///     console.warn('Memory pressure high, consider compacting');
+    ///     index.compact();
+    /// } else if (pressure.level === 'critical') {
+    ///     console.error('Memory critical, stopping inserts');
+    ///     // Disable insert button, show warning to user
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = "getMemoryPressure")]
+    pub fn get_memory_pressure(&self) -> Result<JsValue, JsValue> {
+        let pressure = MemoryPressure::current_with_thresholds(
+            self.memory_config.warning_threshold,
+            self.memory_config.critical_threshold,
+        );
+        serde_wasm_bindgen::to_value(&pressure).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Configure memory pressure thresholds.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - MemoryConfig object with optional fields:
+    ///   - `warningThreshold`: Warning threshold percentage (default: 80)
+    ///   - `criticalThreshold`: Critical threshold percentage (default: 95)
+    ///   - `autoCompactOnWarning`: Auto-compact when warning threshold reached
+    ///   - `blockInsertsOnCritical`: Block inserts when critical threshold reached
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `config` is not a valid MemoryConfig object
+    /// - `warningThreshold` is not between 0 and 100
+    /// - `criticalThreshold` is not between 0 and 100
+    /// - `warningThreshold` is greater than or equal to `criticalThreshold`
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// index.setMemoryConfig({
+    ///     warningThreshold: 70,
+    ///     criticalThreshold: 90,
+    ///     autoCompactOnWarning: true,
+    ///     blockInsertsOnCritical: true
+    /// });
+    /// ```
+    #[wasm_bindgen(js_name = "setMemoryConfig")]
+    pub fn set_memory_config(&mut self, config: JsValue) -> Result<(), JsValue> {
+        let config: MemoryConfig = serde_wasm_bindgen::from_value(config)
+            .map_err(|e| JsValue::from_str(&format!("Invalid config: {e}")))?;
+
+        // Validate thresholds
+        if config.warning_threshold <= 0.0 || config.warning_threshold >= 100.0 {
+            return Err(JsValue::from_str(
+                "warningThreshold must be between 0 and 100",
+            ));
+        }
+        if config.critical_threshold <= 0.0 || config.critical_threshold >= 100.0 {
+            return Err(JsValue::from_str(
+                "criticalThreshold must be between 0 and 100",
+            ));
+        }
+        if config.warning_threshold >= config.critical_threshold {
+            return Err(JsValue::from_str(
+                "warningThreshold must be less than criticalThreshold",
+            ));
+        }
+
+        self.memory_config = config;
+        Ok(())
+    }
+
+    /// Check if inserts are allowed based on memory pressure.
+    ///
+    /// Returns `false` if memory is at critical level and
+    /// `blockInsertsOnCritical` is enabled.
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// if (index.canInsert()) {
+    ///     const id = index.insert(vector);
+    /// } else {
+    ///     console.warn('Memory critical, insert blocked');
+    ///     showMemoryWarning();
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = "canInsert")]
+    #[must_use]
+    pub fn can_insert(&self) -> bool {
+        if !self.memory_config.block_inserts_on_critical {
+            return true;
+        }
+
+        let pressure = MemoryPressure::current_with_thresholds(
+            self.memory_config.warning_threshold,
+            self.memory_config.critical_threshold,
+        );
+        pressure.level != MemoryPressureLevel::Critical
+    }
+
+    /// Get memory recommendation based on current state.
+    ///
+    /// Provides actionable guidance based on memory pressure level.
+    ///
+    /// # Returns
+    ///
+    /// MemoryRecommendation object with:
+    /// - `action`: "none", "compact", or "reduce"
+    /// - `message`: Human-readable description
+    /// - `canInsert`: Whether inserts are allowed
+    /// - `suggestCompact`: Whether compaction would help
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails (should not happen in practice).
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const rec = index.getMemoryRecommendation();
+    /// if (rec.action === 'compact' && rec.suggestCompact) {
+    ///     index.compact();
+    /// } else if (rec.action === 'reduce') {
+    ///     showMemoryWarning(rec.message);
+    ///     disableInsertButton();
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = "getMemoryRecommendation")]
+    pub fn get_memory_recommendation(&self) -> Result<JsValue, JsValue> {
+        let pressure = MemoryPressure::current_with_thresholds(
+            self.memory_config.warning_threshold,
+            self.memory_config.critical_threshold,
+        );
+
+        let needs_compaction = self.inner.needs_compaction();
+
+        let recommendation = match pressure.level {
+            MemoryPressureLevel::Normal => MemoryRecommendation {
+                action: "none".to_string(),
+                message: "Memory usage is healthy.".to_string(),
+                can_insert: true,
+                suggest_compact: needs_compaction,
+            },
+            MemoryPressureLevel::Warning => MemoryRecommendation {
+                action: "compact".to_string(),
+                message: format!(
+                    "Memory usage at {:.1}%. Consider running compact() to free deleted vectors.",
+                    pressure.usage_percent
+                ),
+                can_insert: true,
+                suggest_compact: needs_compaction,
+            },
+            MemoryPressureLevel::Critical => MemoryRecommendation {
+                action: "reduce".to_string(),
+                message: format!(
+                    "Memory usage critical at {:.1}%. Inserts blocked. Run compact() or delete vectors.",
+                    pressure.usage_percent
+                ),
+                can_insert: !self.memory_config.block_inserts_on_critical,
+                suggest_compact: true,
+            },
+        };
+
+        serde_wasm_bindgen::to_value(&recommendation).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Get the current memory configuration.
+    ///
+    /// # Returns
+    ///
+    /// MemoryConfig object with current settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if serialization fails (should not happen in practice).
+    #[wasm_bindgen(js_name = "getMemoryConfig")]
+    pub fn get_memory_config(&self) -> Result<JsValue, JsValue> {
+        serde_wasm_bindgen::to_value(&self.memory_config)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
 }
 
 /// Result of a compaction operation (v0.3.0).
@@ -2066,8 +3036,9 @@ impl<'a> EdgeVecMetadataAdapter<'a> {
 impl crate::filter::MetadataStore for EdgeVecMetadataAdapter<'_> {
     #[allow(clippy::cast_possible_truncation)]
     fn get_metadata(&self, id: usize) -> Option<&HashMap<String, MetadataValue>> {
-        // EdgeVec uses u32 for vector IDs, cast from usize
-        self.store.get_all(id as u32)
+        // Filter uses 0-indexed iteration (0..total), but VectorId is 1-indexed.
+        // Add 1 to convert from filter's 0-based index to VectorId's 1-based ID.
+        self.store.get_all((id + 1) as u32)
     }
 
     fn len(&self) -> usize {
@@ -2324,4 +3295,196 @@ impl BinaryFlatVec {
     pub fn shrink_to_fit(&mut self) {
         self.inner.shrink_to_fit();
     }
+}
+
+// =============================================================================
+// HELPER FUNCTIONS FOR METADATA PARSING (Week 28 RFC-002)
+// =============================================================================
+
+/// Maximum safe integer in JavaScript (2^53 - 1).
+const JS_MAX_SAFE_INT: f64 = 9_007_199_254_740_991.0;
+
+/// Minimum safe integer in JavaScript (-(2^53 - 1)).
+const JS_MIN_SAFE_INT: f64 = -9_007_199_254_740_991.0;
+
+/// Parse a JavaScript object into a HashMap<String, MetadataValue>.
+///
+/// Automatically detects value types:
+/// - String → MetadataValue::String
+/// - Number (integer) → MetadataValue::Integer
+/// - Number (float) → MetadataValue::Float
+/// - Boolean → MetadataValue::Boolean
+/// - Array of strings → MetadataValue::StringArray
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The input is not a valid JavaScript object
+/// - A value has an unsupported type
+/// - An array contains non-string elements
+#[allow(clippy::cast_possible_truncation)]
+fn parse_js_metadata_object(js_obj: &JsValue) -> Result<HashMap<String, MetadataValue>, JsValue> {
+    use js_sys::Object as JsObject;
+
+    // Check if it's an object
+    if !js_obj.is_object() {
+        return Err(JsValue::from_str("Metadata must be a JavaScript object"));
+    }
+
+    let obj = JsObject::try_from(js_obj)
+        .ok_or_else(|| JsValue::from_str("Failed to convert metadata to JavaScript object"))?;
+
+    let mut metadata = HashMap::new();
+
+    // Get all enumerable property keys
+    let keys = JsObject::keys(obj);
+
+    for i in 0..keys.length() {
+        let key_js = keys.get(i);
+        let key = key_js
+            .as_string()
+            .ok_or_else(|| JsValue::from_str("Metadata key must be a string"))?;
+
+        let value_js = Reflect::get(obj, &key_js)?;
+        let value = parse_js_metadata_value(&key, &value_js)?;
+
+        metadata.insert(key, value);
+    }
+
+    Ok(metadata)
+}
+
+/// Parse a single JavaScript value into MetadataValue.
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_precision_loss)]
+fn parse_js_metadata_value(key: &str, value: &JsValue) -> Result<MetadataValue, JsValue> {
+    // Check for null/undefined
+    if value.is_null() || value.is_undefined() {
+        return Err(JsValue::from_str(&format!(
+            "Metadata value for key '{key}' cannot be null or undefined"
+        )));
+    }
+
+    // Check for string
+    if let Some(s) = value.as_string() {
+        return Ok(MetadataValue::String(s));
+    }
+
+    // Check for boolean
+    if let Some(b) = value.as_bool() {
+        return Ok(MetadataValue::Boolean(b));
+    }
+
+    // Check for number
+    if let Some(n) = value.as_f64() {
+        if !n.is_finite() {
+            return Err(JsValue::from_str(&format!(
+                "Metadata value for key '{key}' must be finite (not NaN or Infinity)"
+            )));
+        }
+
+        // Detect if it's an integer (no fractional part)
+        // Use JavaScript safe integer bounds for precision safety
+        if n.fract() == 0.0 && (JS_MIN_SAFE_INT..=JS_MAX_SAFE_INT).contains(&n) {
+            return Ok(MetadataValue::Integer(n as i64));
+        }
+        return Ok(MetadataValue::Float(n));
+    }
+
+    // Check for array (string array)
+    if js_sys::Array::is_array(value) {
+        let arr = js_sys::Array::from(value);
+        let mut strings = Vec::with_capacity(arr.length() as usize);
+
+        for i in 0..arr.length() {
+            let item = arr.get(i);
+            let s = item.as_string().ok_or_else(|| {
+                JsValue::from_str(&format!(
+                    "Metadata array for key '{key}' must contain only strings, found non-string at index {i}"
+                ))
+            })?;
+            strings.push(s);
+        }
+
+        return Ok(MetadataValue::StringArray(strings));
+    }
+
+    Err(JsValue::from_str(&format!(
+        "Unsupported metadata value type for key '{key}'. Supported types: string, number, boolean, string[]"
+    )))
+}
+
+// =============================================================================
+// HELPER FUNCTIONS FOR BQ HYBRID SEARCH (Week 28 RFC-002)
+// =============================================================================
+
+/// Options for hybrid BQ search.
+struct HybridSearchOptions {
+    /// Number of results to return.
+    k: usize,
+    /// Optional filter expression.
+    filter: Option<String>,
+    /// Whether to use binary quantization (default: true).
+    use_bq: bool,
+    /// Rescore factor for BQ (default: 3).
+    rescore_factor: usize,
+}
+
+/// Parse hybrid search options from a JavaScript object.
+///
+/// Expected object shape:
+/// ```javascript
+/// {
+///     k: 10,                    // required
+///     filter: 'category == "news"',  // optional
+///     useBQ: true,              // optional, default true
+///     rescoreFactor: 3          // optional, default 3
+/// }
+/// ```
+#[allow(clippy::cast_possible_truncation)]
+#[allow(clippy::cast_sign_loss)]
+fn parse_hybrid_search_options(options: &JsValue) -> Result<HybridSearchOptions, JsValue> {
+    if !options.is_object() {
+        return Err(JsValue::from_str(
+            "Options must be a JavaScript object with at least { k: number }",
+        ));
+    }
+
+    // Get k (required)
+    let k_js = Reflect::get(options, &JsValue::from_str("k"))?;
+    let k = k_js
+        .as_f64()
+        .ok_or_else(|| JsValue::from_str("Options.k is required and must be a positive number"))?
+        as usize;
+
+    // Get filter (optional)
+    let filter_js = Reflect::get(options, &JsValue::from_str("filter"))?;
+    let filter = if filter_js.is_undefined() || filter_js.is_null() {
+        None
+    } else {
+        filter_js.as_string()
+    };
+
+    // Get useBQ (optional, default true)
+    let use_bq_js = Reflect::get(options, &JsValue::from_str("useBQ"))?;
+    let use_bq = if use_bq_js.is_undefined() || use_bq_js.is_null() {
+        true
+    } else {
+        use_bq_js.as_bool().unwrap_or(true)
+    };
+
+    // Get rescoreFactor (optional, default 3)
+    let rescore_factor_js = Reflect::get(options, &JsValue::from_str("rescoreFactor"))?;
+    let rescore_factor = if rescore_factor_js.is_undefined() || rescore_factor_js.is_null() {
+        3
+    } else {
+        rescore_factor_js.as_f64().unwrap_or(3.0) as usize
+    };
+
+    Ok(HybridSearchOptions {
+        k,
+        filter,
+        use_bq,
+        rescore_factor,
+    })
 }

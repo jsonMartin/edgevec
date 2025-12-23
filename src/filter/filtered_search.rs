@@ -614,27 +614,21 @@ impl<'idx, 'sto, 'meta, M: MetadataStore> FilteredSearcher<'idx, 'sto, 'meta, M>
             return Ok(result);
         }
 
-        // Determine actual strategy (resolve Auto)
-        let actual_strategy = match strategy {
-            FilterStrategy::Auto => {
-                let estimate = estimate_selectivity(filter, self.metadata, Some(42));
-                select_strategy(estimate.selectivity)
-            }
-            other => other,
-        };
+        // IMPORTANT: For binary vectors, ALWAYS use PreFilter strategy.
+        //
+        // Rationale: PostFilter and Hybrid strategies could miss top-K results
+        // because binary search returns a fixed candidate set based on Hamming
+        // distance. If we filter AFTER search, high-quality matches might be
+        // excluded from the initial candidate set.
+        //
+        // PreFilter ensures all matching vectors are considered before ranking
+        // by Hamming distance, guaranteeing correct top-K results.
+        //
+        // The `strategy` parameter is accepted for API compatibility but ignored
+        // for binary search - PreFilter is always used.
+        let _ = strategy; // Explicitly ignore - always use PreFilter for binary
 
-        // Execute appropriate strategy
-        match actual_strategy {
-            FilterStrategy::PreFilter => self.search_binary_prefilter(query, k, filter),
-            FilterStrategy::PostFilter { oversample } => {
-                self.search_binary_postfilter(query, k, filter, oversample)
-            }
-            FilterStrategy::Hybrid {
-                oversample_min,
-                oversample_max,
-            } => self.search_binary_hybrid(query, k, filter, oversample_min, oversample_max),
-            FilterStrategy::Auto => unreachable!("Auto already resolved above"),
-        }
+        self.search_binary_prefilter(query, k, filter)
     }
 
     /// Handle binary filter edge cases before executing search.
@@ -735,6 +729,11 @@ impl<'idx, 'sto, 'meta, M: MetadataStore> FilteredSearcher<'idx, 'sto, 'meta, M>
     }
 
     /// Binary PostFilter strategy: search with oversampling, then filter results.
+    ///
+    /// NOTE: This function is not currently used because binary search with metadata
+    /// filtering always uses PreFilter (see search_binary_filtered). Kept for potential
+    /// future use in testing or specialized scenarios.
+    #[allow(dead_code)]
     fn search_binary_postfilter(
         &mut self,
         query: &[u8],
@@ -792,6 +791,11 @@ impl<'idx, 'sto, 'meta, M: MetadataStore> FilteredSearcher<'idx, 'sto, 'meta, M>
     }
 
     /// Binary Hybrid strategy: estimate selectivity, adapt oversample.
+    ///
+    /// NOTE: This function is not currently used because binary search with metadata
+    /// filtering always uses PreFilter (see search_binary_filtered). Kept for potential
+    /// future use in testing or specialized scenarios.
+    #[allow(dead_code)]
     fn search_binary_hybrid(
         &mut self,
         query: &[u8],
