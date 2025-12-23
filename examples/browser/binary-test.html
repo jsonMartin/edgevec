@@ -483,16 +483,38 @@
             const selectedDims = parseInt(document.getElementById('dimensions').value);
             const selectedBytes = selectedDims / 8;
 
-            // Update header stats with benchmark parameters
-            updateStats(numVectors, selectedDims);
-
             log('Running SIMD benchmark...', 'cyan');
+            setStatus('busy', 'Generating vectors...');
 
-            // Yield to UI
+            // Generate vectors in JS (same path as real usage)
+            const vectors = [];
+            const tempIndex = new BinaryFlatVec(selectedDims);
+            for (let i = 0; i < numVectors; i++) {
+                const v = new Uint8Array(selectedBytes);
+                crypto.getRandomValues(v);
+                vectors.push(v);
+                tempIndex.insert(v);
+
+                // Yield periodically for large datasets
+                if (i > 0 && i % 5000 === 0) {
+                    setStatus('busy', `Generating: ${i.toLocaleString()}/${numVectors.toLocaleString()}`);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            // Create query vector
+            const query = new Uint8Array(selectedBytes);
+            crypto.getRandomValues(query);
+
+            // Update stats with actual memory from temp index
+            updateStats(numVectors, selectedDims, tempIndex);
+            log(`Generated ${numVectors.toLocaleString()} vectors (${tempIndex.memoryUsage().toLocaleString()} bytes actual)`, 'green');
+
+            setStatus('busy', 'Benchmarking...');
             await new Promise(r => setTimeout(r, 50));
 
-            // Run the batch benchmark with global numVectors
-            const result = JSON.parse(benchmarkHammingBatch(numVectors, selectedBytes, iterations));
+            // Run the batch benchmark with JS-created vectors (real usage path)
+            const result = JSON.parse(benchmarkHammingBatch(vectors, query, iterations));
 
             // Collect micro-benchmark data for table
             const microIterations = 50000;

@@ -1799,10 +1799,16 @@ export function benchmarkHamming(bytes: number, iterations: number): number;
 /**
  * Batch benchmark: Compare SIMD implementations searching through N vectors.
  *
- * This is a more realistic benchmark that simulates searching through a dataset:
- * - Creates `num_vectors` random binary vectors
- * - For each iteration, computes hamming distance from a query to ALL vectors
+ * This is a realistic benchmark that simulates searching through a dataset:
+ * - Accepts vectors from JavaScript (same path as real insertions)
+ * - For each iteration, computes hamming distance from query to ALL vectors
  * - Compares new WASM SIMD128 vs current scalar fallback
+ *
+ * # Arguments
+ *
+ * * `vectors_js` - Array of Uint8Array vectors (created in JavaScript)
+ * * `query_js` - Query vector as Uint8Array
+ * * `iterations` - Number of full scans to perform
  *
  * Returns JSON with throughput metrics:
  * ```json
@@ -1818,7 +1824,7 @@ export function benchmarkHamming(bytes: number, iterations: number): number;
  * }
  * ```
  */
-export function benchmarkHammingBatch(num_vectors: number, bytes_per_vector: number, iterations: number): string;
+export function benchmarkHammingBatch(vectors_js: Array<any>, query_js: Uint8Array, iterations: number): string;
 
 /**
  * Side-by-side benchmark: New WASM SIMD128 vs Current runtime dispatcher.
@@ -2087,9 +2093,9 @@ export interface InitOutput {
   readonly binaryflatvec_clear: (a: number) => void;
   readonly binaryflatvec_shrinkToFit: (a: number) => void;
   readonly edgevec_getVectorMetadata: (a: number, b: number) => number;
-  readonly __wasm_bindgen_func_elem_1900: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_1885: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_2440: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_1898: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_1883: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_2439: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;

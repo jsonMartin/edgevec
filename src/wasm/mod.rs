@@ -189,10 +189,16 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
 
 /// Batch benchmark: Compare SIMD implementations searching through N vectors.
 ///
-/// This is a more realistic benchmark that simulates searching through a dataset:
-/// - Creates `num_vectors` random binary vectors
-/// - For each iteration, computes hamming distance from a query to ALL vectors
+/// This is a realistic benchmark that simulates searching through a dataset:
+/// - Accepts vectors from JavaScript (same path as real insertions)
+/// - For each iteration, computes hamming distance from query to ALL vectors
 /// - Compares new WASM SIMD128 vs current scalar fallback
+///
+/// # Arguments
+///
+/// * `vectors_js` - Array of Uint8Array vectors (created in JavaScript)
+/// * `query_js` - Query vector as Uint8Array
+/// * `iterations` - Number of full scans to perform
 ///
 /// Returns JSON with throughput metrics:
 /// ```json
@@ -209,23 +215,23 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
 /// ```
 #[wasm_bindgen(js_name = "benchmarkHammingBatch")]
 pub fn benchmark_hamming_batch(
-    num_vectors: usize,
-    bytes_per_vector: usize,
+    vectors_js: &js_sys::Array,
+    query_js: Uint8Array,
     iterations: usize,
 ) -> String {
     use crate::simd::popcount::simd_popcount_xor;
 
-    // Create dataset of N random vectors
-    let vectors: Vec<Vec<u8>> = (0..num_vectors)
-        .map(|i| {
-            (0..bytes_per_vector)
-                .map(|j| ((i * 17 + j * 31) as u8).wrapping_add((i ^ j) as u8))
-                .collect()
-        })
+    // Convert JS vectors to Rust - same path as real insertions
+    let vectors: Vec<Vec<u8>> = vectors_js
+        .iter()
+        .map(|v| Uint8Array::from(v).to_vec())
         .collect();
 
-    // Create query vector
-    let query: Vec<u8> = (0..bytes_per_vector).map(|i| (i * 13 + 47) as u8).collect();
+    let num_vectors = vectors.len();
+    let bytes_per_vector = if num_vectors > 0 { vectors[0].len() } else { 0 };
+
+    // Convert query vector
+    let query: Vec<u8> = query_js.to_vec();
 
     let perf = web_sys::window().and_then(|w| w.performance());
 

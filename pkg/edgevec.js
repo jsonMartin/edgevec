@@ -17,6 +17,12 @@ function _assertClass(instance, klass) {
     }
 }
 
+function addBorrowedObject(obj) {
+    if (stack_pointer == 1) throw new Error('out of js stack');
+    heap[--stack_pointer] = obj;
+    return stack_pointer;
+}
+
 const CLOSURE_DTORS = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(state => state.dtor(state.a, state.b));
@@ -254,6 +260,8 @@ function passStringToWasm0(arg, malloc, realloc) {
     return ptr;
 }
 
+let stack_pointer = 128;
+
 function takeObject(idx) {
     const ret = getObject(idx);
     dropObject(idx);
@@ -289,12 +297,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_1900(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_1900(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1898(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1898(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_2440(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_2440(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_2439(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_2439(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -3343,10 +3351,16 @@ export function benchmarkHamming(bytes, iterations) {
 /**
  * Batch benchmark: Compare SIMD implementations searching through N vectors.
  *
- * This is a more realistic benchmark that simulates searching through a dataset:
- * - Creates `num_vectors` random binary vectors
- * - For each iteration, computes hamming distance from a query to ALL vectors
+ * This is a realistic benchmark that simulates searching through a dataset:
+ * - Accepts vectors from JavaScript (same path as real insertions)
+ * - For each iteration, computes hamming distance from query to ALL vectors
  * - Compares new WASM SIMD128 vs current scalar fallback
+ *
+ * # Arguments
+ *
+ * * `vectors_js` - Array of Uint8Array vectors (created in JavaScript)
+ * * `query_js` - Query vector as Uint8Array
+ * * `iterations` - Number of full scans to perform
  *
  * Returns JSON with throughput metrics:
  * ```json
@@ -3361,17 +3375,17 @@ export function benchmarkHamming(bytes, iterations) {
  *   "current_throughput": "2.9M vec/s"
  * }
  * ```
- * @param {number} num_vectors
- * @param {number} bytes_per_vector
+ * @param {Array<any>} vectors_js
+ * @param {Uint8Array} query_js
  * @param {number} iterations
  * @returns {string}
  */
-export function benchmarkHammingBatch(num_vectors, bytes_per_vector, iterations) {
+export function benchmarkHammingBatch(vectors_js, query_js, iterations) {
     let deferred1_0;
     let deferred1_1;
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.benchmarkHammingBatch(retptr, num_vectors, bytes_per_vector, iterations);
+        wasm.benchmarkHammingBatch(retptr, addBorrowedObject(vectors_js), addHeapObject(query_js), iterations);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         deferred1_0 = r0;
@@ -3379,6 +3393,7 @@ export function benchmarkHammingBatch(num_vectors, bytes_per_vector, iterations)
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
+        heap[stack_pointer++] = undefined;
         wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
     }
 }
@@ -3899,7 +3914,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_2440(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_2439(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -4062,7 +4077,7 @@ function __wbg_get_imports() {
     };
     imports.wbg.__wbindgen_cast_f1c9170db27db6a8 = function(arg0, arg1) {
         // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [Externref], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1885, __wasm_bindgen_func_elem_1900);
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1883, __wasm_bindgen_func_elem_1898);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_object_clone_ref = function(arg0) {
