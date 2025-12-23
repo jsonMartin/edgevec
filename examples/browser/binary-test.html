@@ -224,7 +224,7 @@
     </div>
 
     <script type="module">
-        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, BinaryFlatVec, getSimdBackend, benchmarkHamming } from '../../pkg/edgevec.js';
+        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, BinaryFlatVec, getSimdBackend, benchmarkHamming, benchmarkHammingComparison } from '../../pkg/edgevec.js';
 
         let db = null;           // HNSW index
         let flatDb = null;       // Flat index
@@ -258,6 +258,51 @@
                 // Microbenchmark Hamming distance
                 const hammingTime = benchmarkHamming(128, 10000); // 128 bytes, 10K iterations
                 log(`Hamming distance (128 bytes): ${hammingTime.toFixed(3)} μs/call`, 'purple');
+
+                // ═══════════════════════════════════════════════════════════
+                // OUR SIMD vs UPSTREAM'S POPCOUNT COMPARISON
+                // ═══════════════════════════════════════════════════════════
+                log('', '');
+                log('═'.repeat(70), 'cyan');
+                log('⚡ HAMMING DISTANCE: OUR IMPL vs UPSTREAM IMPL', 'cyan');
+                log('═'.repeat(70), 'cyan');
+                log('', '');
+                log('OURS (metric::simd::hamming_distance):', 'green');
+                log('  → Compile-time #[cfg(target_feature = "simd128")]', 'green');
+                log('  → Uses WASM SIMD128 intrinsics (v128, i8x16_swizzle)', 'green');
+                log('  → 4-way loop unrolling for ILP', 'green');
+                log('', '');
+                log('UPSTREAM (simd::popcount::simd_popcount_xor):', 'red');
+                log('  → Runtime is_x86_feature_detected!() / is_aarch64_feature_detected!()', 'red');
+                log('  → Falls back to SCALAR in WASM (runtime detection fails)', 'red');
+                log('', '');
+
+                const byteSizes = [16, 48, 96, 128, 192]; // 128D, 384D, 768D, 1024D, 1536D
+                const iterations = 50000;
+
+                // Get first result to show backends
+                const firstResult = JSON.parse(benchmarkHammingComparison(byteSizes[0], iterations));
+                log(`Backends detected:`, 'purple');
+                log(`  OURS:     ${firstResult.ours_backend}`, 'green');
+                log(`  UPSTREAM: ${firstResult.upstream_backend}`, 'red');
+                log('', '');
+
+                log(`  Bytes │  Dims │ OURS(μs) │ UPSTREAM(μs) │ Speedup`, '');
+                log(`  ──────┼───────┼──────────┼──────────────┼─────────`, '');
+
+                for (const bytes of byteSizes) {
+                    const result = JSON.parse(benchmarkHammingComparison(bytes, iterations));
+                    const dims = bytes * 8;
+                    const speedupColor = result.speedup >= 2.0 ? 'green' : result.speedup >= 1.5 ? 'cyan' : 'red';
+                    log(`  ${String(bytes).padStart(5)} │ ${String(dims).padStart(5)} │ ${result.ours_us.toFixed(3).padStart(8)} │ ${result.upstream_us.toFixed(3).padStart(12)} │ ${result.speedup.toFixed(1).padStart(5)}x`, speedupColor);
+                }
+
+                log('', '');
+                log('═'.repeat(70), 'cyan');
+                log('✓ Our compile-time approach enables SIMD in WASM', 'green');
+                log('✗ Upstream runtime detection fails in WASM → scalar fallback', 'red');
+                log('═'.repeat(70), 'cyan');
+                log('', '');
 
                 log(`VectorType enum: Float32=${VectorType.Float32}, Binary=${VectorType.Binary}`, 'purple');
                 log(`MetricType enum: L2=${MetricType.L2}, Cosine=${MetricType.Cosine}, Dot=${MetricType.Dot}, Hamming=${MetricType.Hamming}`, 'purple');

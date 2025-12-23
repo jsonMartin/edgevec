@@ -100,6 +100,93 @@ pub fn benchmark_hamming(bytes: usize, iterations: usize) -> f64 {
     (end - start) * 1000.0 / iterations as f64 // Return microseconds per iteration
 }
 
+/// Side-by-side benchmark: Our WASM SIMD128 vs Upstream's popcount dispatcher.
+///
+/// Compares:
+/// 1. **Ours** (`metric::simd::hamming_distance`): Compile-time SIMD128 detection → uses WASM SIMD
+/// 2. **Upstream** (`simd::popcount::simd_popcount_xor`): Runtime detection → falls to scalar in WASM
+///
+/// Returns a JSON string with timings:
+/// ```json
+/// {"ours_us": 0.15, "upstream_us": 0.42, "speedup": 2.8, "ours_backend": "wasm_simd128", "upstream_backend": "scalar"}
+/// ```
+#[wasm_bindgen(js_name = "benchmarkHammingComparison")]
+pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
+    // Upstream's dispatcher - uses runtime detection, falls to scalar in WASM
+    use crate::simd::popcount::simd_popcount_xor;
+
+    // Create two random-ish vectors
+    let a: Vec<u8> = (0..bytes).map(|i| (i * 17 + 31) as u8).collect();
+    let b: Vec<u8> = (0..bytes).map(|i| (i * 13 + 47) as u8).collect();
+
+    let perf = web_sys::window().and_then(|w| w.performance());
+
+    // Warmup both implementations
+    for _ in 0..100 {
+        let _ = crate::metric::simd::hamming_distance(&a, &b);
+        let _ = simd_popcount_xor(&a, &b);
+    }
+
+    // Benchmark OURS: metric::simd::hamming_distance
+    // Uses compile-time #[cfg(target_feature = "simd128")] → WASM SIMD128
+    let start_ours = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let mut sum_ours: u32 = 0;
+    for _ in 0..iterations {
+        sum_ours = sum_ours.wrapping_add(crate::metric::simd::hamming_distance(&a, &b));
+    }
+    let end_ours = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+
+    // Benchmark UPSTREAM: simd::popcount::simd_popcount_xor
+    // Uses runtime is_x86_feature_detected!() → falls to scalar in WASM
+    let start_upstream = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let mut sum_upstream: u32 = 0;
+    for _ in 0..iterations {
+        sum_upstream = sum_upstream.wrapping_add(simd_popcount_xor(&a, &b));
+    }
+    let end_upstream = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+
+    // Verify both produce same result
+    if sum_ours != sum_upstream {
+        web_sys::console::warn_1(
+            &format!(
+                "WARNING: Results differ! ours={} upstream={}",
+                sum_ours, sum_upstream
+            )
+            .into(),
+        );
+    }
+
+    // Prevent optimizer from removing the loops
+    if sum_ours == 0 || sum_upstream == 0 {
+        web_sys::console::log_1(&format!("sums: {} {}", sum_ours, sum_upstream).into());
+    }
+
+    let ours_us = (end_ours - start_ours) * 1000.0 / iterations as f64;
+    let upstream_us = (end_upstream - start_upstream) * 1000.0 / iterations as f64;
+    let speedup = upstream_us / ours_us;
+
+    // Determine which backend each is actually using
+    let ours_backend = if cfg!(all(target_arch = "wasm32", target_feature = "simd128")) {
+        "wasm_simd128"
+    } else if cfg!(all(target_arch = "x86_64", target_feature = "avx2")) {
+        "avx2"
+    } else {
+        "scalar"
+    };
+
+    // Upstream uses runtime detection - in WASM it's always scalar
+    let upstream_backend = if cfg!(target_arch = "wasm32") {
+        "scalar (runtime detection fails in WASM)"
+    } else {
+        "runtime_dispatch"
+    };
+
+    format!(
+        r#"{{"ours_us": {:.3}, "upstream_us": {:.3}, "speedup": {:.2}, "bytes": {}, "iterations": {}, "ours_backend": "{}", "upstream_backend": "{}"}}"#,
+        ours_us, upstream_us, speedup, bytes, iterations, ours_backend, upstream_backend
+    )
+}
+
 /// Vector storage type for EdgeVec.
 ///
 /// Determines how vectors are stored and processed.

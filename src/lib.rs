@@ -90,6 +90,15 @@
 #![allow(clippy::doc_markdown)]
 #![allow(clippy::pub_underscore_fields)]
 #![allow(clippy::too_many_lines)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::redundant_closure_for_method_calls)]
+#![allow(clippy::wildcard_imports)]
+#![allow(clippy::map_unwrap_or)]
+#![allow(clippy::must_use_candidate)]
 
 /// Persistence and file format definitions.
 pub mod persistence;

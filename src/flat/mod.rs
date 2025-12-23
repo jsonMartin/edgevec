@@ -120,8 +120,7 @@ impl BinaryFlatIndex {
         self.vectors.extend_from_slice(vector);
         self.count += 1;
         // Start IDs at 1 to match EdgeVec/VectorStorage convention (0 is reserved sentinel)
-        let id = VectorId(self.count as u64);
-        id
+        VectorId(self.count as u64)
     }
 
     /// Search for the k nearest neighbors to a query vector.
