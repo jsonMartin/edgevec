@@ -289,12 +289,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_1883(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_1883(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1894(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1894(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_2423(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_2423(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_2434(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_2434(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -3317,6 +3317,49 @@ export function benchmarkHamming(bytes, iterations) {
 }
 
 /**
+ * Batch benchmark: Compare SIMD implementations searching through N vectors.
+ *
+ * This is a more realistic benchmark that simulates searching through a dataset:
+ * - Creates `num_vectors` random binary vectors
+ * - For each iteration, computes hamming distance from a query to ALL vectors
+ * - Compares our WASM SIMD128 vs upstream's scalar fallback
+ *
+ * Returns JSON with throughput metrics:
+ * ```json
+ * {
+ *   "num_vectors": 10000,
+ *   "bytes_per_vector": 128,
+ *   "iterations": 100,
+ *   "ours_ms": 1.23,
+ *   "upstream_ms": 3.45,
+ *   "speedup": 2.8,
+ *   "ours_throughput": "8.1M vec/s",
+ *   "upstream_throughput": "2.9M vec/s"
+ * }
+ * ```
+ * @param {number} num_vectors
+ * @param {number} bytes_per_vector
+ * @param {number} iterations
+ * @returns {string}
+ */
+export function benchmarkHammingBatch(num_vectors, bytes_per_vector, iterations) {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        wasm.benchmarkHammingBatch(retptr, num_vectors, bytes_per_vector, iterations);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred1_0 = r0;
+        deferred1_1 = r1;
+        return getStringFromWasm0(r0, r1);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
+    }
+}
+
+/**
  * Side-by-side benchmark: Our WASM SIMD128 vs Upstream's popcount dispatcher.
  *
  * Compares:
@@ -3832,7 +3875,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_2423(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_2434(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -3995,7 +4038,7 @@ function __wbg_get_imports() {
     };
     imports.wbg.__wbindgen_cast_f1c9170db27db6a8 = function(arg0, arg1) {
         // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [Externref], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1868, __wasm_bindgen_func_elem_1883);
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1879, __wasm_bindgen_func_elem_1894);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_object_clone_ref = function(arg0) {

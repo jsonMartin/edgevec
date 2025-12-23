@@ -25,44 +25,28 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 1rem;
-            margin-top: 1rem;
+            margin-top: 0.5rem;
         }
         .stat-card {
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
-            padding: 1rem;
+            padding: 0.75rem;
         }
         .stat-value {
             font-family: var(--font-mono);
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             color: var(--neon-cyan);
             text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
         }
         .stat-label {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: var(--text-muted);
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin-top: 0.3rem;
-        }
-        .benchmark-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .benchmark-row:last-child {
-            border-bottom: none;
-        }
-        .benchmark-label {
-            color: var(--text-muted);
-        }
-        .benchmark-value {
-            font-family: var(--font-mono);
-            color: var(--neon-green);
+            margin-top: 0.2rem;
         }
         .memory-bar {
-            height: 20px;
+            height: 16px;
             background: #1a1a1a;
             border: 1px solid var(--border-color);
             margin-top: 0.5rem;
@@ -76,11 +60,11 @@
         }
         .memory-text {
             position: absolute;
-            right: 10px;
+            right: 8px;
             top: 50%;
             transform: translateY(-50%);
             font-family: var(--font-mono);
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             color: #fff;
             text-shadow: 0 0 5px #000;
         }
@@ -88,9 +72,9 @@
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
             color: var(--text-primary);
-            padding: 0.6rem 0.8rem;
+            padding: 0.5rem 0.6rem;
             font-family: var(--font-mono);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             width: 100%;
             cursor: pointer;
         }
@@ -100,14 +84,31 @@
         }
         .divider {
             border-top: 1px solid var(--border-color);
-            margin: 1rem 0;
+            margin: 0.75rem 0;
         }
-        /* Override log scrolling */
+        /* Sidebar scrolling fix */
+        .controls {
+            padding: 1rem 1.25rem !important;
+            gap: 0.75rem !important;
+            overflow-y: auto !important;
+            max-height: calc(100vh - 60px);
+        }
+        .control-group {
+            gap: 0.35rem !important;
+        }
+        button {
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.8rem !important;
+        }
+        label {
+            font-size: 0.7rem !important;
+        }
+        /* Terminal container */
         .terminal-container {
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 80px);
+            height: calc(100vh - 60px);
         }
         #log {
             flex: 1;
@@ -127,6 +128,32 @@
         #log::-webkit-scrollbar-thumb:hover {
             background: var(--neon-purple);
         }
+        /* Section headers */
+        .section-header {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--neon-cyan);
+            font-weight: 600;
+            margin-top: 0.5rem;
+            padding-bottom: 0.25rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        /* SIMD info box */
+        .simd-info {
+            background: rgba(0, 243, 255, 0.05);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            padding: 0.5rem;
+            font-size: 0.7rem;
+            font-family: var(--font-mono);
+        }
+        .simd-info .backend {
+            color: var(--neon-green);
+            font-weight: bold;
+        }
+        .simd-info.scalar .backend {
+            color: var(--neon-red);
+        }
     </style>
 </head>
 <body>
@@ -143,6 +170,29 @@
 
     <div class="dashboard">
         <aside class="controls">
+            <!-- SIMD Status -->
+            <div class="simd-info" id="simdInfo">
+                SIMD Backend: <span class="backend" id="simdBackend">detecting...</span>
+            </div>
+
+            <!-- SIMD Benchmark Section -->
+            <div class="section-header">⚡ SIMD Benchmark</div>
+
+            <div class="control-group">
+                <label>Scan Iterations (for averaging)</label>
+                <input type="number" id="simdIterations" value="10" min="1" max="100" step="1">
+            </div>
+
+            <button id="btnSimdBench" onclick="runSimdComparison()">Run SIMD vs Scalar</button>
+            <div style="font-size: 0.6rem; color: var(--text-muted); margin-top: 0.25rem;">
+                Uses "Number of Vectors" × "Dimensions" below
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Index Configuration -->
+            <div class="section-header">Index Configuration</div>
+
             <div class="control-group">
                 <label>Index Type</label>
                 <select id="indexType" onchange="setIndexType(this.value)">
@@ -180,6 +230,9 @@
 
             <div class="divider"></div>
 
+            <!-- Search Section -->
+            <div class="section-header">Search</div>
+
             <div class="control-group">
                 <label>Search K (neighbors)</label>
                 <input type="number" id="searchK" value="10" min="1" max="100">
@@ -190,10 +243,12 @@
 
             <div class="divider"></div>
 
+            <!-- Comparison & Utilities -->
             <button id="btnCompare" onclick="runComparison()" style="background: linear-gradient(45deg, var(--neon-purple), var(--neon-cyan));">⚡ Compare HNSW vs Flat</button>
 
             <button class="danger" id="btnClear" onclick="clearDatabase()" disabled>Clear Database</button>
 
+            <!-- Stats -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-value" id="statVectors">0</div>
@@ -224,7 +279,7 @@
     </div>
 
     <script type="module">
-        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, BinaryFlatVec, getSimdBackend, benchmarkHamming, benchmarkHammingComparison } from '../../pkg/edgevec.js';
+        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, BinaryFlatVec, getSimdBackend, benchmarkHamming, benchmarkHammingComparison, benchmarkHammingBatch } from '../../pkg/edgevec.js';
 
         let db = null;           // HNSW index
         let flatDb = null;       // Flat index
@@ -243,6 +298,7 @@
         window.clearDatabase = clearDatabase;
         window.runComparison = runComparison;
         window.setIndexType = setIndexType;
+        window.runSimdComparison = runSimdComparison;
 
         // Initialize WASM
         async function initialize() {
@@ -251,61 +307,29 @@
                 setStatus('active', 'WASM Ready');
                 log('EdgeVec WASM module loaded', 'cyan');
 
-                // Check SIMD backend
+                // Check SIMD backend and update UI
                 const simdBackend = getSimdBackend();
-                log(`SIMD Backend: ${simdBackend}`, simdBackend === 'wasm_simd128' ? 'green' : 'red');
+                const simdInfo = document.getElementById('simdInfo');
+                const simdBackendSpan = document.getElementById('simdBackend');
+                simdBackendSpan.textContent = simdBackend;
 
-                // Microbenchmark Hamming distance
-                const hammingTime = benchmarkHamming(128, 10000); // 128 bytes, 10K iterations
-                log(`Hamming distance (128 bytes): ${hammingTime.toFixed(3)} μs/call`, 'purple');
-
-                // ═══════════════════════════════════════════════════════════
-                // OUR SIMD vs UPSTREAM'S POPCOUNT COMPARISON
-                // ═══════════════════════════════════════════════════════════
-                log('', '');
-                log('═'.repeat(70), 'cyan');
-                log('⚡ HAMMING DISTANCE: OUR IMPL vs UPSTREAM IMPL', 'cyan');
-                log('═'.repeat(70), 'cyan');
-                log('', '');
-                log('OURS (metric::simd::hamming_distance):', 'green');
-                log('  → Compile-time #[cfg(target_feature = "simd128")]', 'green');
-                log('  → Uses WASM SIMD128 intrinsics (v128, i8x16_swizzle)', 'green');
-                log('  → 4-way loop unrolling for ILP', 'green');
-                log('', '');
-                log('UPSTREAM (simd::popcount::simd_popcount_xor):', 'red');
-                log('  → Runtime is_x86_feature_detected!() / is_aarch64_feature_detected!()', 'red');
-                log('  → Falls back to SCALAR in WASM (runtime detection fails)', 'red');
-                log('', '');
-
-                const byteSizes = [16, 48, 96, 128, 192]; // 128D, 384D, 768D, 1024D, 1536D
-                const iterations = 50000;
-
-                // Get first result to show backends
-                const firstResult = JSON.parse(benchmarkHammingComparison(byteSizes[0], iterations));
-                log(`Backends detected:`, 'purple');
-                log(`  OURS:     ${firstResult.ours_backend}`, 'green');
-                log(`  UPSTREAM: ${firstResult.upstream_backend}`, 'red');
-                log('', '');
-
-                log(`  Bytes │  Dims │ OURS(μs) │ UPSTREAM(μs) │ Speedup`, '');
-                log(`  ──────┼───────┼──────────┼──────────────┼─────────`, '');
-
-                for (const bytes of byteSizes) {
-                    const result = JSON.parse(benchmarkHammingComparison(bytes, iterations));
-                    const dims = bytes * 8;
-                    const speedupColor = result.speedup >= 2.0 ? 'green' : result.speedup >= 1.5 ? 'cyan' : 'red';
-                    log(`  ${String(bytes).padStart(5)} │ ${String(dims).padStart(5)} │ ${result.ours_us.toFixed(3).padStart(8)} │ ${result.upstream_us.toFixed(3).padStart(12)} │ ${result.speedup.toFixed(1).padStart(5)}x`, speedupColor);
+                if (simdBackend === 'wasm_simd128') {
+                    simdInfo.classList.remove('scalar');
+                    log(`SIMD Backend: ${simdBackend}`, 'green');
+                } else {
+                    simdInfo.classList.add('scalar');
+                    log(`SIMD Backend: ${simdBackend} (SIMD disabled!)`, 'red');
                 }
 
-                log('', '');
-                log('═'.repeat(70), 'cyan');
-                log('✓ Our compile-time approach enables SIMD in WASM', 'green');
-                log('✗ Upstream runtime detection fails in WASM → scalar fallback', 'red');
-                log('═'.repeat(70), 'cyan');
-                log('', '');
+                // Quick single-point benchmark
+                const hammingTime = benchmarkHamming(128, 10000);
+                log(`Hamming distance (1024D): ${hammingTime.toFixed(3)} μs/call`, 'purple');
 
-                log(`VectorType enum: Float32=${VectorType.Float32}, Binary=${VectorType.Binary}`, 'purple');
-                log(`MetricType enum: L2=${MetricType.L2}, Cosine=${MetricType.Cosine}, Dot=${MetricType.Dot}, Hamming=${MetricType.Hamming}`, 'purple');
+                log('', '');
+                log('Click "Run SIMD vs Scalar" to compare implementations', 'cyan');
+                log(`VectorType: Float32=${VectorType.Float32}, Binary=${VectorType.Binary}`, 'purple');
+                log(`MetricType: L2=${MetricType.L2}, Cosine=${MetricType.Cosine}, Hamming=${MetricType.Hamming}`, 'purple');
+
                 document.getElementById('btnInit').disabled = false;
                 isReady = true;
             } catch (e) {
@@ -315,12 +339,102 @@
             }
         }
 
+        // SIMD Comparison Benchmark - uses global numVectors parameter
+        async function runSimdComparison() {
+            if (!isReady) return;
+
+            const numVectors = parseInt(document.getElementById('numVectors').value);
+            const iterations = parseInt(document.getElementById('simdIterations').value);
+            const selectedDims = parseInt(document.getElementById('dimensions').value);
+            const selectedBytes = selectedDims / 8;
+
+            log('', '');
+            log('═'.repeat(70), 'cyan');
+            log('⚡ BATCH HAMMING: OUR SIMD128 vs UPSTREAM SCALAR', 'cyan');
+            log('═'.repeat(70), 'cyan');
+            log('', '');
+            log('OURS (metric::simd::hamming_distance):', 'green');
+            log('  → Compile-time #[cfg(target_feature = "simd128")]', 'green');
+            log('  → Uses WASM SIMD128 intrinsics (v128, i8x16_swizzle)', 'green');
+            log('  → 4-way loop unrolling for ILP', 'green');
+            log('', '');
+            log('UPSTREAM (simd::popcount::simd_popcount_xor):', 'red');
+            log('  → Runtime is_x86_feature_detected!()', 'red');
+            log('  → Falls back to SCALAR in WASM (runtime detection fails)', 'red');
+            log('', '');
+
+            log(`Parameters:`, 'purple');
+            log(`  Vectors: ${numVectors.toLocaleString()}`, 'purple');
+            log(`  Dimensions: ${selectedDims} bits (${selectedBytes} bytes)`, 'purple');
+            log(`  Scan iterations: ${iterations} (for averaging)`, 'purple');
+            log(`  Total comparisons: ${(numVectors * iterations).toLocaleString()}`, 'purple');
+            log('', '');
+
+            log('Running batch benchmark (searching through all vectors)...', 'cyan');
+
+            // Yield to UI
+            await new Promise(r => setTimeout(r, 50));
+
+            // Run the batch benchmark with global numVectors
+            const result = JSON.parse(benchmarkHammingBatch(numVectors, selectedBytes, iterations));
+
+            log('', '');
+            log('─'.repeat(70), '');
+            log('RESULTS', 'cyan');
+            log('─'.repeat(70), '');
+            log('', '');
+
+            const speedupColor = result.speedup >= 2.0 ? 'green' : result.speedup >= 1.5 ? 'cyan' : 'red';
+
+            log(`OURS (WASM SIMD128):`, 'green');
+            log(`  Time: ${result.ours_ms.toFixed(2)}ms to scan ${numVectors.toLocaleString()} vectors`, 'green');
+            log(`  Throughput: ${result.ours_throughput}`, 'green');
+            log('', '');
+            log(`UPSTREAM (Scalar fallback):`, 'red');
+            log(`  Time: ${result.upstream_ms.toFixed(2)}ms to scan ${numVectors.toLocaleString()} vectors`, 'red');
+            log(`  Throughput: ${result.upstream_throughput}`, 'red');
+            log('', '');
+            log(`SPEEDUP: ${result.speedup.toFixed(2)}x faster with our SIMD128!`, speedupColor);
+
+            log('', '');
+            log('═'.repeat(70), 'cyan');
+            log('✓ Our compile-time approach enables SIMD in WASM', 'green');
+            log('✗ Upstream runtime detection fails in WASM → scalar fallback', 'red');
+            log('═'.repeat(70), 'cyan');
+
+            // Also run the micro-benchmark at different dimensions for reference
+            log('', '');
+            log('─'.repeat(70), '');
+            log('MICRO-BENCHMARK: Per-call latency at various dimensions', 'purple');
+            log('─'.repeat(70), '');
+
+            const microIterations = 50000;
+            const byteSizes = [16, 48, 96, 128, 192];
+            if (!byteSizes.includes(selectedBytes) && selectedBytes <= 512) {
+                byteSizes.push(selectedBytes);
+                byteSizes.sort((a, b) => a - b);
+            }
+
+            log(`  Bytes │  Dims │ OURS(μs) │ UPSTREAM(μs) │ Speedup`, '');
+            log(`  ──────┼───────┼──────────┼──────────────┼─────────`, '');
+
+            for (const bytes of byteSizes) {
+                await new Promise(r => setTimeout(r, 10));
+                const microResult = JSON.parse(benchmarkHammingComparison(bytes, microIterations));
+                const dims = bytes * 8;
+                const isSelected = bytes === selectedBytes;
+                const microSpeedupColor = microResult.speedup >= 2.0 ? 'green' : microResult.speedup >= 1.5 ? 'cyan' : 'red';
+                const marker = isSelected ? ' ←' : '';
+                log(`  ${String(bytes).padStart(5)} │ ${String(dims).padStart(5)} │ ${microResult.ours_us.toFixed(3).padStart(8)} │ ${microResult.upstream_us.toFixed(3).padStart(12)} │ ${microResult.speedup.toFixed(1).padStart(5)}x${marker}`, microSpeedupColor);
+            }
+        }
+
         function setIndexType(type) {
             indexType = type;
             log(`Index type set to: ${type.toUpperCase()}`, 'cyan');
             if (type === 'flat') {
                 log('Flat index: O(1) insert, O(n) search - ideal for <100K vectors', 'purple');
-                document.getElementById('btnSearchFiltered').disabled = true; // No filtered search on flat yet
+                document.getElementById('btnSearchFiltered').disabled = true;
             } else {
                 log('HNSW index: O(log n) insert, O(log n) search - approximate results', 'purple');
             }
@@ -335,7 +449,6 @@
 
             try {
                 if (indexType === 'flat') {
-                    // Create flat index
                     flatDb = new BinaryFlatVec(dimensions);
                     flatVectorCount = 0;
 
@@ -343,7 +456,6 @@
                     log(`Flat index initialized in ${elapsed}ms`, 'green');
                     log(`O(1) insert, O(n) SIMD search - no graph overhead!`, 'purple');
                 } else {
-                    // Create HNSW index
                     const config = new EdgeVecConfig(dimensions);
                     config.vector_type = VectorType.Binary;
                     config.setMetricType(MetricType.Hamming);
@@ -375,7 +487,6 @@
             log(`Testing single ${indexType.toUpperCase()} insert (${bytesPerVector} bytes)...`, 'cyan');
 
             try {
-                // Create a simple test vector (all zeros)
                 const vector = new Uint8Array(bytesPerVector);
                 log(`Created vector: length=${vector.length}`, 'purple');
 
@@ -384,12 +495,10 @@
                 let id;
                 if (indexType === 'flat') {
                     if (!flatDb) return;
-                    log('Calling flatDb.insert...', 'purple');
                     id = flatDb.insert(vector);
                     flatVectorCount = 1;
                 } else {
                     if (!db) return;
-                    log('Calling db.insertBinary...', 'purple');
                     id = db.insertBinary(vector);
                     vectorCount = 1;
                 }
@@ -399,7 +508,6 @@
 
                 updateStats();
 
-                // Test search too
                 log('Testing search...', 'purple');
                 const searchStart = performance.now();
                 let results;
@@ -439,36 +547,30 @@
             let inserted = 0;
             const batchTimes = [];
 
-            // Process in batches with yielding for UI updates
             for (let i = 0; i < numVectors; i += batchSize) {
                 const currentBatch = Math.min(batchSize, numVectors - i);
                 const batchStart = performance.now();
 
                 try {
                     for (let j = 0; j < currentBatch; j++) {
-                        // Generate random binary vector
                         const vector = new Uint8Array(bytesPerVector);
                         crypto.getRandomValues(vector);
 
-                        // Debug first insert
                         if (inserted === 0) {
                             log(`First vector: ${vector.length} bytes, first bytes: [${Array.from(vector.slice(0, 4)).join(', ')}...]`, 'purple');
                         }
 
-                        // Insert binary vector
                         let id;
                         if (indexType === 'flat') {
                             id = flatDb.insert(vector);
                         } else {
                             id = db.insertBinary(vector);
 
-                            // Add metadata for filtered search demo (HNSW only)
                             try {
                                 const category = (inserted % 3 === 0) ? 'A' : (inserted % 3 === 1) ? 'B' : 'C';
                                 db.setMetadata(id, 'category', JsMetadataValue.fromString(category));
                                 db.setMetadata(id, 'value', JsMetadataValue.fromInteger(inserted % 100));
                             } catch (metaErr) {
-                                // Metadata is optional, continue without it
                                 if (inserted === 0) {
                                     log(`Note: Metadata error: ${metaErr.message}`, 'purple');
                                 }
@@ -496,14 +598,12 @@
                 }
                 updateStats();
 
-                // Log progress every few batches
                 if (batchTimes.length % 5 === 0 || i + batchSize >= numVectors) {
                     const avgBatchTime = batchTimes.slice(-5).reduce((a, b) => a + b, 0) / Math.min(5, batchTimes.length);
                     const vecPerSec = (batchSize / avgBatchTime * 1000).toFixed(0);
                     log(`Progress: ${inserted.toLocaleString()}/${numVectors.toLocaleString()} (${vecPerSec} vec/s)`, 'purple');
                 }
 
-                // Yield to UI
                 await new Promise(r => setTimeout(r, 0));
             }
 
@@ -574,7 +674,6 @@
             log(`QPS: ${(1000 / avgTime).toFixed(0)} queries/sec`, 'green');
             log('─'.repeat(50), '');
 
-            // Show sample results
             if (results && results.length > 0) {
                 log('Sample results (last query):', 'purple');
                 results.slice(0, 5).forEach((r, i) => {
@@ -662,14 +761,13 @@
 
             const bytesPerVector = currentDimensions / 8;
             const memoryBytes = count * bytesPerVector;
-            const maxMemory = 100 * 1024 * 1024; // 100 MB scale
+            const maxMemory = 100 * 1024 * 1024;
             const percent = Math.min(100, (memoryBytes / maxMemory) * 100);
 
             document.getElementById('memoryFill').style.width = `${percent}%`;
             document.getElementById('memoryText').textContent = formatBytes(memoryBytes);
         }
 
-        // ==== COMPARISON BENCHMARK ====
         async function runComparison() {
             const dimensions = parseInt(document.getElementById('dimensions').value);
             const numVectors = parseInt(document.getElementById('numVectors').value);
@@ -686,7 +784,6 @@
 
             setStatus('busy', 'Running comparison...');
 
-            // Generate test vectors once
             const vectors = [];
             for (let i = 0; i < numVectors; i++) {
                 const v = new Uint8Array(bytesPerVector);
@@ -694,7 +791,7 @@
                 vectors.push(v);
             }
 
-            // ==== FLAT INDEX TEST ====
+            // FLAT INDEX TEST
             log('\n[FLAT INDEX] Testing...', 'green');
 
             const flatIndex = new BinaryFlatVec(dimensions);
@@ -705,7 +802,6 @@
             const flatInsertTime = performance.now() - flatInsertStart;
             const flatInsertThroughput = (numVectors / flatInsertTime * 1000).toFixed(0);
 
-            // Flat search benchmark
             const flatSearchTimes = [];
             for (let i = 0; i < 50; i++) {
                 const query = vectors[Math.floor(Math.random() * vectors.length)];
@@ -718,7 +814,7 @@
             log(`  Insert: ${flatInsertTime.toFixed(0)}ms (${flatInsertThroughput} vec/s)`, 'cyan');
             log(`  Search: ${flatAvgSearch.toFixed(3)}ms avg`, 'cyan');
 
-            // ==== HNSW INDEX TEST ====
+            // HNSW INDEX TEST
             log('\n[HNSW INDEX] Testing...', 'green');
 
             const hnswConfig = new EdgeVecConfig(dimensions);
@@ -734,7 +830,6 @@
             for (const v of vectors) {
                 hnswIndex.insertBinary(v);
                 insertCount++;
-                // Yield occasionally to prevent UI freeze
                 if (insertCount % 1000 === 0) {
                     await new Promise(r => setTimeout(r, 0));
                 }
@@ -742,7 +837,6 @@
             const hnswInsertTime = performance.now() - hnswInsertStart;
             const hnswInsertThroughput = (numVectors / hnswInsertTime * 1000).toFixed(0);
 
-            // HNSW search benchmark
             const hnswSearchTimes = [];
             for (let i = 0; i < 50; i++) {
                 const query = vectors[Math.floor(Math.random() * vectors.length)];
@@ -755,84 +849,12 @@
             log(`  Insert: ${hnswInsertTime.toFixed(0)}ms (${hnswInsertThroughput} vec/s)`, 'cyan');
             log(`  Search: ${hnswAvgSearch.toFixed(3)}ms avg`, 'cyan');
 
-            // ==== RECALL vs ef_search BENCHMARK ====
-            log('\n[RECALL] Testing HNSW accuracy at different ef_search values...', 'green');
-            log(`  (ef_search controls recall/speed tradeoff - higher = better recall, slower)`, 'purple');
-
-            const numRecallQueries = 30;
-            const efValues = [10, 20, 50, 100, 200];
-            const recallResults = [];
-
-            // Pre-compute ground truth for all test queries
-            const testQueries = [];
-            const groundTruths = [];
-            for (let i = 0; i < numRecallQueries; i++) {
-                const query = vectors[Math.floor(Math.random() * vectors.length)];
-                testQueries.push(query);
-                const gt = flatIndex.search(query, k);
-                groundTruths.push(new Set(gt.map(r => r.id)));
-            }
-
-            log(``, '');
-            log(`  ef_search │ Recall@${k} │ Latency  │ vs Default`, '');
-            log(`  ──────────┼──────────┼──────────┼───────────`, '');
-
-            for (const ef of efValues) {
-                let totalRecall = 0;
-                const searchTimes = [];
-
-                for (let i = 0; i < numRecallQueries; i++) {
-                    const query = testQueries[i];
-                    const groundTruthIds = groundTruths[i];
-
-                    const start = performance.now();
-                    const hnswResults = hnswIndex.searchBinaryWithEf(query, k, ef);
-                    searchTimes.push(performance.now() - start);
-
-                    const hnswIds = new Set(hnswResults.map(r => r.id));
-                    let hits = 0;
-                    for (const id of hnswIds) {
-                        if (groundTruthIds.has(id)) hits++;
-                    }
-                    totalRecall += hits / k;
-                }
-
-                const avgRecall = (totalRecall / numRecallQueries * 100);
-                const avgLatency = searchTimes.reduce((a, b) => a + b, 0) / numRecallQueries;
-                const isDefault = ef === 50;
-
-                recallResults.push({ ef, recall: avgRecall, latency: avgLatency });
-
-                const recallColor = avgRecall >= 99 ? 'green' : avgRecall >= 95 ? 'cyan' : 'red';
-                const marker = isDefault ? ' ←' : '  ';
-                log(`  ${String(ef).padStart(9)} │ ${avgRecall.toFixed(1).padStart(7)}% │ ${avgLatency.toFixed(3).padStart(7)}ms │${marker}${isDefault ? ' (default)' : ''}`, recallColor);
-            }
-
-            // Get default (ef=50) results for comparison
-            const defaultResult = recallResults.find(r => r.ef === 50);
-            const avgRecall = defaultResult.recall.toFixed(1);
-            const nearPerfectEf = recallResults.find(r => r.recall >= 99);
-
-            log(``, '');
-            if (nearPerfectEf) {
-                log(`  ✓ Use ef_search=${nearPerfectEf.ef} for ${nearPerfectEf.recall.toFixed(1)}% recall`, 'green');
-            }
-
-            // ==== COMPARISON SUMMARY ====
+            // COMPARISON SUMMARY
             const insertSpeedup = (hnswInsertTime / flatInsertTime).toFixed(1);
-            const searchSlowdown = (flatAvgSearch / hnswAvgSearch).toFixed(1);
 
             log('\n' + '═'.repeat(60), 'green');
             log('📊 COMPARISON SUMMARY', 'green');
             log('═'.repeat(60), 'green');
-
-            log(`Accuracy (Recall@${k}):`, '');
-            log(`  • FLAT:  ${' 100.0'.padStart(7)}%  (exact, ground truth)`, 'green');
-            log(`  • HNSW:  ${avgRecall.padStart(6)}%  (approximate)`, avgRecall >= 95 ? 'green' : 'red');
-            if (avgRecall < 95) {
-                log(`  ⚠️  Consider increasing ef_search for better recall`, 'red');
-            }
-            log(``, '');
 
             log(`Insert Throughput:`, '');
             log(`  • FLAT:  ${flatInsertThroughput.padStart(8)} vec/s`, 'green');
@@ -845,21 +867,7 @@
             if (flatAvgSearch < hnswAvgSearch) {
                 log(`  → FLAT is ${(hnswAvgSearch / flatAvgSearch).toFixed(1)}x FASTER for search!`, 'green');
             } else {
-                log(`  → HNSW is ${searchSlowdown}x faster for search`, 'purple');
-            }
-            log(``, '');
-            log(`📝 Recommendation:`, 'purple');
-            if (avgRecall >= 99 && flatAvgSearch < hnswAvgSearch * 2) {
-                log(`  Use FLAT: 100% recall + comparable speed + ${insertSpeedup}x faster inserts`, 'green');
-            } else if (numVectors <= 50000 || flatAvgSearch < 5) {
-                log(`  Use FLAT for this dataset size (${numVectors.toLocaleString()} vectors)`, 'green');
-                log(`  Flat gives 100% recall + ${insertSpeedup}x faster inserts`, 'green');
-            } else if (avgRecall >= 95) {
-                log(`  HNSW is viable: ${avgRecall}% recall with faster search`, 'cyan');
-                log(`  Use FLAT if you need exact results or fast inserts`, 'cyan');
-            } else {
-                log(`  ⚠️ HNSW recall too low (${avgRecall}%) - increase ef_search`, 'red');
-                log(`  Or use FLAT for guaranteed correct results`, 'green');
+                log(`  → HNSW is ${(flatAvgSearch / hnswAvgSearch).toFixed(1)}x faster for search`, 'purple');
             }
             log('═'.repeat(60), 'green');
 
@@ -899,12 +907,10 @@
             statusText.textContent = text;
         }
 
-        // Update timestamp
         setInterval(() => {
             document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
         }, 1000);
 
-        // Start
         initialize();
     </script>
 </body>

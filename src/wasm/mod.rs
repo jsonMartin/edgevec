@@ -187,6 +187,113 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
     )
 }
 
+/// Batch benchmark: Compare SIMD implementations searching through N vectors.
+///
+/// This is a more realistic benchmark that simulates searching through a dataset:
+/// - Creates `num_vectors` random binary vectors
+/// - For each iteration, computes hamming distance from a query to ALL vectors
+/// - Compares our WASM SIMD128 vs upstream's scalar fallback
+///
+/// Returns JSON with throughput metrics:
+/// ```json
+/// {
+///   "num_vectors": 10000,
+///   "bytes_per_vector": 128,
+///   "iterations": 100,
+///   "ours_ms": 1.23,
+///   "upstream_ms": 3.45,
+///   "speedup": 2.8,
+///   "ours_throughput": "8.1M vec/s",
+///   "upstream_throughput": "2.9M vec/s"
+/// }
+/// ```
+#[wasm_bindgen(js_name = "benchmarkHammingBatch")]
+pub fn benchmark_hamming_batch(
+    num_vectors: usize,
+    bytes_per_vector: usize,
+    iterations: usize,
+) -> String {
+    use crate::simd::popcount::simd_popcount_xor;
+
+    // Create dataset of N random vectors
+    let vectors: Vec<Vec<u8>> = (0..num_vectors)
+        .map(|i| {
+            (0..bytes_per_vector)
+                .map(|j| ((i * 17 + j * 31) as u8).wrapping_add((i ^ j) as u8))
+                .collect()
+        })
+        .collect();
+
+    // Create query vector
+    let query: Vec<u8> = (0..bytes_per_vector).map(|i| (i * 13 + 47) as u8).collect();
+
+    let perf = web_sys::window().and_then(|w| w.performance());
+
+    // Warmup
+    for v in vectors.iter().take(100.min(num_vectors)) {
+        let _ = crate::metric::simd::hamming_distance(&query, v);
+        let _ = simd_popcount_xor(&query, v);
+    }
+
+    // Benchmark OURS: metric::simd::hamming_distance (WASM SIMD128)
+    let start_ours = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let mut total_dist_ours: u64 = 0;
+    for _ in 0..iterations {
+        for v in &vectors {
+            total_dist_ours += u64::from(crate::metric::simd::hamming_distance(&query, v));
+        }
+    }
+    let end_ours = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+
+    // Benchmark UPSTREAM: simd::popcount::simd_popcount_xor (scalar fallback in WASM)
+    let start_upstream = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let mut total_dist_upstream: u64 = 0;
+    for _ in 0..iterations {
+        for v in &vectors {
+            total_dist_upstream += u64::from(simd_popcount_xor(&query, v));
+        }
+    }
+    let end_upstream = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+
+    // Prevent optimizer removal
+    if total_dist_ours == 0 || total_dist_upstream == 0 {
+        web_sys::console::log_1(
+            &format!("sums: {} {}", total_dist_ours, total_dist_upstream).into(),
+        );
+    }
+
+    let ours_ms = end_ours - start_ours;
+    let upstream_ms = end_upstream - start_upstream;
+    let speedup = upstream_ms / ours_ms;
+
+    let total_comparisons = num_vectors * iterations;
+    let ours_throughput = (total_comparisons as f64) / (ours_ms / 1000.0);
+    let upstream_throughput = (total_comparisons as f64) / (upstream_ms / 1000.0);
+
+    // Format throughput with appropriate units
+    let format_throughput = |t: f64| -> String {
+        if t >= 1_000_000.0 {
+            format!("{:.1}M vec/s", t / 1_000_000.0)
+        } else if t >= 1_000.0 {
+            format!("{:.1}K vec/s", t / 1_000.0)
+        } else {
+            format!("{:.0} vec/s", t)
+        }
+    };
+
+    format!(
+        r#"{{"num_vectors": {}, "bytes_per_vector": {}, "iterations": {}, "ours_ms": {:.2}, "upstream_ms": {:.2}, "speedup": {:.2}, "ours_throughput": "{}", "upstream_throughput": "{}"}}"#,
+        num_vectors,
+        bytes_per_vector,
+        iterations,
+        ours_ms,
+        upstream_ms,
+        speedup,
+        format_throughput(ours_throughput),
+        format_throughput(upstream_throughput)
+    )
+}
+
 /// Vector storage type for EdgeVec.
 ///
 /// Determines how vectors are stored and processed.

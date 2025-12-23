@@ -1777,6 +1777,30 @@ export class WasmCompactionResult {
 export function benchmarkHamming(bytes: number, iterations: number): number;
 
 /**
+ * Batch benchmark: Compare SIMD implementations searching through N vectors.
+ *
+ * This is a more realistic benchmark that simulates searching through a dataset:
+ * - Creates `num_vectors` random binary vectors
+ * - For each iteration, computes hamming distance from a query to ALL vectors
+ * - Compares our WASM SIMD128 vs upstream's scalar fallback
+ *
+ * Returns JSON with throughput metrics:
+ * ```json
+ * {
+ *   "num_vectors": 10000,
+ *   "bytes_per_vector": 128,
+ *   "iterations": 100,
+ *   "ours_ms": 1.23,
+ *   "upstream_ms": 3.45,
+ *   "speedup": 2.8,
+ *   "ours_throughput": "8.1M vec/s",
+ *   "upstream_throughput": "2.9M vec/s"
+ * }
+ * ```
+ */
+export function benchmarkHammingBatch(num_vectors: number, bytes_per_vector: number, iterations: number): string;
+
+/**
  * Side-by-side benchmark: Our WASM SIMD128 vs Upstream's popcount dispatcher.
  *
  * Compares:
@@ -1950,6 +1974,7 @@ export interface InitOutput {
   readonly getSimdBackend: (a: number) => void;
   readonly benchmarkHamming: (a: number, b: number) => number;
   readonly benchmarkHammingComparison: (a: number, b: number, c: number) => void;
+  readonly benchmarkHammingBatch: (a: number, b: number, c: number, d: number) => void;
   readonly __wbg_edgevecconfig_free: (a: number, b: number) => void;
   readonly __wbg_get_edgevecconfig_dimensions: (a: number) => number;
   readonly __wbg_set_edgevecconfig_dimensions: (a: number, b: number) => void;
@@ -2041,9 +2066,9 @@ export interface InitOutput {
   readonly binaryflatvec_clear: (a: number) => void;
   readonly binaryflatvec_shrinkToFit: (a: number) => void;
   readonly edgevec_getVectorMetadata: (a: number, b: number) => number;
-  readonly __wasm_bindgen_func_elem_1883: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_1868: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_2423: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_1894: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_1879: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_2434: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;
