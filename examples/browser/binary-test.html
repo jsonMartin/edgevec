@@ -22,53 +22,6 @@
             border-color: var(--neon-cyan);
             box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
         }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-top: 0.5rem;
-        }
-        .stat-card {
-            background: rgba(0, 0, 0, 0.3);
-            border: 1px solid var(--border-color);
-            padding: 0.75rem;
-        }
-        .stat-value {
-            font-family: var(--font-mono);
-            font-size: 1.25rem;
-            color: var(--neon-cyan);
-            text-shadow: 0 0 10px rgba(0, 243, 255, 0.5);
-        }
-        .stat-label {
-            font-size: 0.65rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-top: 0.2rem;
-        }
-        .memory-bar {
-            height: 16px;
-            background: #1a1a1a;
-            border: 1px solid var(--border-color);
-            margin-top: 0.5rem;
-            position: relative;
-            overflow: hidden;
-        }
-        .memory-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--neon-purple), var(--neon-cyan));
-            transition: width 0.3s ease;
-        }
-        .memory-text {
-            position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-family: var(--font-mono);
-            font-size: 0.7rem;
-            color: #fff;
-            text-shadow: 0 0 5px #000;
-        }
         select {
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
@@ -303,6 +256,43 @@
             color: var(--text-muted);
             margin-top: 0.25rem;
         }
+        /* Header stats bar */
+        .header-stats {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+        }
+        .header-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            min-width: 80px;
+        }
+        .header-stat-value {
+            color: var(--neon-cyan);
+            font-weight: 600;
+            font-size: 1rem;
+            text-shadow: 0 0 8px rgba(0, 243, 255, 0.4);
+        }
+        .header-stat-label {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .header-stat.memory {
+            min-width: 100px;
+        }
+        .header-stat.memory .header-stat-value {
+            color: var(--neon-purple);
+            text-shadow: 0 0 8px rgba(188, 19, 254, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -310,6 +300,20 @@
         <div>
             <h1>EdgeVec</h1>
             <span class="subtitle">Binary Vector Benchmark</span>
+        </div>
+        <div class="header-stats">
+            <div class="header-stat">
+                <span class="header-stat-value" id="statVectors">0</span>
+                <span class="header-stat-label">Vectors</span>
+            </div>
+            <div class="header-stat">
+                <span class="header-stat-value" id="statDimensions">1024</span>
+                <span class="header-stat-label">Dimensions</span>
+            </div>
+            <div class="header-stat memory">
+                <span class="header-stat-value" id="statMemory">0 B</span>
+                <span class="header-stat-label">Memory</span>
+            </div>
         </div>
         <div style="font-family: var(--font-mono); color: var(--text-muted);">
             <span class="status-indicator" id="statusIndicator"></span>
@@ -391,26 +395,6 @@
 
             <button id="btnSearch" onclick="runSearch()" disabled>Run Search Benchmark</button>
             <button id="btnSearchFiltered" onclick="runFilteredSearch()" disabled>Search with Filter</button>
-
-            <!-- Stats -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="statVectors">0</div>
-                    <div class="stat-label">Vectors</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="statDimensions">-</div>
-                    <div class="stat-label">Dimensions</div>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>Estimated Memory</label>
-                <div class="memory-bar">
-                    <div class="memory-fill" id="memoryFill" style="width: 0%"></div>
-                    <span class="memory-text" id="memoryText">0 MB</span>
-                </div>
-            </div>
         </aside>
 
         <main class="terminal-container">
@@ -476,6 +460,13 @@
 
                 document.getElementById('btnInit').disabled = false;
                 isReady = true;
+
+                // Initialize header stats from global config
+                updateStats();
+
+                // Update header stats when global config changes
+                document.getElementById('dimensions').addEventListener('change', () => updateStats());
+                document.getElementById('numVectors').addEventListener('input', () => updateStats());
             } catch (e) {
                 setStatus('', 'Error');
                 log(`Failed to load WASM: ${e.message}`, 'red');
@@ -491,6 +482,9 @@
             const iterations = parseInt(document.getElementById('simdIterations').value);
             const selectedDims = parseInt(document.getElementById('dimensions').value);
             const selectedBytes = selectedDims / 8;
+
+            // Update header stats with benchmark parameters
+            updateStats(numVectors, selectedDims);
 
             log('Running SIMD benchmark...', 'cyan');
 
@@ -943,18 +937,30 @@
             setStatus('active', 'WASM Ready');
         }
 
-        function updateStats() {
-            const count = indexType === 'flat' ? flatVectorCount : vectorCount;
+        // Update header stats - can be called with overrides for benchmarks
+        function updateStats(overrideCount = null, overrideDims = null) {
+            // Use overrides if provided, otherwise use database state or global config
+            let count, dims;
+
+            if (overrideCount !== null) {
+                count = overrideCount;
+            } else {
+                const dbCount = indexType === 'flat' ? flatVectorCount : vectorCount;
+                count = dbCount > 0 ? dbCount : parseInt(document.getElementById('numVectors').value) || 0;
+            }
+
+            if (overrideDims !== null) {
+                dims = overrideDims;
+            } else {
+                dims = currentDimensions > 0 ? currentDimensions : parseInt(document.getElementById('dimensions').value) || 0;
+            }
+
             document.getElementById('statVectors').textContent = count.toLocaleString();
-            document.getElementById('statDimensions').textContent = currentDimensions || '-';
+            document.getElementById('statDimensions').textContent = dims || '-';
 
-            const bytesPerVector = currentDimensions / 8;
+            const bytesPerVector = dims / 8;
             const memoryBytes = count * bytesPerVector;
-            const maxMemory = 100 * 1024 * 1024;
-            const percent = Math.min(100, (memoryBytes / maxMemory) * 100);
-
-            document.getElementById('memoryFill').style.width = `${percent}%`;
-            document.getElementById('memoryText').textContent = formatBytes(memoryBytes);
+            document.getElementById('statMemory').textContent = formatBytes(memoryBytes);
         }
 
         async function runComparison() {
@@ -963,6 +969,9 @@
             const batchSize = parseInt(document.getElementById('batchSize').value);
             const k = parseInt(document.getElementById('searchK').value);
             const bytesPerVector = dimensions / 8;
+
+            // Update header stats with benchmark parameters
+            updateStats(numVectors, dimensions);
 
             log('═'.repeat(60), 'cyan');
             log('⚡ HNSW vs FLAT INDEX COMPARISON BENCHMARK', 'cyan');
@@ -1005,10 +1014,12 @@
                     const elapsed = performance.now() - flatInsertStart;
                     const rate = (flatInserted / elapsed * 1000).toFixed(0);
                     setStatus('busy', `FLAT: ${flatInserted.toLocaleString()}/${numVectors.toLocaleString()}`);
+                    updateStats(flatInserted, dimensions);
                     log(`  FLAT Progress: ${flatInserted.toLocaleString()}/${numVectors.toLocaleString()} (${rate} vec/s)`, 'purple');
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
+            updateStats(numVectors, dimensions);
             const flatInsertTime = performance.now() - flatInsertStart;
             const flatInsertThroughput = (numVectors / flatInsertTime * 1000).toFixed(0);
 
@@ -1051,10 +1062,12 @@
                     const elapsed = performance.now() - hnswInsertStart;
                     const rate = (hnswInserted / elapsed * 1000).toFixed(0);
                     setStatus('busy', `HNSW: ${hnswInserted.toLocaleString()}/${numVectors.toLocaleString()}`);
+                    updateStats(hnswInserted, dimensions);
                     log(`  HNSW Progress: ${hnswInserted.toLocaleString()}/${numVectors.toLocaleString()} (${rate} vec/s)`, 'purple');
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
+            updateStats(numVectors, dimensions);
             const hnswInsertTime = performance.now() - hnswInsertStart;
             const hnswInsertThroughput = (numVectors / hnswInsertTime * 1000).toFixed(0);
 
