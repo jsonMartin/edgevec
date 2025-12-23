@@ -1106,10 +1106,10 @@
       try {
         log('Initializing EdgeVec WASM module...', 'info');
 
-        const { default: init, EdgeVec } = await import('../../pkg/edgevec.js');
+        const { default: init, EdgeVec, EdgeVecConfig } = await import('../../pkg/edgevec.js');
         await init();
 
-        state.edgevec = { EdgeVec };
+        state.edgevec = { EdgeVec, EdgeVecConfig };
         state.wasmLoaded = true;
 
         elements.wasmStatus.textContent = 'READY';
@@ -1223,7 +1223,9 @@
       log(`Starting benchmark: dim=${state.selectedDim}, ops=${state.selectedOps.join(',')}`, 'info');
 
       try {
-        const db = new state.edgevec.EdgeVec({ dimensions: state.selectedDim });
+        // Create EdgeVec with proper config object (not plain JS object)
+        const config = new state.edgevec.EdgeVecConfig(state.selectedDim);
+        const db = new state.edgevec.EdgeVec(config);
 
         // Generate test vectors
         const vectors = [];
