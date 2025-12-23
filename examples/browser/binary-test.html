@@ -11,10 +11,11 @@
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
             color: var(--text-primary);
-            padding: 0.6rem 0.8rem;
+            padding: 0.5rem 0.6rem;
             font-family: var(--font-mono);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             width: 100%;
+            box-sizing: border-box;
         }
         input[type="number"]:focus {
             outline: none;
@@ -76,6 +77,7 @@
             font-family: var(--font-mono);
             font-size: 0.85rem;
             width: 100%;
+            box-sizing: border-box;
             cursor: pointer;
         }
         select:focus {
@@ -83,18 +85,17 @@
             border-color: var(--neon-cyan);
         }
         .divider {
-            border-top: 1px solid var(--border-color);
-            margin: 1rem 0;
+            margin: 0.25rem 0;
         }
         /* Sidebar scrolling */
         .controls {
             padding: 1.25rem !important;
-            gap: 1rem !important;
+            gap: 0.75rem !important;
             overflow-y: auto !important;
             max-height: calc(100vh - 60px);
         }
         .control-group {
-            gap: 0.5rem !important;
+            gap: 0.4rem !important;
         }
         /* Fix button text squashing */
         button {
@@ -125,8 +126,8 @@
             letter-spacing: 1px;
             color: var(--neon-cyan);
             font-weight: 600;
-            margin-top: 0.75rem;
-            padding-bottom: 0.5rem;
+            margin-top: 0.25rem;
+            padding-bottom: 0.4rem;
             border-bottom: 1px solid var(--border-color);
             line-height: 1.3;
         }
@@ -191,6 +192,27 @@
                 SIMD Backend: <span class="backend" id="simdBackend">detecting...</span>
             </div>
 
+            <!-- Global Configuration (affects all tests) -->
+            <div class="section-header">Global Configuration</div>
+
+            <div class="control-group">
+                <label>Embedding Dimensions</label>
+                <select id="dimensions">
+                    <option value="128">128 (16 bytes)</option>
+                    <option value="384">384 (48 bytes) - MiniLM</option>
+                    <option value="768">768 (96 bytes) - BERT</option>
+                    <option value="1024" selected>1024 (128 bytes)</option>
+                    <option value="1536">1536 (192 bytes) - OpenAI</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Number of Vectors</label>
+                <input type="number" id="numVectors" value="10000" min="100" max="1000000" step="1000">
+            </div>
+
+            <div class="divider"></div>
+
             <!-- SIMD Benchmark Section -->
             <div class="section-header">⚡ SIMD Benchmark</div>
 
@@ -200,14 +222,11 @@
             </div>
 
             <button id="btnSimdBench" onclick="runSimdComparison()">Run SIMD vs Scalar</button>
-            <div style="font-size: 0.6rem; color: var(--text-muted); margin-top: 0.25rem;">
-                Uses "Number of Vectors" × "Dimensions" below
-            </div>
 
             <div class="divider"></div>
 
             <!-- Index Configuration -->
-            <div class="section-header">Index Configuration</div>
+            <div class="section-header">Index Operations</div>
 
             <div class="control-group">
                 <label>Index Type</label>
@@ -215,24 +234,6 @@
                     <option value="hnsw" selected>HNSW (ANN, O(log n))</option>
                     <option value="flat">Flat (Brute-Force, O(1) insert)</option>
                 </select>
-            </div>
-
-            <div class="control-group">
-                <label>Dimensions (bits)</label>
-                <select id="dimensions">
-                    <option value="128">128 (16 bytes)</option>
-                    <option value="256">256 (32 bytes)</option>
-                    <option value="512">512 (64 bytes)</option>
-                    <option value="768">768 (96 bytes)</option>
-                    <option value="1024" selected>1024 (128 bytes)</option>
-                    <option value="2048">2048 (256 bytes)</option>
-                    <option value="4096">4096 (512 bytes)</option>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label>Number of Vectors</label>
-                <input type="number" id="numVectors" value="10000" min="100" max="1000000" step="1000">
             </div>
 
             <div class="control-group">
