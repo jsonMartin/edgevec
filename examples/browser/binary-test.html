@@ -213,8 +213,8 @@
 
             <div class="divider"></div>
 
-            <!-- SIMD Benchmark Section -->
-            <div class="section-header">⚡ SIMD Benchmark</div>
+            <!-- Standalone Benchmarks -->
+            <div class="section-header">Benchmarks</div>
 
             <div class="control-group">
                 <label>Scan Iterations (for averaging)</label>
@@ -222,11 +222,12 @@
             </div>
 
             <button id="btnSimdBench" onclick="runSimdComparison()">Run SIMD vs Scalar</button>
+            <button id="btnCompare" onclick="runComparison()" style="background: linear-gradient(45deg, var(--neon-purple), var(--neon-cyan));">Compare HNSW vs Flat</button>
 
             <div class="divider"></div>
 
-            <!-- Index Configuration -->
-            <div class="section-header">Index Operations</div>
+            <!-- Database Operations -->
+            <div class="section-header">Database</div>
 
             <div class="control-group">
                 <label>Index Type</label>
@@ -244,6 +245,7 @@
             <button id="btnInit" onclick="initDatabase()">Initialize Database</button>
             <button id="btnTestOne" onclick="testSingleInsert()" disabled>Test Single Insert</button>
             <button id="btnInsert" onclick="insertVectors()" disabled>Insert Vectors</button>
+            <button class="danger" id="btnClear" onclick="clearDatabase()" disabled>Clear Database</button>
 
             <div class="divider"></div>
 
@@ -257,13 +259,6 @@
 
             <button id="btnSearch" onclick="runSearch()" disabled>Run Search Benchmark</button>
             <button id="btnSearchFiltered" onclick="runFilteredSearch()" disabled>Search with Filter</button>
-
-            <div class="divider"></div>
-
-            <!-- Comparison & Utilities -->
-            <button id="btnCompare" onclick="runComparison()" style="background: linear-gradient(45deg, var(--neon-purple), var(--neon-cyan));">⚡ Compare HNSW vs Flat</button>
-
-            <button class="danger" id="btnClear" onclick="clearDatabase()" disabled>Clear Database</button>
 
             <!-- Stats -->
             <div class="stats-grid">
