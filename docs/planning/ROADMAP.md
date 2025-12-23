@@ -1,10 +1,10 @@
-# EdgeVec Roadmap v3.1
+# EdgeVec Roadmap v4.0
 
-**Date:** 2025-12-22
+**Date:** 2025-12-23
 **Author:** PLANNER
-**Status:** [REVISED] — Week 28 Update (Pre-Release Planning)
-**Current Version:** v0.5.3 (released)
-**Next Version:** v0.6.0 (planned — Week 26-29)
+**Status:** [REVISED] — v0.6.0 Released, v0.7.0 Planning
+**Current Version:** v0.6.0 (released 2025-12-23)
+**Next Version:** v0.7.0 (planned — Week 30+)
 
 ---
 
@@ -211,30 +211,78 @@ git commit -m "chore: remove internal development files before v0.6.0 release"
 
 ---
 
-## Phase 8: v0.6.1+ Documentation & Ecosystem (Future)
+## Phase 8: v0.7.0 Performance & Documentation (Week 30+)
 
-### Milestone 8: Documentation Sprint
+### Milestone 8.1: RFC-003 WASM SIMD Optimization
+**Status:** APPROVED — Ready for Implementation
+**Target:** v0.7.0
+**Duration:** 3 weeks (22 hours)
+
+**Objective:** 2-3x dot product speedup via WASM SIMD128.
+
+**Deliverables:**
+- [ ] `simd` feature flag in Cargo.toml
+- [ ] `src/simd/wasm_simd.rs` — SIMD128 dot product
+- [ ] Scalar fallback for iOS Safari
+- [ ] Runtime SIMD detection
+- [ ] Benchmark suite (`benches/simd_bench.rs`)
+
+**Success Metrics:**
+| Metric | Current | Target |
+|:-------|:--------|:-------|
+| Dot Product Latency | ~500ns | <200ns |
+| Search (100k, k=10) | ~5ms | ~2ms |
+| Speedup Factor | 1x | 2.5-3x |
+
+### Milestone 8.2: Documentation Improvements
+**Status:** PLANNED — User Feedback
+**Target:** v0.7.0
+
+**Objective:** Add more code examples per Reddit user feedback.
+
+**Deliverables:**
+- [ ] README expanded with 10+ code examples
+- [ ] TypeScript usage guide
+- [ ] Common patterns guide
+- [ ] Embedding provider integration examples
+- [ ] Error handling examples
+
+### Milestone 8.3: v0.7.0 Release
 **Status:** PLANNED
-**Target:** v0.6.1
+**Target:** Week 33
 
-**Planned Features:**
-- Embedding Integration Guide
-- LangChain integration
-- Example gallery (5+ use cases)
-- Cloud sync MVP (S3/R2)
+**Deliverables:**
+- [ ] v0.7.0 on crates.io
+- [ ] v0.7.0 on npm
+- [ ] Updated demos with SIMD toggle
+- [ ] Performance blog post
 
 ---
 
-## Phase 9: v0.7.0+ Advanced Features (Future)
+## Phase 9: v0.8.0+ Advanced Features (Future)
 
-### Milestone 9: Production Hardening
+### Milestone 9.1: RFC-004 Query Result Caching
+**Status:** CONDITIONAL — Needs Fixes Before Approval
+**Target:** v0.8.0
+
+**Blocking Issues (must fix):**
+1. Add memory budget specification
+2. Add mutation invalidation mechanism
+3. Measure cache overhead (<100ns required)
+4. Specify hash algorithm
+
+**Planned Features:**
+- In-memory LRU cache
+- Semantic similarity detection
+- Cache invalidation on mutations
+
+### Milestone 9.2: Production Hardening
 **Status:** PLANNED
-**Target:** v0.7.0+
+**Target:** v0.8.0+
 
 **Planned Features:**
 - ACORN in-algorithm filtering (if needed)
-- Metadata indexing
-- Hybrid SQ8+BQ two-stage search
+- Metadata indexing for large collections
 - Mobile Safari testing suite
 
 ---
