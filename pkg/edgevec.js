@@ -224,12 +224,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_1520(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_1520(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1608(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1608(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_2060(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_2060(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_2148(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_2148(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -239,6 +239,10 @@ const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefine
 const BatchInsertResultFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_batchinsertresult_free(ptr >>> 0, 1));
+
+const BinaryFlatVecFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_binaryflatvec_free(ptr >>> 0, 1));
 
 const EdgeVecFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
@@ -369,6 +373,206 @@ export class BatchInsertResult {
     }
 }
 if (Symbol.dispose) BatchInsertResult.prototype[Symbol.dispose] = BatchInsertResult.prototype.free;
+
+/**
+ * A flat (brute-force) index for binary vectors.
+ *
+ * This provides O(1) insert and O(n) search, which is faster than HNSW
+ * for small-to-medium datasets (< 100K vectors) due to extremely fast
+ * SIMD Hamming distance calculation.
+ *
+ * ## When to Use
+ *
+ * - **Insert-heavy workloads** (semantic caching, real-time ingestion)
+ * - **Datasets < 100K vectors** (search remains fast due to SIMD)
+ * - **When 100% recall (exact search) is required**
+ * - **When insert latency is critical** (~1μs vs ~2ms for HNSW)
+ *
+ * ## Performance Characteristics
+ *
+ * | Operation | Flat Index | HNSW |
+ * |-----------|------------|------|
+ * | Insert    | O(1) ~1μs  | O(log n) ~2ms |
+ * | Search    | O(n) ~1ms/10K | O(log n) ~1ms |
+ *
+ * ## Example (JavaScript)
+ *
+ * ```javascript
+ * // Create a flat index for 1024-bit binary vectors
+ * const flatDb = new BinaryFlatVec(1024);
+ *
+ * // Insert binary vectors (O(1) - extremely fast!)
+ * const binaryVector = new Uint8Array(128); // 1024 bits = 128 bytes
+ * const id = flatDb.insert(binaryVector);
+ *
+ * // Search (O(n) but SIMD-accelerated)
+ * const results = flatDb.search(binaryVector, 10);
+ * results.forEach(r => console.log(`ID: ${r.id}, Distance: ${r.distance}`));
+ * ```
+ */
+export class BinaryFlatVec {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(BinaryFlatVec.prototype);
+        obj.__wbg_ptr = ptr;
+        BinaryFlatVecFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        BinaryFlatVecFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_binaryflatvec_free(ptr, 0);
+    }
+    /**
+     * Create a new binary flat index.
+     *
+     * # Arguments
+     *
+     * * `dimensions` - Number of bits per vector (must be divisible by 8).
+     *
+     * # Panics
+     *
+     * Panics if dimensions is not divisible by 8.
+     * @param {number} dimensions
+     */
+    constructor(dimensions) {
+        const ret = wasm.binaryflatvec_new(dimensions);
+        this.__wbg_ptr = ret >>> 0;
+        BinaryFlatVecFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * Create a new binary flat index with pre-allocated capacity.
+     *
+     * # Arguments
+     *
+     * * `dimensions` - Number of bits per vector (must be divisible by 8).
+     * * `capacity` - Number of vectors to pre-allocate space for.
+     * @param {number} dimensions
+     * @param {number} capacity
+     * @returns {BinaryFlatVec}
+     */
+    static withCapacity(dimensions, capacity) {
+        const ret = wasm.binaryflatvec_withCapacity(dimensions, capacity);
+        return BinaryFlatVec.__wrap(ret);
+    }
+    /**
+     * Insert a binary vector into the index.
+     *
+     * This is O(1) - just a memcpy to contiguous storage.
+     *
+     * # Arguments
+     *
+     * * `vector` - Binary vector as packed bytes (length = dimensions / 8).
+     *
+     * # Returns
+     *
+     * The assigned Vector ID (u32).
+     *
+     * # Panics
+     *
+     * Panics if vector length doesn't match expected bytes.
+     * @param {Uint8Array} vector
+     * @returns {number}
+     */
+    insert(vector) {
+        const ret = wasm.binaryflatvec_insert(this.__wbg_ptr, addHeapObject(vector));
+        return ret >>> 0;
+    }
+    /**
+     * Search for the k nearest neighbors using Hamming distance.
+     *
+     * This is O(n) but SIMD-accelerated, so still fast for <100K vectors.
+     * Returns exact results (100% recall).
+     *
+     * # Arguments
+     *
+     * * `query` - Query vector as packed bytes.
+     * * `k` - Number of neighbors to return.
+     *
+     * # Returns
+     *
+     * Array of `{ id: u32, distance: f32 }` sorted by distance (ascending).
+     * @param {Uint8Array} query
+     * @param {number} k
+     * @returns {any}
+     */
+    search(query, k) {
+        const ret = wasm.binaryflatvec_search(this.__wbg_ptr, addHeapObject(query), k);
+        return takeObject(ret);
+    }
+    /**
+     * Get a vector by ID.
+     *
+     * # Returns
+     *
+     * The vector bytes as Uint8Array, or null if ID not found.
+     * @param {number} id
+     * @returns {any}
+     */
+    get(id) {
+        const ret = wasm.binaryflatvec_get(this.__wbg_ptr, id);
+        return takeObject(ret);
+    }
+    /**
+     * Get the number of vectors in the index.
+     * @returns {number}
+     */
+    get len() {
+        const ret = wasm.binaryflatvec_len(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Check if the index is empty.
+     * @returns {boolean}
+     */
+    get isEmpty() {
+        const ret = wasm.binaryflatvec_isEmpty(this.__wbg_ptr);
+        return ret !== 0;
+    }
+    /**
+     * Get the dimensions (bits) per vector.
+     * @returns {number}
+     */
+    get dimensions() {
+        const ret = wasm.binaryflatvec_dimensions(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get the bytes per vector.
+     * @returns {number}
+     */
+    get bytesPerVector() {
+        const ret = wasm.binaryflatvec_bytesPerVector(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get approximate memory usage in bytes.
+     * @returns {number}
+     */
+    memoryUsage() {
+        const ret = wasm.binaryflatvec_memoryUsage(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Clear all vectors from the index.
+     */
+    clear() {
+        wasm.binaryflatvec_clear(this.__wbg_ptr);
+    }
+    /**
+     * Shrink internal storage to fit current number of vectors.
+     */
+    shrinkToFit() {
+        wasm.binaryflatvec_shrinkToFit(this.__wbg_ptr);
+    }
+}
+if (Symbol.dispose) BinaryFlatVec.prototype[Symbol.dispose] = BinaryFlatVec.prototype.free;
 
 /**
  * The main EdgeVec database handle.
@@ -602,6 +806,52 @@ export class EdgeVec {
         try {
             const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
             wasm.edgevec_searchBinary(retptr, this.__wbg_ptr, addHeapObject(query), k);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return takeObject(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
+    }
+    /**
+     * Searches binary vectors with a custom ef_search parameter.
+     *
+     * This allows tuning the recall/speed tradeoff per-query:
+     * - Lower ef_search = faster, lower recall
+     * - Higher ef_search = slower, higher recall
+     *
+     * # Arguments
+     *
+     * * `query` - A Uint8Array containing the binary query vector.
+     * * `k` - The number of neighbors to return.
+     * * `ef_search` - Size of dynamic candidate list (must be >= k).
+     *
+     * # Returns
+     *
+     * An array of objects: `[{ id: u32, score: f32 }, ...]`
+     *
+     * # Example (JavaScript)
+     *
+     * ```javascript
+     * // Low ef_search = fast, ~90% recall
+     * const fastResults = db.searchBinaryWithEf(query, 10, 20);
+     *
+     * // High ef_search = slower, ~99% recall
+     * const accurateResults = db.searchBinaryWithEf(query, 10, 200);
+     * ```
+     * @param {Uint8Array} query
+     * @param {number} k
+     * @param {number} ef_search
+     * @returns {any}
+     */
+    searchBinaryWithEf(query, k, ef_search) {
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_searchBinaryWithEf(retptr, this.__wbg_ptr, addHeapObject(query), k, ef_search);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
             var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
@@ -2714,7 +2964,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_2060(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_2148(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -2859,7 +3109,7 @@ function __wbg_get_imports() {
     };
     imports.wbg.__wbindgen_cast_336ddcf56cf45ed6 = function(arg0, arg1) {
         // Cast intrinsic for `Closure(Closure { dtor_idx: 113, function: Function { arguments: [Externref], shim_idx: 114, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1505, __wasm_bindgen_func_elem_1520);
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1593, __wasm_bindgen_func_elem_1608);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {

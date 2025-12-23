@@ -34,6 +34,102 @@ export class BatchInsertResult {
   readonly ids: BigUint64Array;
 }
 
+export class BinaryFlatVec {
+  free(): void;
+  [Symbol.dispose](): void;
+  /**
+   * Create a new binary flat index.
+   *
+   * # Arguments
+   *
+   * * `dimensions` - Number of bits per vector (must be divisible by 8).
+   *
+   * # Panics
+   *
+   * Panics if dimensions is not divisible by 8.
+   */
+  constructor(dimensions: number);
+  /**
+   * Create a new binary flat index with pre-allocated capacity.
+   *
+   * # Arguments
+   *
+   * * `dimensions` - Number of bits per vector (must be divisible by 8).
+   * * `capacity` - Number of vectors to pre-allocate space for.
+   */
+  static withCapacity(dimensions: number, capacity: number): BinaryFlatVec;
+  /**
+   * Insert a binary vector into the index.
+   *
+   * This is O(1) - just a memcpy to contiguous storage.
+   *
+   * # Arguments
+   *
+   * * `vector` - Binary vector as packed bytes (length = dimensions / 8).
+   *
+   * # Returns
+   *
+   * The assigned Vector ID (u32).
+   *
+   * # Panics
+   *
+   * Panics if vector length doesn't match expected bytes.
+   */
+  insert(vector: Uint8Array): number;
+  /**
+   * Search for the k nearest neighbors using Hamming distance.
+   *
+   * This is O(n) but SIMD-accelerated, so still fast for <100K vectors.
+   * Returns exact results (100% recall).
+   *
+   * # Arguments
+   *
+   * * `query` - Query vector as packed bytes.
+   * * `k` - Number of neighbors to return.
+   *
+   * # Returns
+   *
+   * Array of `{ id: u32, distance: f32 }` sorted by distance (ascending).
+   */
+  search(query: Uint8Array, k: number): any;
+  /**
+   * Get a vector by ID.
+   *
+   * # Returns
+   *
+   * The vector bytes as Uint8Array, or null if ID not found.
+   */
+  get(id: number): any;
+  /**
+   * Get approximate memory usage in bytes.
+   */
+  memoryUsage(): number;
+  /**
+   * Clear all vectors from the index.
+   */
+  clear(): void;
+  /**
+   * Shrink internal storage to fit current number of vectors.
+   */
+  shrinkToFit(): void;
+  /**
+   * Get the number of vectors in the index.
+   */
+  readonly len: number;
+  /**
+   * Check if the index is empty.
+   */
+  readonly isEmpty: boolean;
+  /**
+   * Get the dimensions (bits) per vector.
+   */
+  readonly dimensions: number;
+  /**
+   * Get the bytes per vector.
+   */
+  readonly bytesPerVector: number;
+}
+
 export class EdgeVec {
   free(): void;
   [Symbol.dispose](): void;
@@ -166,6 +262,34 @@ export class EdgeVec {
    * ```
    */
   searchBinary(query: Uint8Array, k: number): any;
+  /**
+   * Searches binary vectors with a custom ef_search parameter.
+   *
+   * This allows tuning the recall/speed tradeoff per-query:
+   * - Lower ef_search = faster, lower recall
+   * - Higher ef_search = slower, higher recall
+   *
+   * # Arguments
+   *
+   * * `query` - A Uint8Array containing the binary query vector.
+   * * `k` - The number of neighbors to return.
+   * * `ef_search` - Size of dynamic candidate list (must be >= k).
+   *
+   * # Returns
+   *
+   * An array of objects: `[{ id: u32, score: f32 }, ...]`
+   *
+   * # Example (JavaScript)
+   *
+   * ```javascript
+   * // Low ef_search = fast, ~90% recall
+   * const fastResults = db.searchBinaryWithEf(query, 10, 20);
+   *
+   * // High ef_search = slower, ~99% recall
+   * const accurateResults = db.searchBinaryWithEf(query, 10, 200);
+   * ```
+   */
+  searchBinaryWithEf(query: Uint8Array, k: number, ef_search: number): any;
   /**
    * Searches binary vectors with optional metadata filtering.
    *
@@ -1356,6 +1480,7 @@ export interface InitOutput {
   readonly edgevec_insertBinary: (a: number, b: number, c: number) => void;
   readonly edgevec_insertWithBq: (a: number, b: number, c: number) => void;
   readonly edgevec_searchBinary: (a: number, b: number, c: number, d: number) => void;
+  readonly edgevec_searchBinaryWithEf: (a: number, b: number, c: number, d: number, e: number) => void;
   readonly edgevec_searchBinaryFiltered: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
   readonly edgevec_insertBatchFlat: (a: number, b: number, c: number, d: number) => void;
   readonly edgevec_insertBatch: (a: number, b: number, c: number, d: number) => void;
@@ -1398,9 +1523,22 @@ export interface InitOutput {
   readonly wasmbatchdeleteresult_uniqueCount: (a: number) => number;
   readonly wasmbatchdeleteresult_allValid: (a: number) => number;
   readonly wasmbatchdeleteresult_anyDeleted: (a: number) => number;
-  readonly __wasm_bindgen_func_elem_1520: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_1505: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_2060: (a: number, b: number, c: number, d: number) => void;
+  readonly __wbg_binaryflatvec_free: (a: number, b: number) => void;
+  readonly binaryflatvec_new: (a: number) => number;
+  readonly binaryflatvec_withCapacity: (a: number, b: number) => number;
+  readonly binaryflatvec_insert: (a: number, b: number) => number;
+  readonly binaryflatvec_search: (a: number, b: number, c: number) => number;
+  readonly binaryflatvec_get: (a: number, b: number) => number;
+  readonly binaryflatvec_len: (a: number) => number;
+  readonly binaryflatvec_isEmpty: (a: number) => number;
+  readonly binaryflatvec_dimensions: (a: number) => number;
+  readonly binaryflatvec_bytesPerVector: (a: number) => number;
+  readonly binaryflatvec_memoryUsage: (a: number) => number;
+  readonly binaryflatvec_clear: (a: number) => void;
+  readonly binaryflatvec_shrinkToFit: (a: number) => void;
+  readonly __wasm_bindgen_func_elem_1608: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_1593: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_2148: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;

@@ -28,7 +28,28 @@
       "Bash(npm test)",
       "Bash(bash:*)",
       "WebSearch",
-      "WebFetch(domain:milvus.io)"
+      "WebFetch(domain:milvus.io)",
+      "Bash(RUSTFLAGS=\"-A unused_variables\" cargo test:*)",
+      "Skill(git-commit)",
+      "Bash(wasm-pack:*)",
+      "Bash(cargo install:*)",
+      "Bash(bun run build:*)",
+      "Bash(git checkout:*)",
+      "Bash(bun run build:ts:*)",
+      "Bash(bun install:*)",
+      "Bash(wasm-bindgen:*)",
+      "Bash(wasm-objdump:*)",
+      "Bash(xxd:*)",
+      "Bash(RUSTFLAGS=\"-C target-feature=+simd128\" cargo build:*)",
+      "Bash(git restore:*)",
+      "Bash(RUSTFLAGS=\"-C target-feature=+simd128 -A unused_variables\" cargo build:*)",
+      "Bash(RUSTFLAGS=\"-A unused_variables\" cargo check:*)",
+      "Bash(RUSTFLAGS=\"-A unused_variables\" cargo run:*)",
+      "Bash(RUSTFLAGS=\"-C target-feature=+simd128\" wasm-pack build:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(git fetch:*)"
     ]
   }
 }

@@ -144,6 +144,14 @@
     <div class="dashboard">
         <aside class="controls">
             <div class="control-group">
+                <label>Index Type</label>
+                <select id="indexType" onchange="setIndexType(this.value)">
+                    <option value="hnsw" selected>HNSW (ANN, O(log n))</option>
+                    <option value="flat">Flat (Brute-Force, O(1) insert)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
                 <label>Dimensions (bits)</label>
                 <select id="dimensions">
                     <option value="128">128 (16 bytes)</option>
@@ -182,6 +190,8 @@
 
             <div class="divider"></div>
 
+            <button id="btnCompare" onclick="runComparison()" style="background: linear-gradient(45deg, var(--neon-purple), var(--neon-cyan));">⚡ Compare HNSW vs Flat</button>
+
             <button class="danger" id="btnClear" onclick="clearDatabase()" disabled>Clear Database</button>
 
             <div class="stats-grid">
@@ -214,12 +224,15 @@
     </div>
 
     <script type="module">
-        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, getSimdBackend, benchmarkHamming } from '../../pkg/edgevec.js';
+        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, BinaryFlatVec, getSimdBackend, benchmarkHamming } from '../../pkg/edgevec.js';
 
-        let db = null;
+        let db = null;           // HNSW index
+        let flatDb = null;       // Flat index
         let isReady = false;
         let vectorCount = 0;
+        let flatVectorCount = 0;
         let currentDimensions = 0;
+        let indexType = 'hnsw';  // 'hnsw' or 'flat'
 
         // Expose functions to window for onclick handlers
         window.initDatabase = initDatabase;
@@ -228,6 +241,8 @@
         window.runSearch = runSearch;
         window.runFilteredSearch = runFilteredSearch;
         window.clearDatabase = clearDatabase;
+        window.runComparison = runComparison;
+        window.setIndexType = setIndexType;
 
         // Initialize WASM
         async function initialize() {
@@ -255,33 +270,55 @@
             }
         }
 
+        function setIndexType(type) {
+            indexType = type;
+            log(`Index type set to: ${type.toUpperCase()}`, 'cyan');
+            if (type === 'flat') {
+                log('Flat index: O(1) insert, O(n) search - ideal for <100K vectors', 'purple');
+                document.getElementById('btnSearchFiltered').disabled = true; // No filtered search on flat yet
+            } else {
+                log('HNSW index: O(log n) insert, O(log n) search - approximate results', 'purple');
+            }
+        }
+
         function initDatabase() {
             const dimensions = parseInt(document.getElementById('dimensions').value);
             currentDimensions = dimensions;
 
-            log(`Initializing binary database with ${dimensions} dimensions...`, 'cyan');
+            log(`Initializing ${indexType.toUpperCase()} binary index with ${dimensions} dimensions...`, 'cyan');
             const start = performance.now();
 
             try {
-                const config = new EdgeVecConfig(dimensions);
-                config.vector_type = VectorType.Binary;
-                config.setMetricType(MetricType.Hamming);
-                config.m = 16;
-                config.m0 = 32;
-                config.ef_construction = 100;
+                if (indexType === 'flat') {
+                    // Create flat index
+                    flatDb = new BinaryFlatVec(dimensions);
+                    flatVectorCount = 0;
 
-                db = new EdgeVec(config);
-                vectorCount = 0;
+                    const elapsed = (performance.now() - start).toFixed(2);
+                    log(`Flat index initialized in ${elapsed}ms`, 'green');
+                    log(`O(1) insert, O(n) SIMD search - no graph overhead!`, 'purple');
+                } else {
+                    // Create HNSW index
+                    const config = new EdgeVecConfig(dimensions);
+                    config.vector_type = VectorType.Binary;
+                    config.setMetricType(MetricType.Hamming);
+                    config.m = 16;
+                    config.m0 = 32;
+                    config.ef_construction = 100;
 
-                const elapsed = (performance.now() - start).toFixed(2);
-                log(`Database initialized in ${elapsed}ms`, 'green');
-                log(`Config: M=16, M0=32, ef_construction=100, metric=Hamming`, 'purple');
+                    db = new EdgeVec(config);
+                    vectorCount = 0;
+
+                    const elapsed = (performance.now() - start).toFixed(2);
+                    log(`HNSW database initialized in ${elapsed}ms`, 'green');
+                    log(`Config: M=16, M0=32, ef_construction=100, metric=Hamming`, 'purple');
+                }
 
                 updateStats();
                 document.getElementById('btnInsert').disabled = false;
                 document.getElementById('btnTestOne').disabled = false;
                 document.getElementById('btnClear').disabled = false;
-                setStatus('active', 'Database Ready');
+                setStatus('active', `${indexType.toUpperCase()} Ready`);
             } catch (e) {
                 log(`Error initializing database: ${e.message}`, 'red');
                 console.error(e);
@@ -289,10 +326,8 @@
         }
 
         function testSingleInsert() {
-            if (!db) return;
-
             const bytesPerVector = currentDimensions / 8;
-            log(`Testing single insert (${bytesPerVector} bytes)...`, 'cyan');
+            log(`Testing single ${indexType.toUpperCase()} insert (${bytesPerVector} bytes)...`, 'cyan');
 
             try {
                 // Create a simple test vector (all zeros)
@@ -300,25 +335,40 @@
                 log(`Created vector: length=${vector.length}`, 'purple');
 
                 const start = performance.now();
-                log('Calling insertBinary...', 'purple');
 
-                const id = db.insertBinary(vector);
+                let id;
+                if (indexType === 'flat') {
+                    if (!flatDb) return;
+                    log('Calling flatDb.insert...', 'purple');
+                    id = flatDb.insert(vector);
+                    flatVectorCount = 1;
+                } else {
+                    if (!db) return;
+                    log('Calling db.insertBinary...', 'purple');
+                    id = db.insertBinary(vector);
+                    vectorCount = 1;
+                }
 
                 const elapsed = (performance.now() - start).toFixed(2);
                 log(`SUCCESS! Insert completed in ${elapsed}ms, ID: ${id}`, 'green');
 
-                vectorCount = 1;
                 updateStats();
 
                 // Test search too
-                log('Testing searchBinary...', 'purple');
+                log('Testing search...', 'purple');
                 const searchStart = performance.now();
-                const results = db.searchBinary(vector, 1);
+                let results;
+                if (indexType === 'flat') {
+                    results = flatDb.search(vector, 1);
+                } else {
+                    results = db.searchBinary(vector, 1);
+                }
                 const searchElapsed = (performance.now() - searchStart).toFixed(2);
                 log(`Search completed in ${searchElapsed}ms, found ${results.length} results`, 'green');
 
                 if (results.length > 0) {
-                    log(`Result: ID=${results[0].id}, distance=${results[0].score}`, 'cyan');
+                    const r = results[0];
+                    log(`Result: ID=${r.id}, distance=${r.distance || r.score}`, 'cyan');
                 }
 
                 document.getElementById('btnSearch').disabled = false;
@@ -329,13 +379,14 @@
         }
 
         async function insertVectors() {
-            if (!db) return;
+            if (indexType === 'flat' && !flatDb) return;
+            if (indexType === 'hnsw' && !db) return;
 
             const numVectors = parseInt(document.getElementById('numVectors').value);
             const batchSize = parseInt(document.getElementById('batchSize').value);
             const bytesPerVector = currentDimensions / 8;
 
-            log(`Inserting ${numVectors.toLocaleString()} binary vectors (${bytesPerVector} bytes each)...`, 'cyan');
+            log(`Inserting ${numVectors.toLocaleString()} binary vectors into ${indexType.toUpperCase()} (${bytesPerVector} bytes each)...`, 'cyan');
             setStatus('busy', 'Inserting...');
             document.getElementById('btnInsert').disabled = true;
 
@@ -360,22 +411,27 @@
                         }
 
                         // Insert binary vector
-                        const id = db.insertBinary(vector);
+                        let id;
+                        if (indexType === 'flat') {
+                            id = flatDb.insert(vector);
+                        } else {
+                            id = db.insertBinary(vector);
+
+                            // Add metadata for filtered search demo (HNSW only)
+                            try {
+                                const category = (inserted % 3 === 0) ? 'A' : (inserted % 3 === 1) ? 'B' : 'C';
+                                db.setMetadata(id, 'category', JsMetadataValue.fromString(category));
+                                db.setMetadata(id, 'value', JsMetadataValue.fromInteger(inserted % 100));
+                            } catch (metaErr) {
+                                // Metadata is optional, continue without it
+                                if (inserted === 0) {
+                                    log(`Note: Metadata error: ${metaErr.message}`, 'purple');
+                                }
+                            }
+                        }
 
                         if (inserted === 0) {
                             log(`First insert succeeded, ID: ${id}`, 'green');
-                        }
-
-                        // Add metadata for filtered search demo
-                        try {
-                            const category = (inserted % 3 === 0) ? 'A' : (inserted % 3 === 1) ? 'B' : 'C';
-                            db.setMetadata(id, 'category', JsMetadataValue.fromString(category));
-                            db.setMetadata(id, 'value', JsMetadataValue.fromInteger(inserted % 100));
-                        } catch (metaErr) {
-                            // Metadata is optional, continue without it
-                            if (inserted === 0) {
-                                log(`Note: Metadata error: ${metaErr.message}`, 'purple');
-                            }
                         }
                         inserted++;
                     }
@@ -388,7 +444,11 @@
                 const batchElapsed = performance.now() - batchStart;
                 batchTimes.push(batchElapsed);
 
-                vectorCount = inserted;
+                if (indexType === 'flat') {
+                    flatVectorCount = inserted;
+                } else {
+                    vectorCount = inserted;
+                }
                 updateStats();
 
                 // Log progress every few batches
@@ -407,7 +467,7 @@
             const throughput = (numVectors / totalElapsed * 1000).toFixed(0);
 
             log('─'.repeat(50), '');
-            log('INSERT BENCHMARK COMPLETE', 'green');
+            log(`${indexType.toUpperCase()} INSERT BENCHMARK COMPLETE`, 'green');
             log(`Total vectors: ${numVectors.toLocaleString()}`, 'cyan');
             log(`Total time: ${(totalElapsed / 1000).toFixed(2)}s`, 'cyan');
             log(`Avg insert time: ${avgInsertTime}ms/vector`, 'cyan');
@@ -417,18 +477,23 @@
 
             document.getElementById('btnInsert').disabled = false;
             document.getElementById('btnSearch').disabled = false;
-            document.getElementById('btnSearchFiltered').disabled = false;
-            setStatus('active', `${numVectors.toLocaleString()} vectors`);
+            if (indexType === 'hnsw') {
+                document.getElementById('btnSearchFiltered').disabled = false;
+            }
+            setStatus('active', `${indexType.toUpperCase()}: ${numVectors.toLocaleString()} vectors`);
         }
 
         async function runSearch() {
-            if (!db || vectorCount === 0) return;
+            const count = indexType === 'flat' ? flatVectorCount : vectorCount;
+            if (count === 0) return;
+            if (indexType === 'flat' && !flatDb) return;
+            if (indexType === 'hnsw' && !db) return;
 
             const k = parseInt(document.getElementById('searchK').value);
             const bytesPerVector = currentDimensions / 8;
             const numQueries = 100;
 
-            log(`Running ${numQueries} search queries (k=${k})...`, 'cyan');
+            log(`Running ${numQueries} ${indexType.toUpperCase()} search queries (k=${k})...`, 'cyan');
             setStatus('busy', 'Searching...');
 
             const queryTimes = [];
@@ -439,7 +504,11 @@
                 crypto.getRandomValues(query);
 
                 const start = performance.now();
-                results = db.searchBinary(query, k);
+                if (indexType === 'flat') {
+                    results = flatDb.search(query, k);
+                } else {
+                    results = db.searchBinary(query, k);
+                }
                 queryTimes.push(performance.now() - start);
             }
 
@@ -450,7 +519,7 @@
             const p99 = queryTimes.sort((a, b) => a - b)[Math.floor(numQueries * 0.99)];
 
             log('─'.repeat(50), '');
-            log('SEARCH BENCHMARK COMPLETE', 'green');
+            log(`${indexType.toUpperCase()} SEARCH BENCHMARK COMPLETE`, 'green');
             log(`Queries: ${numQueries}`, 'cyan');
             log(`Avg latency: ${avgTime.toFixed(3)}ms`, 'cyan');
             log(`Min latency: ${minTime.toFixed(3)}ms`, 'cyan');
@@ -464,11 +533,12 @@
             if (results && results.length > 0) {
                 log('Sample results (last query):', 'purple');
                 results.slice(0, 5).forEach((r, i) => {
-                    log(`  ${i + 1}. ID: ${r.id}, Hamming Distance: ${r.score}`, '');
+                    const dist = r.distance !== undefined ? r.distance : r.score;
+                    log(`  ${i + 1}. ID: ${r.id}, Hamming Distance: ${dist}`, '');
                 });
             }
 
-            setStatus('active', `${vectorCount.toLocaleString()} vectors`);
+            setStatus('active', `${indexType.toUpperCase()}: ${count.toLocaleString()} vectors`);
         }
 
         async function runFilteredSearch() {
@@ -526,10 +596,13 @@
 
         function clearDatabase() {
             db = null;
+            flatDb = null;
             vectorCount = 0;
+            flatVectorCount = 0;
             currentDimensions = 0;
             updateStats();
             document.getElementById('btnInsert').disabled = true;
+            document.getElementById('btnTestOne').disabled = true;
             document.getElementById('btnSearch').disabled = true;
             document.getElementById('btnSearchFiltered').disabled = true;
             document.getElementById('btnClear').disabled = true;
@@ -538,16 +611,214 @@
         }
 
         function updateStats() {
-            document.getElementById('statVectors').textContent = vectorCount.toLocaleString();
+            const count = indexType === 'flat' ? flatVectorCount : vectorCount;
+            document.getElementById('statVectors').textContent = count.toLocaleString();
             document.getElementById('statDimensions').textContent = currentDimensions || '-';
 
             const bytesPerVector = currentDimensions / 8;
-            const memoryBytes = vectorCount * bytesPerVector;
+            const memoryBytes = count * bytesPerVector;
             const maxMemory = 100 * 1024 * 1024; // 100 MB scale
             const percent = Math.min(100, (memoryBytes / maxMemory) * 100);
 
             document.getElementById('memoryFill').style.width = `${percent}%`;
             document.getElementById('memoryText').textContent = formatBytes(memoryBytes);
+        }
+
+        // ==== COMPARISON BENCHMARK ====
+        async function runComparison() {
+            const dimensions = parseInt(document.getElementById('dimensions').value);
+            const numVectors = parseInt(document.getElementById('numVectors').value);
+            const k = parseInt(document.getElementById('searchK').value);
+            const bytesPerVector = dimensions / 8;
+
+            log('═'.repeat(60), 'cyan');
+            log('⚡ HNSW vs FLAT INDEX COMPARISON BENCHMARK', 'cyan');
+            log('═'.repeat(60), 'cyan');
+            log(`Dimensions: ${dimensions} bits (${bytesPerVector} bytes)`, 'purple');
+            log(`Vectors: ${numVectors.toLocaleString()}`, 'purple');
+            log(`Search K: ${k}`, 'purple');
+            log('─'.repeat(60), '');
+
+            setStatus('busy', 'Running comparison...');
+
+            // Generate test vectors once
+            const vectors = [];
+            for (let i = 0; i < numVectors; i++) {
+                const v = new Uint8Array(bytesPerVector);
+                crypto.getRandomValues(v);
+                vectors.push(v);
+            }
+
+            // ==== FLAT INDEX TEST ====
+            log('\n[FLAT INDEX] Testing...', 'green');
+
+            const flatIndex = new BinaryFlatVec(dimensions);
+            const flatInsertStart = performance.now();
+            for (const v of vectors) {
+                flatIndex.insert(v);
+            }
+            const flatInsertTime = performance.now() - flatInsertStart;
+            const flatInsertThroughput = (numVectors / flatInsertTime * 1000).toFixed(0);
+
+            // Flat search benchmark
+            const flatSearchTimes = [];
+            for (let i = 0; i < 50; i++) {
+                const query = vectors[Math.floor(Math.random() * vectors.length)];
+                const start = performance.now();
+                flatIndex.search(query, k);
+                flatSearchTimes.push(performance.now() - start);
+            }
+            const flatAvgSearch = flatSearchTimes.reduce((a, b) => a + b, 0) / flatSearchTimes.length;
+
+            log(`  Insert: ${flatInsertTime.toFixed(0)}ms (${flatInsertThroughput} vec/s)`, 'cyan');
+            log(`  Search: ${flatAvgSearch.toFixed(3)}ms avg`, 'cyan');
+
+            // ==== HNSW INDEX TEST ====
+            log('\n[HNSW INDEX] Testing...', 'green');
+
+            const hnswConfig = new EdgeVecConfig(dimensions);
+            hnswConfig.vector_type = VectorType.Binary;
+            hnswConfig.setMetricType(MetricType.Hamming);
+            hnswConfig.m = 16;
+            hnswConfig.m0 = 32;
+            hnswConfig.ef_construction = 100;
+
+            const hnswIndex = new EdgeVec(hnswConfig);
+            const hnswInsertStart = performance.now();
+            let insertCount = 0;
+            for (const v of vectors) {
+                hnswIndex.insertBinary(v);
+                insertCount++;
+                // Yield occasionally to prevent UI freeze
+                if (insertCount % 1000 === 0) {
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+            const hnswInsertTime = performance.now() - hnswInsertStart;
+            const hnswInsertThroughput = (numVectors / hnswInsertTime * 1000).toFixed(0);
+
+            // HNSW search benchmark
+            const hnswSearchTimes = [];
+            for (let i = 0; i < 50; i++) {
+                const query = vectors[Math.floor(Math.random() * vectors.length)];
+                const start = performance.now();
+                hnswIndex.searchBinary(query, k);
+                hnswSearchTimes.push(performance.now() - start);
+            }
+            const hnswAvgSearch = hnswSearchTimes.reduce((a, b) => a + b, 0) / hnswSearchTimes.length;
+
+            log(`  Insert: ${hnswInsertTime.toFixed(0)}ms (${hnswInsertThroughput} vec/s)`, 'cyan');
+            log(`  Search: ${hnswAvgSearch.toFixed(3)}ms avg`, 'cyan');
+
+            // ==== RECALL vs ef_search BENCHMARK ====
+            log('\n[RECALL] Testing HNSW accuracy at different ef_search values...', 'green');
+            log(`  (ef_search controls recall/speed tradeoff - higher = better recall, slower)`, 'purple');
+
+            const numRecallQueries = 30;
+            const efValues = [10, 20, 50, 100, 200];
+            const recallResults = [];
+
+            // Pre-compute ground truth for all test queries
+            const testQueries = [];
+            const groundTruths = [];
+            for (let i = 0; i < numRecallQueries; i++) {
+                const query = vectors[Math.floor(Math.random() * vectors.length)];
+                testQueries.push(query);
+                const gt = flatIndex.search(query, k);
+                groundTruths.push(new Set(gt.map(r => r.id)));
+            }
+
+            log(``, '');
+            log(`  ef_search │ Recall@${k} │ Latency  │ vs Default`, '');
+            log(`  ──────────┼──────────┼──────────┼───────────`, '');
+
+            for (const ef of efValues) {
+                let totalRecall = 0;
+                const searchTimes = [];
+
+                for (let i = 0; i < numRecallQueries; i++) {
+                    const query = testQueries[i];
+                    const groundTruthIds = groundTruths[i];
+
+                    const start = performance.now();
+                    const hnswResults = hnswIndex.searchBinaryWithEf(query, k, ef);
+                    searchTimes.push(performance.now() - start);
+
+                    const hnswIds = new Set(hnswResults.map(r => r.id));
+                    let hits = 0;
+                    for (const id of hnswIds) {
+                        if (groundTruthIds.has(id)) hits++;
+                    }
+                    totalRecall += hits / k;
+                }
+
+                const avgRecall = (totalRecall / numRecallQueries * 100);
+                const avgLatency = searchTimes.reduce((a, b) => a + b, 0) / numRecallQueries;
+                const isDefault = ef === 50;
+
+                recallResults.push({ ef, recall: avgRecall, latency: avgLatency });
+
+                const recallColor = avgRecall >= 99 ? 'green' : avgRecall >= 95 ? 'cyan' : 'red';
+                const marker = isDefault ? ' ←' : '  ';
+                log(`  ${String(ef).padStart(9)} │ ${avgRecall.toFixed(1).padStart(7)}% │ ${avgLatency.toFixed(3).padStart(7)}ms │${marker}${isDefault ? ' (default)' : ''}`, recallColor);
+            }
+
+            // Get default (ef=50) results for comparison
+            const defaultResult = recallResults.find(r => r.ef === 50);
+            const avgRecall = defaultResult.recall.toFixed(1);
+            const nearPerfectEf = recallResults.find(r => r.recall >= 99);
+
+            log(``, '');
+            if (nearPerfectEf) {
+                log(`  ✓ Use ef_search=${nearPerfectEf.ef} for ${nearPerfectEf.recall.toFixed(1)}% recall`, 'green');
+            }
+
+            // ==== COMPARISON SUMMARY ====
+            const insertSpeedup = (hnswInsertTime / flatInsertTime).toFixed(1);
+            const searchSlowdown = (flatAvgSearch / hnswAvgSearch).toFixed(1);
+
+            log('\n' + '═'.repeat(60), 'green');
+            log('📊 COMPARISON SUMMARY', 'green');
+            log('═'.repeat(60), 'green');
+
+            log(`Accuracy (Recall@${k}):`, '');
+            log(`  • FLAT:  ${' 100.0'.padStart(7)}%  (exact, ground truth)`, 'green');
+            log(`  • HNSW:  ${avgRecall.padStart(6)}%  (approximate)`, avgRecall >= 95 ? 'green' : 'red');
+            if (avgRecall < 95) {
+                log(`  ⚠️  Consider increasing ef_search for better recall`, 'red');
+            }
+            log(``, '');
+
+            log(`Insert Throughput:`, '');
+            log(`  • FLAT:  ${flatInsertThroughput.padStart(8)} vec/s`, 'green');
+            log(`  • HNSW:  ${hnswInsertThroughput.padStart(8)} vec/s`, 'cyan');
+            log(`  → FLAT is ${insertSpeedup}x FASTER for inserts`, 'green');
+            log(``, '');
+            log(`Search Latency:`, '');
+            log(`  • FLAT:  ${flatAvgSearch.toFixed(3).padStart(8)}ms`, flatAvgSearch < 10 ? 'green' : 'cyan');
+            log(`  • HNSW:  ${hnswAvgSearch.toFixed(3).padStart(8)}ms`, 'cyan');
+            if (flatAvgSearch < hnswAvgSearch) {
+                log(`  → FLAT is ${(hnswAvgSearch / flatAvgSearch).toFixed(1)}x FASTER for search!`, 'green');
+            } else {
+                log(`  → HNSW is ${searchSlowdown}x faster for search`, 'purple');
+            }
+            log(``, '');
+            log(`📝 Recommendation:`, 'purple');
+            if (avgRecall >= 99 && flatAvgSearch < hnswAvgSearch * 2) {
+                log(`  Use FLAT: 100% recall + comparable speed + ${insertSpeedup}x faster inserts`, 'green');
+            } else if (numVectors <= 50000 || flatAvgSearch < 5) {
+                log(`  Use FLAT for this dataset size (${numVectors.toLocaleString()} vectors)`, 'green');
+                log(`  Flat gives 100% recall + ${insertSpeedup}x faster inserts`, 'green');
+            } else if (avgRecall >= 95) {
+                log(`  HNSW is viable: ${avgRecall}% recall with faster search`, 'cyan');
+                log(`  Use FLAT if you need exact results or fast inserts`, 'cyan');
+            } else {
+                log(`  ⚠️ HNSW recall too low (${avgRecall}%) - increase ef_search`, 'red');
+                log(`  Or use FLAT for guaranteed correct results`, 'green');
+            }
+            log('═'.repeat(60), 'green');
+
+            setStatus('active', 'Comparison complete');
         }
 
         function formatBytes(bytes) {

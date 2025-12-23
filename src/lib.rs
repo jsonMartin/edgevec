@@ -124,8 +124,12 @@ pub mod metadata;
 /// Filter expression parsing and evaluation.
 pub mod filter;
 
+/// Flat (brute-force) index for binary vectors.
+pub mod flat;
+
 pub use batch::BatchInsertable;
 pub use error::BatchError;
+pub use flat::{BinaryFlatIndex, FlatSearchResult};
 pub use hnsw::{BatchDeleteError, BatchDeleteResult, HnswConfig, HnswIndex, SearchResult};
 pub use metric::Metric;
 pub use persistence::ChunkedWriter;

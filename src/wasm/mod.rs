@@ -609,6 +609,86 @@ impl EdgeVec {
         Ok(arr.into())
     }
 
+    /// Searches binary vectors with a custom ef_search parameter.
+    ///
+    /// This allows tuning the recall/speed tradeoff per-query:
+    /// - Lower ef_search = faster, lower recall
+    /// - Higher ef_search = slower, higher recall
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - A Uint8Array containing the binary query vector.
+    /// * `k` - The number of neighbors to return.
+    /// * `ef_search` - Size of dynamic candidate list (must be >= k).
+    ///
+    /// # Returns
+    ///
+    /// An array of objects: `[{ id: u32, score: f32 }, ...]`
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// // Low ef_search = fast, ~90% recall
+    /// const fastResults = db.searchBinaryWithEf(query, 10, 20);
+    ///
+    /// // High ef_search = slower, ~99% recall
+    /// const accurateResults = db.searchBinaryWithEf(query, 10, 200);
+    /// ```
+    #[wasm_bindgen(js_name = "searchBinaryWithEf")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_binary_with_ef(
+        &self,
+        query: Uint8Array,
+        k: usize,
+        ef_search: usize,
+    ) -> Result<JsValue, JsValue> {
+        // Validate metric is Hamming
+        if self.inner.config.metric != HnswConfig::METRIC_HAMMING {
+            return Err(EdgeVecError::Validation(
+                "searchBinaryWithEf requires metric='hamming'. Current metric is not Hamming."
+                    .to_string(),
+            )
+            .into());
+        }
+
+        let expected_bytes = ((self.inner.config.dimensions + 7) / 8) as usize;
+        let len = query.length() as usize;
+
+        if len != expected_bytes {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: expected_bytes,
+                actual: len,
+            })
+            .into());
+        }
+
+        let vec = query.to_vec();
+
+        let results = self
+            .inner
+            .search_binary_with_ef(&vec, k, ef_search, &self.storage)
+            .map_err(EdgeVecError::from)?;
+
+        let arr = Array::new_with_length(results.len() as u32);
+        for (i, result) in results.iter().enumerate() {
+            let obj = Object::new();
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("id"),
+                &JsValue::from(result.vector_id.0 as u32),
+            )?;
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("score"),
+                &JsValue::from(result.distance),
+            )?;
+            arr.set(i as u32, obj.into());
+        }
+
+        Ok(arr.into())
+    }
+
     /// Searches binary vectors with optional metadata filtering.
     ///
     /// Combines binary vector search (Hamming distance) with metadata filtering.
@@ -2053,5 +2133,195 @@ fn strategy_to_string(strategy: &FilterStrategy) -> String {
         FilterStrategy::PostFilter { .. } => "post".to_string(),
         FilterStrategy::Hybrid { .. } => "hybrid".to_string(),
         FilterStrategy::Auto => "auto".to_string(),
+    }
+}
+
+// =============================================================================
+// BINARY FLAT INDEX (Brute-Force for Maximum Insert Speed)
+// =============================================================================
+
+/// A flat (brute-force) index for binary vectors.
+///
+/// This provides O(1) insert and O(n) search, which is faster than HNSW
+/// for small-to-medium datasets (< 100K vectors) due to extremely fast
+/// SIMD Hamming distance calculation.
+///
+/// ## When to Use
+///
+/// - **Insert-heavy workloads** (semantic caching, real-time ingestion)
+/// - **Datasets < 100K vectors** (search remains fast due to SIMD)
+/// - **When 100% recall (exact search) is required**
+/// - **When insert latency is critical** (~1μs vs ~2ms for HNSW)
+///
+/// ## Performance Characteristics
+///
+/// | Operation | Flat Index | HNSW |
+/// |-----------|------------|------|
+/// | Insert    | O(1) ~1μs  | O(log n) ~2ms |
+/// | Search    | O(n) ~1ms/10K | O(log n) ~1ms |
+///
+/// ## Example (JavaScript)
+///
+/// ```javascript
+/// // Create a flat index for 1024-bit binary vectors
+/// const flatDb = new BinaryFlatVec(1024);
+///
+/// // Insert binary vectors (O(1) - extremely fast!)
+/// const binaryVector = new Uint8Array(128); // 1024 bits = 128 bytes
+/// const id = flatDb.insert(binaryVector);
+///
+/// // Search (O(n) but SIMD-accelerated)
+/// const results = flatDb.search(binaryVector, 10);
+/// results.forEach(r => console.log(`ID: ${r.id}, Distance: ${r.distance}`));
+/// ```
+#[wasm_bindgen]
+pub struct BinaryFlatVec {
+    inner: crate::flat::BinaryFlatIndex,
+}
+
+#[wasm_bindgen]
+impl BinaryFlatVec {
+    /// Create a new binary flat index.
+    ///
+    /// # Arguments
+    ///
+    /// * `dimensions` - Number of bits per vector (must be divisible by 8).
+    ///
+    /// # Panics
+    ///
+    /// Panics if dimensions is not divisible by 8.
+    #[wasm_bindgen(constructor)]
+    #[must_use]
+    pub fn new(dimensions: usize) -> BinaryFlatVec {
+        INIT.call_once(init_logging);
+        BinaryFlatVec {
+            inner: crate::flat::BinaryFlatIndex::new(dimensions),
+        }
+    }
+
+    /// Create a new binary flat index with pre-allocated capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `dimensions` - Number of bits per vector (must be divisible by 8).
+    /// * `capacity` - Number of vectors to pre-allocate space for.
+    #[wasm_bindgen(js_name = "withCapacity")]
+    #[must_use]
+    pub fn with_capacity(dimensions: usize, capacity: usize) -> BinaryFlatVec {
+        INIT.call_once(init_logging);
+        BinaryFlatVec {
+            inner: crate::flat::BinaryFlatIndex::with_capacity(dimensions, capacity),
+        }
+    }
+
+    /// Insert a binary vector into the index.
+    ///
+    /// This is O(1) - just a memcpy to contiguous storage.
+    ///
+    /// # Arguments
+    ///
+    /// * `vector` - Binary vector as packed bytes (length = dimensions / 8).
+    ///
+    /// # Returns
+    ///
+    /// The assigned Vector ID (u32).
+    ///
+    /// # Panics
+    ///
+    /// Panics if vector length doesn't match expected bytes.
+    #[wasm_bindgen]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn insert(&mut self, vector: Uint8Array) -> u32 {
+        let vec = vector.to_vec();
+        let id = self.inner.insert(&vec);
+        id.0 as u32
+    }
+
+    /// Search for the k nearest neighbors using Hamming distance.
+    ///
+    /// This is O(n) but SIMD-accelerated, so still fast for <100K vectors.
+    /// Returns exact results (100% recall).
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Query vector as packed bytes.
+    /// * `k` - Number of neighbors to return.
+    ///
+    /// # Returns
+    ///
+    /// Array of `{ id: u32, distance: f32 }` sorted by distance (ascending).
+    #[wasm_bindgen]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search(&self, query: Uint8Array, k: usize) -> JsValue {
+        let vec = query.to_vec();
+        let results = self.inner.search(&vec, k);
+
+        let arr = Array::new_with_length(results.len() as u32);
+        for (i, result) in results.iter().enumerate() {
+            let obj = Object::new();
+            let _ = Reflect::set(&obj, &"id".into(), &JsValue::from(result.id.0 as u32));
+            let _ = Reflect::set(&obj, &"distance".into(), &JsValue::from(result.distance));
+            arr.set(i as u32, obj.into());
+        }
+        arr.into()
+    }
+
+    /// Get a vector by ID.
+    ///
+    /// # Returns
+    ///
+    /// The vector bytes as Uint8Array, or null if ID not found.
+    #[wasm_bindgen]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn get(&self, id: u32) -> JsValue {
+        let vector_id = crate::hnsw::VectorId(u64::from(id));
+        match self.inner.get(vector_id) {
+            Some(bytes) => Uint8Array::from(bytes).into(),
+            None => JsValue::NULL,
+        }
+    }
+
+    /// Get the number of vectors in the index.
+    #[wasm_bindgen(getter)]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Check if the index is empty.
+    #[wasm_bindgen(getter, js_name = "isEmpty")]
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Get the dimensions (bits) per vector.
+    #[wasm_bindgen(getter)]
+    pub fn dimensions(&self) -> usize {
+        self.inner.dimensions()
+    }
+
+    /// Get the bytes per vector.
+    #[wasm_bindgen(getter, js_name = "bytesPerVector")]
+    pub fn bytes_per_vector(&self) -> usize {
+        self.inner.bytes_per_vector()
+    }
+
+    /// Get approximate memory usage in bytes.
+    #[wasm_bindgen(js_name = "memoryUsage")]
+    pub fn memory_usage(&self) -> usize {
+        self.inner.memory_usage()
+    }
+
+    /// Clear all vectors from the index.
+    #[wasm_bindgen]
+    pub fn clear(&mut self) {
+        self.inner.clear();
+    }
+
+    /// Shrink internal storage to fit current number of vectors.
+    #[wasm_bindgen(js_name = "shrinkToFit")]
+    pub fn shrink_to_fit(&mut self) {
+        self.inner.shrink_to_fit();
     }
 }

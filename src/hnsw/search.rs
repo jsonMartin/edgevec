@@ -409,6 +409,23 @@ impl HnswIndex {
         storage: &VectorStorage,
         search_ctx: &mut SearchContext,
     ) -> Result<Vec<SearchResult>, GraphError> {
+        self.search_impl_with_ef::<M>(
+            query,
+            k,
+            self.config.ef_search as usize,
+            storage,
+            search_ctx,
+        )
+    }
+
+    fn search_impl_with_ef<M: Metric<f32>>(
+        &self,
+        query: &[f32],
+        k: usize,
+        ef_search: usize,
+        storage: &VectorStorage,
+        search_ctx: &mut SearchContext,
+    ) -> Result<Vec<SearchResult>, GraphError> {
         let Some(entry_point) = self.entry_point() else {
             return Ok(Vec::new());
         };
@@ -428,7 +445,7 @@ impl HnswIndex {
         // 2. Search layer 0 with ef_search
         // W16.3: Use adjusted_k to compensate for tombstones
         let adjusted_k = self.adjusted_k(k);
-        let ef = adjusted_k.max(self.config.ef_search as usize);
+        let ef = adjusted_k.max(ef_search);
         let searcher = Searcher::<M, VectorStorage>::new(self, storage);
         searcher.search_layer(search_ctx, [curr_ep], query, ef, 0)?;
 
@@ -526,10 +543,82 @@ impl HnswIndex {
         self.search_binary_impl(query, k, storage, ctx)
     }
 
+    /// Searches the index using a binary query with a custom ef_search parameter.
+    ///
+    /// This allows tuning the recall/speed tradeoff per-query without changing config.
+    /// Higher ef_search = better recall, slower search.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The binary query vector (packed bytes).
+    /// * `k` - The number of neighbors to return.
+    /// * `ef_search` - Size of dynamic candidate list (higher = better recall).
+    /// * `storage` - The vector storage for distance calculations.
+    ///
+    /// # Returns
+    ///
+    /// A list of `SearchResult`s, sorted by Hamming distance (ascending).
+    pub fn search_binary_with_ef(
+        &self,
+        query: &[u8],
+        k: usize,
+        ef_search: usize,
+        storage: &VectorStorage,
+    ) -> Result<Vec<SearchResult>, GraphError> {
+        let mut ctx = SearchContext::new();
+        self.search_binary_with_ef_context(query, k, ef_search, storage, &mut ctx)
+    }
+
+    /// Searches the index using a binary query with custom ef_search and reusable context.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - The binary query vector (packed bytes).
+    /// * `k` - The number of neighbors to return.
+    /// * `ef_search` - Size of dynamic candidate list (higher = better recall).
+    /// * `storage` - The vector storage for distance calculations.
+    /// * `ctx` - A reusable search context to avoid allocations.
+    pub fn search_binary_with_ef_context(
+        &self,
+        query: &[u8],
+        k: usize,
+        ef_search: usize,
+        storage: &VectorStorage,
+        ctx: &mut SearchContext,
+    ) -> Result<Vec<SearchResult>, GraphError> {
+        // Validate dimensions: for binary, dimensions is in bits
+        let expected_bytes = ((self.config.dimensions + 7) / 8) as usize;
+        if query.len() != expected_bytes {
+            return Err(GraphError::DimensionMismatch {
+                expected: expected_bytes,
+                actual: query.len(),
+            });
+        }
+
+        self.search_binary_impl_with_ef(query, k, ef_search, storage, ctx)
+    }
+
     fn search_binary_impl(
         &self,
         query: &[u8],
         k: usize,
+        storage: &VectorStorage,
+        search_ctx: &mut SearchContext,
+    ) -> Result<Vec<SearchResult>, GraphError> {
+        self.search_binary_impl_with_ef(
+            query,
+            k,
+            self.config.ef_search as usize,
+            storage,
+            search_ctx,
+        )
+    }
+
+    fn search_binary_impl_with_ef(
+        &self,
+        query: &[u8],
+        k: usize,
+        ef_search: usize,
         storage: &VectorStorage,
         search_ctx: &mut SearchContext,
     ) -> Result<Vec<SearchResult>, GraphError> {
@@ -550,7 +639,7 @@ impl HnswIndex {
 
         // 2. Search layer 0 with ef_search
         let adjusted_k = self.adjusted_k(k);
-        let ef = adjusted_k.max(self.config.ef_search as usize);
+        let ef = adjusted_k.max(ef_search);
         self.search_binary_layer(search_ctx, [curr_ep], query, ef, 0, storage)?;
 
         // 3. Extract top K, filtering out deleted vectors
