@@ -171,6 +171,138 @@
         .simd-info.scalar .backend {
             color: var(--neon-red);
         }
+        /* Benchmark results styling */
+        .benchmark-results {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1rem;
+            margin: 1rem 0;
+        }
+        .benchmark-results h3 {
+            margin: 0 0 1rem 0;
+            color: var(--neon-cyan);
+            font-size: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+        .benchmark-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            margin-bottom: 1rem;
+        }
+        .benchmark-table th {
+            text-align: left;
+            padding: 0.5rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+        .benchmark-table td {
+            padding: 0.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .benchmark-table tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+        .benchmark-table .selected {
+            background: rgba(0, 243, 255, 0.1);
+        }
+        .benchmark-table .new { color: var(--neon-green); }
+        .benchmark-table .current { color: var(--neon-red); }
+        .benchmark-table .speedup { color: var(--neon-cyan); font-weight: bold; }
+        /* Bar chart */
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin: 1rem 0;
+        }
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .bar-label {
+            width: 80px;
+            font-size: 0.8rem;
+            font-family: var(--font-mono);
+        }
+        .bar-container {
+            flex: 1;
+            height: 28px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 8px;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            color: #fff;
+            text-shadow: 0 0 4px rgba(0,0,0,0.8);
+            transition: width 0.5s ease;
+            white-space: nowrap;
+            min-width: fit-content;
+        }
+        .bar-fill.new {
+            background: linear-gradient(90deg, #0aff00, #00f3ff);
+        }
+        .bar-fill.current {
+            background: linear-gradient(90deg, #ff003c, #bc13fe);
+        }
+        .speedup-badge {
+            display: inline-block;
+            background: linear-gradient(45deg, var(--neon-purple), var(--neon-cyan));
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-size: 1.25rem;
+            font-weight: bold;
+            font-family: var(--font-mono);
+            color: #fff;
+            text-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        .summary-card {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            padding: 1rem;
+            border-radius: 4px;
+        }
+        .summary-card.new { border-color: var(--neon-green); }
+        .summary-card.current { border-color: var(--neon-red); }
+        .summary-card h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+        }
+        .summary-card.new h4 { color: var(--neon-green); }
+        .summary-card.current h4 { color: var(--neon-red); }
+        .summary-value {
+            font-size: 1.5rem;
+            font-family: var(--font-mono);
+            font-weight: bold;
+        }
+        .summary-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
     </style>
 </head>
 <body>
@@ -360,29 +492,7 @@
             const selectedDims = parseInt(document.getElementById('dimensions').value);
             const selectedBytes = selectedDims / 8;
 
-            log('', '');
-            log('═'.repeat(70), 'cyan');
-            log('⚡ BATCH HAMMING: OUR SIMD128 vs UPSTREAM SCALAR', 'cyan');
-            log('═'.repeat(70), 'cyan');
-            log('', '');
-            log('OURS (metric::simd::hamming_distance):', 'green');
-            log('  → Compile-time #[cfg(target_feature = "simd128")]', 'green');
-            log('  → Uses WASM SIMD128 intrinsics (v128, i8x16_swizzle)', 'green');
-            log('  → 4-way loop unrolling for ILP', 'green');
-            log('', '');
-            log('UPSTREAM (simd::popcount::simd_popcount_xor):', 'red');
-            log('  → Runtime is_x86_feature_detected!()', 'red');
-            log('  → Falls back to SCALAR in WASM (runtime detection fails)', 'red');
-            log('', '');
-
-            log(`Parameters:`, 'purple');
-            log(`  Vectors: ${numVectors.toLocaleString()}`, 'purple');
-            log(`  Dimensions: ${selectedDims} bits (${selectedBytes} bytes)`, 'purple');
-            log(`  Scan iterations: ${iterations} (for averaging)`, 'purple');
-            log(`  Total comparisons: ${(numVectors * iterations).toLocaleString()}`, 'purple');
-            log('', '');
-
-            log('Running batch benchmark (searching through all vectors)...', 'cyan');
+            log('Running SIMD benchmark...', 'cyan');
 
             // Yield to UI
             await new Promise(r => setTimeout(r, 50));
@@ -390,36 +500,7 @@
             // Run the batch benchmark with global numVectors
             const result = JSON.parse(benchmarkHammingBatch(numVectors, selectedBytes, iterations));
 
-            log('', '');
-            log('─'.repeat(70), '');
-            log('RESULTS', 'cyan');
-            log('─'.repeat(70), '');
-            log('', '');
-
-            const speedupColor = result.speedup >= 2.0 ? 'green' : result.speedup >= 1.5 ? 'cyan' : 'red';
-
-            log(`OURS (WASM SIMD128):`, 'green');
-            log(`  Time: ${result.ours_ms.toFixed(2)}ms to scan ${numVectors.toLocaleString()} vectors`, 'green');
-            log(`  Throughput: ${result.ours_throughput}`, 'green');
-            log('', '');
-            log(`UPSTREAM (Scalar fallback):`, 'red');
-            log(`  Time: ${result.upstream_ms.toFixed(2)}ms to scan ${numVectors.toLocaleString()} vectors`, 'red');
-            log(`  Throughput: ${result.upstream_throughput}`, 'red');
-            log('', '');
-            log(`SPEEDUP: ${result.speedup.toFixed(2)}x faster with our SIMD128!`, speedupColor);
-
-            log('', '');
-            log('═'.repeat(70), 'cyan');
-            log('✓ Our compile-time approach enables SIMD in WASM', 'green');
-            log('✗ Upstream runtime detection fails in WASM → scalar fallback', 'red');
-            log('═'.repeat(70), 'cyan');
-
-            // Also run the micro-benchmark at different dimensions for reference
-            log('', '');
-            log('─'.repeat(70), '');
-            log('MICRO-BENCHMARK: Per-call latency at various dimensions', 'purple');
-            log('─'.repeat(70), '');
-
+            // Collect micro-benchmark data for table
             const microIterations = 50000;
             const byteSizes = [16, 48, 96, 128, 192];
             if (!byteSizes.includes(selectedBytes) && selectedBytes <= 512) {
@@ -427,18 +508,114 @@
                 byteSizes.sort((a, b) => a - b);
             }
 
-            log(`  Bytes │  Dims │ OURS(μs) │ UPSTREAM(μs) │ Speedup`, '');
-            log(`  ──────┼───────┼──────────┼──────────────┼─────────`, '');
-
+            const microResults = [];
             for (const bytes of byteSizes) {
                 await new Promise(r => setTimeout(r, 10));
                 const microResult = JSON.parse(benchmarkHammingComparison(bytes, microIterations));
-                const dims = bytes * 8;
-                const isSelected = bytes === selectedBytes;
-                const microSpeedupColor = microResult.speedup >= 2.0 ? 'green' : microResult.speedup >= 1.5 ? 'cyan' : 'red';
-                const marker = isSelected ? ' ←' : '';
-                log(`  ${String(bytes).padStart(5)} │ ${String(dims).padStart(5)} │ ${microResult.ours_us.toFixed(3).padStart(8)} │ ${microResult.upstream_us.toFixed(3).padStart(12)} │ ${microResult.speedup.toFixed(1).padStart(5)}x${marker}`, microSpeedupColor);
+                microResults.push({ bytes, dims: bytes * 8, ...microResult });
             }
+
+            // Render results as HTML
+            const logEl = document.getElementById('log');
+
+            // Calculate average time per scan (total / iterations)
+            const newAvgMs = result.new_ms / iterations;
+            const currentAvgMs = result.current_ms / iterations;
+
+            const resultsHtml = `
+                <div class="benchmark-results">
+                    <h3>⚡ SIMD Benchmark Results</h3>
+
+                    <div style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.8rem;">
+                        ${numVectors.toLocaleString()} vectors × ${selectedDims} dimensions
+                    </div>
+
+                    <!-- Summary Cards -->
+                    <div class="summary-grid">
+                        <div class="summary-card new">
+                            <h4>✓ New (WASM SIMD128)</h4>
+                            <div class="summary-value">${newAvgMs.toFixed(2)}ms</div>
+                            <div class="summary-label">avg per scan • ${result.new_throughput}</div>
+                            <div class="summary-label" style="opacity: 0.6;">${result.new_ms.toFixed(2)}ms total (${iterations} scans)</div>
+                        </div>
+                        <div class="summary-card current">
+                            <h4>✗ Current (Scalar)</h4>
+                            <div class="summary-value">${currentAvgMs.toFixed(2)}ms</div>
+                            <div class="summary-label">avg per scan • ${result.current_throughput}</div>
+                            <div class="summary-label" style="opacity: 0.6;">${result.current_ms.toFixed(2)}ms total (${iterations} scans)</div>
+                        </div>
+                    </div>
+
+                    <!-- Bar Chart -->
+                    <div class="bar-chart">
+                        <div class="bar-row">
+                            <div class="bar-label new">New</div>
+                            <div class="bar-container">
+                                <div class="bar-fill new" style="width: ${Math.min(100, 100 / result.speedup)}%">
+                                    ${newAvgMs.toFixed(2)}ms
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bar-row">
+                            <div class="bar-label current">Current</div>
+                            <div class="bar-container">
+                                <div class="bar-fill current" style="width: 100%">
+                                    ${currentAvgMs.toFixed(2)}ms
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="text-align: center; margin: 1.5rem 0;">
+                        <span class="speedup-badge">${result.speedup.toFixed(1)}× faster</span>
+                    </div>
+
+                    <!-- Micro-benchmark Table -->
+                    <h3 style="margin-top: 2rem;">Per-Call Latency by Dimension</h3>
+                    <table class="benchmark-table">
+                        <thead>
+                            <tr>
+                                <th>Dims</th>
+                                <th>Bytes</th>
+                                <th>New (μs)</th>
+                                <th>Current (μs)</th>
+                                <th>Speedup</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${microResults.map(r => `
+                                <tr class="${r.bytes === selectedBytes ? 'selected' : ''}">
+                                    <td>${r.dims}</td>
+                                    <td>${r.bytes}</td>
+                                    <td class="new">${r.new_us.toFixed(3)}</td>
+                                    <td class="current">${r.current_us.toFixed(3)}</td>
+                                    <td class="speedup">${r.speedup.toFixed(1)}×</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <!-- Implementation Details -->
+                    <div style="margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted);">
+                        <div style="margin-bottom: 0.5rem;">
+                            <strong style="color: var(--neon-green);">New:</strong>
+                            Compile-time SIMD128 detection • v128 intrinsics • 4-way unrolling
+                        </div>
+                        <div>
+                            <strong style="color: var(--neon-red);">Current:</strong>
+                            Runtime CPU detection fails in WASM → falls back to scalar
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="message">${resultsHtml}</span>`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+
+            log('Benchmark complete!', 'green');
         }
 
         function setIndexType(type) {
@@ -823,7 +1000,9 @@
             }
             const flatAvgSearch = flatSearchTimes.reduce((a, b) => a + b, 0) / flatSearchTimes.length;
 
-            log(`  Insert: ${flatInsertTime.toFixed(0)}ms (${flatInsertThroughput} vec/s)`, 'cyan');
+            const formatTime = (ms) => ms >= 1000 ? `${ms.toFixed(0)}ms (${(ms/1000).toFixed(2)}s)` : `${ms.toFixed(0)}ms`;
+
+            log(`  Insert: ${formatTime(flatInsertTime)} — ${flatInsertThroughput} vec/s`, 'cyan');
             log(`  Search: ${flatAvgSearch.toFixed(3)}ms avg`, 'cyan');
 
             // HNSW INDEX TEST
@@ -858,7 +1037,7 @@
             }
             const hnswAvgSearch = hnswSearchTimes.reduce((a, b) => a + b, 0) / hnswSearchTimes.length;
 
-            log(`  Insert: ${hnswInsertTime.toFixed(0)}ms (${hnswInsertThroughput} vec/s)`, 'cyan');
+            log(`  Insert: ${formatTime(hnswInsertTime)} — ${hnswInsertThroughput} vec/s`, 'cyan');
             log(`  Search: ${hnswAvgSearch.toFixed(3)}ms avg`, 'cyan');
 
             // COMPARISON SUMMARY

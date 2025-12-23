@@ -100,19 +100,19 @@ pub fn benchmark_hamming(bytes: usize, iterations: usize) -> f64 {
     (end - start) * 1000.0 / iterations as f64 // Return microseconds per iteration
 }
 
-/// Side-by-side benchmark: Our WASM SIMD128 vs Upstream's popcount dispatcher.
+/// Side-by-side benchmark: New WASM SIMD128 vs Current runtime dispatcher.
 ///
 /// Compares:
-/// 1. **Ours** (`metric::simd::hamming_distance`): Compile-time SIMD128 detection → uses WASM SIMD
-/// 2. **Upstream** (`simd::popcount::simd_popcount_xor`): Runtime detection → falls to scalar in WASM
+/// 1. **New** (`metric::simd::hamming_distance`): Compile-time SIMD128 detection → uses WASM SIMD
+/// 2. **Current** (`simd::popcount::simd_popcount_xor`): Runtime detection → falls to scalar in WASM
 ///
 /// Returns a JSON string with timings:
 /// ```json
-/// {"ours_us": 0.15, "upstream_us": 0.42, "speedup": 2.8, "ours_backend": "wasm_simd128", "upstream_backend": "scalar"}
+/// {"new_us": 0.15, "current_us": 0.42, "speedup": 2.8, "new_backend": "wasm_simd128", "current_backend": "scalar"}
 /// ```
 #[wasm_bindgen(js_name = "benchmarkHammingComparison")]
 pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
-    // Upstream's dispatcher - uses runtime detection, falls to scalar in WASM
+    // Current implementation - uses runtime detection, falls to scalar in WASM
     use crate::simd::popcount::simd_popcount_xor;
 
     // Create two random-ish vectors
@@ -127,63 +127,63 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
         let _ = simd_popcount_xor(&a, &b);
     }
 
-    // Benchmark OURS: metric::simd::hamming_distance
+    // Benchmark NEW: metric::simd::hamming_distance
     // Uses compile-time #[cfg(target_feature = "simd128")] → WASM SIMD128
-    let start_ours = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
-    let mut sum_ours: u32 = 0;
+    let start_new = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let mut sum_new: u32 = 0;
     for _ in 0..iterations {
-        sum_ours = sum_ours.wrapping_add(crate::metric::simd::hamming_distance(&a, &b));
+        sum_new = sum_new.wrapping_add(crate::metric::simd::hamming_distance(&a, &b));
     }
-    let end_ours = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let end_new = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
 
-    // Benchmark UPSTREAM: simd::popcount::simd_popcount_xor
+    // Benchmark CURRENT: simd::popcount::simd_popcount_xor
     // Uses runtime is_x86_feature_detected!() → falls to scalar in WASM
-    let start_upstream = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
-    let mut sum_upstream: u32 = 0;
+    let start_current = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let mut sum_current: u32 = 0;
     for _ in 0..iterations {
-        sum_upstream = sum_upstream.wrapping_add(simd_popcount_xor(&a, &b));
+        sum_current = sum_current.wrapping_add(simd_popcount_xor(&a, &b));
     }
-    let end_upstream = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let end_current = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
 
     // Verify both produce same result
-    if sum_ours != sum_upstream {
+    if sum_new != sum_current {
         web_sys::console::warn_1(
             &format!(
-                "WARNING: Results differ! ours={} upstream={}",
-                sum_ours, sum_upstream
+                "WARNING: Results differ! new={} current={}",
+                sum_new, sum_current
             )
             .into(),
         );
     }
 
     // Prevent optimizer from removing the loops
-    if sum_ours == 0 || sum_upstream == 0 {
-        web_sys::console::log_1(&format!("sums: {} {}", sum_ours, sum_upstream).into());
+    if sum_new == 0 || sum_current == 0 {
+        web_sys::console::log_1(&format!("sums: {} {}", sum_new, sum_current).into());
     }
 
-    let ours_us = (end_ours - start_ours) * 1000.0 / iterations as f64;
-    let upstream_us = (end_upstream - start_upstream) * 1000.0 / iterations as f64;
-    let speedup = upstream_us / ours_us;
+    let new_us = (end_new - start_new) * 1000.0 / iterations as f64;
+    let current_us = (end_current - start_current) * 1000.0 / iterations as f64;
+    let speedup = current_us / new_us;
 
     // Determine which backend each is actually using
-    let ours_backend = if cfg!(all(target_arch = "wasm32", target_feature = "simd128")) {
-        "wasm_simd128"
+    let new_backend = if cfg!(all(target_arch = "wasm32", target_feature = "simd128")) {
+        "WASM SIMD128"
     } else if cfg!(all(target_arch = "x86_64", target_feature = "avx2")) {
-        "avx2"
+        "AVX2"
     } else {
-        "scalar"
+        "Scalar"
     };
 
-    // Upstream uses runtime detection - in WASM it's always scalar
-    let upstream_backend = if cfg!(target_arch = "wasm32") {
-        "scalar (runtime detection fails in WASM)"
+    // Current uses runtime detection - in WASM it's always scalar
+    let current_backend = if cfg!(target_arch = "wasm32") {
+        "Scalar"
     } else {
-        "runtime_dispatch"
+        "Runtime Dispatch"
     };
 
     format!(
-        r#"{{"ours_us": {:.3}, "upstream_us": {:.3}, "speedup": {:.2}, "bytes": {}, "iterations": {}, "ours_backend": "{}", "upstream_backend": "{}"}}"#,
-        ours_us, upstream_us, speedup, bytes, iterations, ours_backend, upstream_backend
+        r#"{{"new_us": {:.3}, "current_us": {:.3}, "speedup": {:.2}, "bytes": {}, "iterations": {}, "new_backend": "{}", "current_backend": "{}"}}"#,
+        new_us, current_us, speedup, bytes, iterations, new_backend, current_backend
     )
 }
 
@@ -192,7 +192,7 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
 /// This is a more realistic benchmark that simulates searching through a dataset:
 /// - Creates `num_vectors` random binary vectors
 /// - For each iteration, computes hamming distance from a query to ALL vectors
-/// - Compares our WASM SIMD128 vs upstream's scalar fallback
+/// - Compares new WASM SIMD128 vs current scalar fallback
 ///
 /// Returns JSON with throughput metrics:
 /// ```json
@@ -200,11 +200,11 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
 ///   "num_vectors": 10000,
 ///   "bytes_per_vector": 128,
 ///   "iterations": 100,
-///   "ours_ms": 1.23,
-///   "upstream_ms": 3.45,
+///   "new_ms": 1.23,
+///   "current_ms": 3.45,
 ///   "speedup": 2.8,
-///   "ours_throughput": "8.1M vec/s",
-///   "upstream_throughput": "2.9M vec/s"
+///   "new_throughput": "8.1M vec/s",
+///   "current_throughput": "2.9M vec/s"
 /// }
 /// ```
 #[wasm_bindgen(js_name = "benchmarkHammingBatch")]
@@ -235,40 +235,38 @@ pub fn benchmark_hamming_batch(
         let _ = simd_popcount_xor(&query, v);
     }
 
-    // Benchmark OURS: metric::simd::hamming_distance (WASM SIMD128)
-    let start_ours = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
-    let mut total_dist_ours: u64 = 0;
+    // Benchmark NEW: metric::simd::hamming_distance (WASM SIMD128)
+    let start_new = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let mut total_dist_new: u64 = 0;
     for _ in 0..iterations {
         for v in &vectors {
-            total_dist_ours += u64::from(crate::metric::simd::hamming_distance(&query, v));
+            total_dist_new += u64::from(crate::metric::simd::hamming_distance(&query, v));
         }
     }
-    let end_ours = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let end_new = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
 
-    // Benchmark UPSTREAM: simd::popcount::simd_popcount_xor (scalar fallback in WASM)
-    let start_upstream = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
-    let mut total_dist_upstream: u64 = 0;
+    // Benchmark CURRENT: simd::popcount::simd_popcount_xor (scalar fallback in WASM)
+    let start_current = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let mut total_dist_current: u64 = 0;
     for _ in 0..iterations {
         for v in &vectors {
-            total_dist_upstream += u64::from(simd_popcount_xor(&query, v));
+            total_dist_current += u64::from(simd_popcount_xor(&query, v));
         }
     }
-    let end_upstream = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let end_current = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
 
     // Prevent optimizer removal
-    if total_dist_ours == 0 || total_dist_upstream == 0 {
-        web_sys::console::log_1(
-            &format!("sums: {} {}", total_dist_ours, total_dist_upstream).into(),
-        );
+    if total_dist_new == 0 || total_dist_current == 0 {
+        web_sys::console::log_1(&format!("sums: {} {}", total_dist_new, total_dist_current).into());
     }
 
-    let ours_ms = end_ours - start_ours;
-    let upstream_ms = end_upstream - start_upstream;
-    let speedup = upstream_ms / ours_ms;
+    let new_ms = end_new - start_new;
+    let current_ms = end_current - start_current;
+    let speedup = current_ms / new_ms;
 
     let total_comparisons = num_vectors * iterations;
-    let ours_throughput = (total_comparisons as f64) / (ours_ms / 1000.0);
-    let upstream_throughput = (total_comparisons as f64) / (upstream_ms / 1000.0);
+    let new_throughput = (total_comparisons as f64) / (new_ms / 1000.0);
+    let current_throughput = (total_comparisons as f64) / (current_ms / 1000.0);
 
     // Format throughput with appropriate units
     let format_throughput = |t: f64| -> String {
@@ -282,15 +280,15 @@ pub fn benchmark_hamming_batch(
     };
 
     format!(
-        r#"{{"num_vectors": {}, "bytes_per_vector": {}, "iterations": {}, "ours_ms": {:.2}, "upstream_ms": {:.2}, "speedup": {:.2}, "ours_throughput": "{}", "upstream_throughput": "{}"}}"#,
+        r#"{{"num_vectors": {}, "bytes_per_vector": {}, "iterations": {}, "new_ms": {:.2}, "current_ms": {:.2}, "speedup": {:.2}, "new_throughput": "{}", "current_throughput": "{}"}}"#,
         num_vectors,
         bytes_per_vector,
         iterations,
-        ours_ms,
-        upstream_ms,
+        new_ms,
+        current_ms,
         speedup,
-        format_throughput(ours_throughput),
-        format_throughput(upstream_throughput)
+        format_throughput(new_throughput),
+        format_throughput(current_throughput)
     )
 }
 

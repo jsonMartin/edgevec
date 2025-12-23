@@ -1782,7 +1782,7 @@ export function benchmarkHamming(bytes: number, iterations: number): number;
  * This is a more realistic benchmark that simulates searching through a dataset:
  * - Creates `num_vectors` random binary vectors
  * - For each iteration, computes hamming distance from a query to ALL vectors
- * - Compares our WASM SIMD128 vs upstream's scalar fallback
+ * - Compares new WASM SIMD128 vs current scalar fallback
  *
  * Returns JSON with throughput metrics:
  * ```json
@@ -1790,26 +1790,26 @@ export function benchmarkHamming(bytes: number, iterations: number): number;
  *   "num_vectors": 10000,
  *   "bytes_per_vector": 128,
  *   "iterations": 100,
- *   "ours_ms": 1.23,
- *   "upstream_ms": 3.45,
+ *   "new_ms": 1.23,
+ *   "current_ms": 3.45,
  *   "speedup": 2.8,
- *   "ours_throughput": "8.1M vec/s",
- *   "upstream_throughput": "2.9M vec/s"
+ *   "new_throughput": "8.1M vec/s",
+ *   "current_throughput": "2.9M vec/s"
  * }
  * ```
  */
 export function benchmarkHammingBatch(num_vectors: number, bytes_per_vector: number, iterations: number): string;
 
 /**
- * Side-by-side benchmark: Our WASM SIMD128 vs Upstream's popcount dispatcher.
+ * Side-by-side benchmark: New WASM SIMD128 vs Current runtime dispatcher.
  *
  * Compares:
- * 1. **Ours** (`metric::simd::hamming_distance`): Compile-time SIMD128 detection → uses WASM SIMD
- * 2. **Upstream** (`simd::popcount::simd_popcount_xor`): Runtime detection → falls to scalar in WASM
+ * 1. **New** (`metric::simd::hamming_distance`): Compile-time SIMD128 detection → uses WASM SIMD
+ * 2. **Current** (`simd::popcount::simd_popcount_xor`): Runtime detection → falls to scalar in WASM
  *
  * Returns a JSON string with timings:
  * ```json
- * {"ours_us": 0.15, "upstream_us": 0.42, "speedup": 2.8, "ours_backend": "wasm_simd128", "upstream_backend": "scalar"}
+ * {"new_us": 0.15, "current_us": 0.42, "speedup": 2.8, "new_backend": "wasm_simd128", "current_backend": "scalar"}
  * ```
  */
 export function benchmarkHammingComparison(bytes: number, iterations: number): string;
