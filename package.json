@@ -1,6 +1,6 @@
 {
   "name": "@edgevec/core",
-  "version": "0.1.0",
+  "version": "0.7.0",
   "description": "High-performance embedded vector database for edge computing. HNSW indexing with WASM-first architecture for browser, Node.js, and Rust.",
   "type": "module",
   "main": "./wasm/dist/index.js",
@@ -61,9 +61,11 @@
   },
   "sideEffects": false,
   "scripts": {
-    "build": "wasm-pack build --target web --out-dir pkg && npm run build:ts",
+    "build": "wasm-pack build --target web --out-dir pkg --release && npm run build:ts",
+    "build:debug": "wasm-pack build --target web --out-dir pkg --dev && npm run build:ts",
     "build:ts": "tsc --project wasm/tsconfig.json",
-    "build:node": "wasm-pack build --target nodejs --out-dir pkg-node",
+    "build:node": "wasm-pack build --target nodejs --out-dir pkg-node --release",
+    "build:profiling": "wasm-pack build --target web --out-dir pkg --profiling",
     "test": "cargo test && npm run test:wasm",
     "test:wasm": "cd wasm && npm test",
     "test:coverage": "cd wasm && npm run test:coverage",

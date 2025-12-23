@@ -1,4 +1,4 @@
-import { IndexedDbBackend } from './snippets/edgevec-98e271a617b3aceb/src/js/storage.js';
+import { IndexedDbBackend } from './snippets/edgevec-78d8c49bd24b079a/src/js/storage.js';
 
 let wasm;
 
@@ -3187,7 +3187,7 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_randomFillSync_ac0988aba3254290 = function() { return handleError(function (arg0, arg1) {
         getObject(arg0).randomFillSync(takeObject(arg1));
     }, arguments) };
-    imports.wbg.__wbg_read_4b87ebfb9daf2382 = function() { return handleError(function (arg0, arg1) {
+    imports.wbg.__wbg_read_034630817ee5f3b2 = function() { return handleError(function (arg0, arg1) {
         const ret = IndexedDbBackend.read(getStringFromWasm0(arg0, arg1));
         return addHeapObject(ret);
     }, arguments) };
@@ -3251,7 +3251,7 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_warn_6e567d0d926ff881 = function(arg0) {
         console.warn(getObject(arg0));
     };
-    imports.wbg.__wbg_write_eab4b5dfa9d6d182 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+    imports.wbg.__wbg_write_a14711ba121961c2 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
         const ret = IndexedDbBackend.write(getStringFromWasm0(arg0, arg1), getArrayU8FromWasm0(arg2, arg3));
         return addHeapObject(ret);
     }, arguments) };

@@ -11,6 +11,12 @@ rustflags = [
     "-C", "llvm-args=-enable-no-nans-fp-math",  # Aggressive float optimizations
 ]
 
+# W30.1: WASM SIMD128 Configuration
+# Enables SIMD instructions for 2-3x performance improvement in browsers
+# Supported: Chrome 91+, Firefox 89+, Safari 16.4+ (macOS only, NOT iOS)
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]
+
 [profile.release]
 # Additional release optimizations
 lto = "fat"            # Full LTO for maximum performance
