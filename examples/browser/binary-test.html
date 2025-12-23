@@ -1141,9 +1141,11 @@
                 log(`  → HNSW is ${(flatAvgSearch / hnswAvgSearch).toFixed(1)}x faster for search`, 'purple');
             }
             log(``, '');
-            log(`Memory Usage:`, '');
+            log(`Memory Allocated:`, '');
             log(`  • FLAT:  ${formatBytes(flatMemory).padStart(10)}`, 'green');
             log(`  • HNSW:  ${formatBytes(hnswMemory).padStart(10)}`, 'cyan');
+            const rawDataSize = numVectors * bytesPerVector;
+            log(`  (raw data: ${formatBytes(rawDataSize)}, Vec capacity overhead included)`, 'purple');
             log(`  → HNSW uses ${memoryRatio}x more memory (graph overhead)`, 'purple');
             log('═'.repeat(60), 'green');
 

@@ -3133,10 +3133,11 @@ impl EdgeVec {
     /// ```
     #[wasm_bindgen(js_name = "memoryUsage")]
     pub fn memory_usage(&self) -> usize {
-        // Storage memory (binary vectors)
-        let storage_size = self.storage.binary_data.len()
-            + self.storage.data_f32.len() * std::mem::size_of::<f32>()
-            + self.storage.quantized_data.len();
+        // Storage memory - use capacity() for actual allocated memory
+        // (Vec over-allocates for amortized O(1) growth)
+        let storage_size = self.storage.binary_data.capacity()
+            + self.storage.data_f32.capacity() * std::mem::size_of::<f32>()
+            + self.storage.quantized_data.capacity();
 
         // Index memory (HNSW graph)
         let index_size = self.inner.memory_usage();
