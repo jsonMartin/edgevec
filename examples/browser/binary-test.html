@@ -343,6 +343,11 @@
                 <input type="number" id="numVectors" value="10000" min="100" max="1000000" step="1000">
             </div>
 
+            <div class="control-group">
+                <label>Batch Size</label>
+                <input type="number" id="batchSize" value="1000" min="100" max="10000" step="100">
+            </div>
+
             <div class="divider"></div>
 
             <!-- Standalone Benchmarks -->
@@ -367,11 +372,6 @@
                     <option value="hnsw" selected>HNSW (ANN, O(log n))</option>
                     <option value="flat">Flat (Brute-Force, O(1) insert)</option>
                 </select>
-            </div>
-
-            <div class="control-group">
-                <label>Batch Size</label>
-                <input type="number" id="batchSize" value="1000" min="100" max="10000" step="100">
             </div>
 
             <button id="btnInit" onclick="initDatabase()">Initialize Database</button>
@@ -960,6 +960,7 @@
         async function runComparison() {
             const dimensions = parseInt(document.getElementById('dimensions').value);
             const numVectors = parseInt(document.getElementById('numVectors').value);
+            const batchSize = parseInt(document.getElementById('batchSize').value);
             const k = parseInt(document.getElementById('searchK').value);
             const bytesPerVector = dimensions / 8;
 
@@ -969,29 +970,50 @@
             log(`Dimensions: ${dimensions} bits (${bytesPerVector} bytes)`, 'purple');
             log(`Vectors: ${numVectors.toLocaleString()}`, 'purple');
             log(`Search K: ${k}`, 'purple');
+            log(`Batch Size: ${batchSize.toLocaleString()}`, 'purple');
             log('─'.repeat(60), '');
 
-            setStatus('busy', 'Running comparison...');
+            setStatus('busy', 'Generating vectors...');
+            log('Generating random vectors...', 'cyan');
 
             const vectors = [];
             for (let i = 0; i < numVectors; i++) {
                 const v = new Uint8Array(bytesPerVector);
                 crypto.getRandomValues(v);
                 vectors.push(v);
+                // Yield periodically during generation for large datasets
+                if (i > 0 && i % 10000 === 0) {
+                    await new Promise(r => setTimeout(r, 0));
+                }
             }
+            log(`Generated ${numVectors.toLocaleString()} vectors`, 'green');
 
             // FLAT INDEX TEST
-            log('\n[FLAT INDEX] Testing...', 'green');
+            log('\n[FLAT INDEX] Inserting...', 'green');
+            setStatus('busy', 'FLAT: Inserting...');
 
             const flatIndex = new BinaryFlatVec(dimensions);
             const flatInsertStart = performance.now();
+            let flatInserted = 0;
+
             for (const v of vectors) {
                 flatIndex.insert(v);
+                flatInserted++;
+
+                // Progress update at batch boundaries
+                if (flatInserted % batchSize === 0) {
+                    const elapsed = performance.now() - flatInsertStart;
+                    const rate = (flatInserted / elapsed * 1000).toFixed(0);
+                    setStatus('busy', `FLAT: ${flatInserted.toLocaleString()}/${numVectors.toLocaleString()}`);
+                    log(`  FLAT Progress: ${flatInserted.toLocaleString()}/${numVectors.toLocaleString()} (${rate} vec/s)`, 'purple');
+                    await new Promise(r => setTimeout(r, 0));
+                }
             }
             const flatInsertTime = performance.now() - flatInsertStart;
             const flatInsertThroughput = (numVectors / flatInsertTime * 1000).toFixed(0);
 
             const flatSearchTimes = [];
+            setStatus('busy', 'FLAT: Searching...');
             for (let i = 0; i < 50; i++) {
                 const query = vectors[Math.floor(Math.random() * vectors.length)];
                 const start = performance.now();
@@ -1006,7 +1028,8 @@
             log(`  Search: ${flatAvgSearch.toFixed(3)}ms avg`, 'cyan');
 
             // HNSW INDEX TEST
-            log('\n[HNSW INDEX] Testing...', 'green');
+            log('\n[HNSW INDEX] Inserting...', 'green');
+            setStatus('busy', 'HNSW: Inserting...');
 
             const hnswConfig = new EdgeVecConfig(dimensions);
             hnswConfig.vector_type = VectorType.Binary;
@@ -1017,11 +1040,18 @@
 
             const hnswIndex = new EdgeVec(hnswConfig);
             const hnswInsertStart = performance.now();
-            let insertCount = 0;
+            let hnswInserted = 0;
+
             for (const v of vectors) {
                 hnswIndex.insertBinary(v);
-                insertCount++;
-                if (insertCount % 1000 === 0) {
+                hnswInserted++;
+
+                // Progress update at batch boundaries
+                if (hnswInserted % batchSize === 0) {
+                    const elapsed = performance.now() - hnswInsertStart;
+                    const rate = (hnswInserted / elapsed * 1000).toFixed(0);
+                    setStatus('busy', `HNSW: ${hnswInserted.toLocaleString()}/${numVectors.toLocaleString()}`);
+                    log(`  HNSW Progress: ${hnswInserted.toLocaleString()}/${numVectors.toLocaleString()} (${rate} vec/s)`, 'purple');
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
@@ -1029,6 +1059,7 @@
             const hnswInsertThroughput = (numVectors / hnswInsertTime * 1000).toFixed(0);
 
             const hnswSearchTimes = [];
+            setStatus('busy', 'HNSW: Searching...');
             for (let i = 0; i < 50; i++) {
                 const query = vectors[Math.floor(Math.random() * vectors.length)];
                 const start = performance.now();
