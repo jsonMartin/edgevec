@@ -1066,8 +1066,10 @@
 
             const formatTime = (ms) => ms >= 1000 ? `${ms.toFixed(0)}ms (${(ms/1000).toFixed(2)}s)` : `${ms.toFixed(0)}ms`;
 
+            const flatMemory = flatIndex.memoryUsage();
             log(`  Insert: ${formatTime(flatInsertTime)} — ${flatInsertThroughput} vec/s`, 'cyan');
             log(`  Search: ${flatAvgSearch.toFixed(3)}ms avg`, 'cyan');
+            log(`  Memory: ${formatBytes(flatMemory)}`, 'cyan');
 
             // HNSW INDEX TEST
             log('\n[HNSW INDEX] Inserting...', 'green');
@@ -1112,11 +1114,14 @@
             }
             const hnswAvgSearch = hnswSearchTimes.reduce((a, b) => a + b, 0) / hnswSearchTimes.length;
 
+            const hnswMemory = hnswIndex.memoryUsage();
             log(`  Insert: ${formatTime(hnswInsertTime)} — ${hnswInsertThroughput} vec/s`, 'cyan');
             log(`  Search: ${hnswAvgSearch.toFixed(3)}ms avg`, 'cyan');
+            log(`  Memory: ${formatBytes(hnswMemory)}`, 'cyan');
 
             // COMPARISON SUMMARY
             const insertSpeedup = (hnswInsertTime / flatInsertTime).toFixed(1);
+            const memoryRatio = (hnswMemory / flatMemory).toFixed(1);
 
             log('\n' + '═'.repeat(60), 'green');
             log('📊 COMPARISON SUMMARY', 'green');
@@ -1135,6 +1140,11 @@
             } else {
                 log(`  → HNSW is ${(flatAvgSearch / hnswAvgSearch).toFixed(1)}x faster for search`, 'purple');
             }
+            log(``, '');
+            log(`Memory Usage:`, '');
+            log(`  • FLAT:  ${formatBytes(flatMemory).padStart(10)}`, 'green');
+            log(`  • HNSW:  ${formatBytes(hnswMemory).padStart(10)}`, 'cyan');
+            log(`  → HNSW uses ${memoryRatio}x more memory (graph overhead)`, 'purple');
             log('═'.repeat(60), 'green');
 
             setStatus('active', 'Comparison complete');
