@@ -61,3 +61,12 @@ scripts/package-lock.json
 
 # NUL file (Windows artifact)
 NUL
+
+# Private research pipeline (DO NOT COMMIT)
+.research/
+
+# AI Agent configuration files (private prompts, not for public repo)
+.claude/
+.cursor/
+.cursorrules
+CLAUDE.md
