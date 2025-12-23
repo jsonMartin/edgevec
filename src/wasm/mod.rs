@@ -3107,6 +3107,36 @@ impl EdgeVec {
         serde_wasm_bindgen::to_value(&self.memory_config)
             .map_err(|e| JsValue::from_str(&e.to_string()))
     }
+
+    /// Get approximate memory usage in bytes.
+    ///
+    /// Returns the total memory used by the index, including:
+    /// - Vector storage (binary vectors)
+    /// - HNSW graph structure (nodes and neighbor lists)
+    /// - Internal metadata
+    ///
+    /// # Returns
+    ///
+    /// Total bytes used by the index.
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const bytes = index.memoryUsage();
+    /// console.log(`Index using ${(bytes / 1024 / 1024).toFixed(2)} MB`);
+    /// ```
+    #[wasm_bindgen(js_name = "memoryUsage")]
+    pub fn memory_usage(&self) -> usize {
+        // Storage memory (binary vectors)
+        let storage_size = self.storage.binary_data.len()
+            + self.storage.data_f32.len() * std::mem::size_of::<f32>()
+            + self.storage.quantized_data.len();
+
+        // Index memory (HNSW graph)
+        let index_size = self.inner.memory_usage();
+
+        storage_size + index_size
+    }
 }
 
 /// Result of a compaction operation (v0.3.0).

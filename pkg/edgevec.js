@@ -289,12 +289,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_1894(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_1894(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1900(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1900(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_2434(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_2434(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_2440(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_2440(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -2559,6 +2559,30 @@ export class EdgeVec {
             wasm.__wbindgen_add_to_stack_pointer(16);
         }
     }
+    /**
+     * Get approximate memory usage in bytes.
+     *
+     * Returns the total memory used by the index, including:
+     * - Vector storage (binary vectors)
+     * - HNSW graph structure (nodes and neighbor lists)
+     * - Internal metadata
+     *
+     * # Returns
+     *
+     * Total bytes used by the index.
+     *
+     * # Example
+     *
+     * ```javascript
+     * const bytes = index.memoryUsage();
+     * console.log(`Index using ${(bytes / 1024 / 1024).toFixed(2)} MB`);
+     * ```
+     * @returns {number}
+     */
+    memoryUsage() {
+        const ret = wasm.edgevec_memoryUsage(this.__wbg_ptr);
+        return ret >>> 0;
+    }
 }
 if (Symbol.dispose) EdgeVec.prototype[Symbol.dispose] = EdgeVec.prototype.free;
 
@@ -3875,7 +3899,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_2434(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_2440(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -4038,7 +4062,7 @@ function __wbg_get_imports() {
     };
     imports.wbg.__wbindgen_cast_f1c9170db27db6a8 = function(arg0, arg1) {
         // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [Externref], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1879, __wasm_bindgen_func_elem_1894);
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1885, __wasm_bindgen_func_elem_1900);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_object_clone_ref = function(arg0) {

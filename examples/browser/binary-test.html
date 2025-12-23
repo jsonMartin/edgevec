@@ -938,7 +938,8 @@
         }
 
         // Update header stats - can be called with overrides for benchmarks
-        function updateStats(overrideCount = null, overrideDims = null) {
+        // If an index is provided, uses actual memoryUsage() instead of estimate
+        function updateStats(overrideCount = null, overrideDims = null, index = null) {
             // Use overrides if provided, otherwise use database state or global config
             let count, dims;
 
@@ -958,8 +959,16 @@
             document.getElementById('statVectors').textContent = count.toLocaleString();
             document.getElementById('statDimensions').textContent = dims || '-';
 
-            const bytesPerVector = dims / 8;
-            const memoryBytes = count * bytesPerVector;
+            // Use actual memory if index provided, otherwise estimate
+            let memoryBytes;
+            const activeIndex = index || (indexType === 'flat' ? flatDb : db);
+            if (activeIndex && typeof activeIndex.memoryUsage === 'function') {
+                memoryBytes = activeIndex.memoryUsage();
+            } else {
+                // Estimate: count * bytes per vector
+                const bytesPerVector = dims / 8;
+                memoryBytes = count * bytesPerVector;
+            }
             document.getElementById('statMemory').textContent = formatBytes(memoryBytes);
         }
 
@@ -1014,12 +1023,12 @@
                     const elapsed = performance.now() - flatInsertStart;
                     const rate = (flatInserted / elapsed * 1000).toFixed(0);
                     setStatus('busy', `FLAT: ${flatInserted.toLocaleString()}/${numVectors.toLocaleString()}`);
-                    updateStats(flatInserted, dimensions);
+                    updateStats(flatInserted, dimensions, flatIndex);
                     log(`  FLAT Progress: ${flatInserted.toLocaleString()}/${numVectors.toLocaleString()} (${rate} vec/s)`, 'purple');
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
-            updateStats(numVectors, dimensions);
+            updateStats(numVectors, dimensions, flatIndex);
             const flatInsertTime = performance.now() - flatInsertStart;
             const flatInsertThroughput = (numVectors / flatInsertTime * 1000).toFixed(0);
 
@@ -1062,12 +1071,12 @@
                     const elapsed = performance.now() - hnswInsertStart;
                     const rate = (hnswInserted / elapsed * 1000).toFixed(0);
                     setStatus('busy', `HNSW: ${hnswInserted.toLocaleString()}/${numVectors.toLocaleString()}`);
-                    updateStats(hnswInserted, dimensions);
+                    updateStats(hnswInserted, dimensions, hnswIndex);
                     log(`  HNSW Progress: ${hnswInserted.toLocaleString()}/${numVectors.toLocaleString()} (${rate} vec/s)`, 'purple');
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
-            updateStats(numVectors, dimensions);
+            updateStats(numVectors, dimensions, hnswIndex);
             const hnswInsertTime = performance.now() - hnswInsertStart;
             const hnswInsertThroughput = (numVectors / hnswInsertTime * 1000).toFixed(0);
 

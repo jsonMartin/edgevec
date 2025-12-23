@@ -1405,6 +1405,26 @@ export class EdgeVec {
    * Returns an error if serialization fails (should not happen in practice).
    */
   getMemoryConfig(): any;
+  /**
+   * Get approximate memory usage in bytes.
+   *
+   * Returns the total memory used by the index, including:
+   * - Vector storage (binary vectors)
+   * - HNSW graph structure (nodes and neighbor lists)
+   * - Internal metadata
+   *
+   * # Returns
+   *
+   * Total bytes used by the index.
+   *
+   * # Example
+   *
+   * ```javascript
+   * const bytes = index.memoryUsage();
+   * console.log(`Index using ${(bytes / 1024 / 1024).toFixed(2)} MB`);
+   * ```
+   */
+  memoryUsage(): number;
 }
 
 export class EdgeVecConfig {
@@ -2040,6 +2060,7 @@ export interface InitOutput {
   readonly edgevec_canInsert: (a: number) => number;
   readonly edgevec_getMemoryRecommendation: (a: number, b: number) => void;
   readonly edgevec_getMemoryConfig: (a: number, b: number) => void;
+  readonly edgevec_memoryUsage: (a: number) => number;
   readonly __wbg_wasmcompactionresult_free: (a: number, b: number) => void;
   readonly __wbg_get_wasmcompactionresult_tombstones_removed: (a: number) => number;
   readonly __wbg_get_wasmcompactionresult_new_size: (a: number) => number;
@@ -2066,9 +2087,9 @@ export interface InitOutput {
   readonly binaryflatvec_clear: (a: number) => void;
   readonly binaryflatvec_shrinkToFit: (a: number) => void;
   readonly edgevec_getVectorMetadata: (a: number, b: number) => number;
-  readonly __wasm_bindgen_func_elem_1894: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_1879: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_2434: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_1900: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_1885: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_2440: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;
