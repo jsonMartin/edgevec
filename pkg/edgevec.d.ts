@@ -1993,9 +1993,9 @@ export interface InitOutput {
   readonly wasmbatchdeleteresult_allValid: (a: number) => number;
   readonly wasmbatchdeleteresult_anyDeleted: (a: number) => number;
   readonly edgevec_getVectorMetadata: (a: number, b: number) => number;
-  readonly __wasm_bindgen_func_elem_1815: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_1800: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_2344: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_1816: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_1801: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_2345: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;

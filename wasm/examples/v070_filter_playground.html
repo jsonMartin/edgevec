@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="EdgeVec Filter Playground v0.7.0 - Interactive metadata filter builder with live sandbox and code examples">
+  <title>EdgeVec v0.7.0 // FILTER_PLAYGROUND</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+
+  <!-- Reuse v0.6.0 CSS Files -->
+  <link rel="stylesheet" href="css/cyberpunk.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/mobile.css">
+
+  <!-- Filter Playground Specific Styles -->
+  <link rel="stylesheet" href="css/filter-playground.css">
+</head>
+<body>
+  <!-- Canvas Backgrounds for Effects -->
+  <canvas id="particleCanvas" class="effect-canvas"></canvas>
+  <canvas id="matrixCanvas" class="effect-canvas effect-canvas--matrix"></canvas>
+
+  <!-- Noise Overlay -->
+  <div class="noise-overlay" aria-hidden="true"></div>
+
+  <!-- Scanline Overlay -->
+  <div class="scanline-overlay"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="container header__inner">
+      <div class="header__logo">
+        <span class="glitch neon-text" data-text="EDGEVEC">EDGEVEC</span>
+        <span class="header__version">v0.7.0</span>
+      </div>
+
+      <nav class="header__nav" role="navigation" aria-label="Main navigation">
+        <a href="#builder" class="header__link">BUILDER</a>
+        <a href="#examples" class="header__link">EXAMPLES</a>
+        <a href="#sandbox" class="header__link">SANDBOX</a>
+        <a href="#snippets" class="header__link">CODE</a>
+      </nav>
+
+      <div class="header__actions">
+        <button
+          class="theme-toggle"
+          id="themeToggle"
+          aria-label="Toggle dark/light mode"
+        >
+          <svg class="theme-toggle__icon theme-toggle__icon--dark" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg class="theme-toggle__icon theme-toggle__icon--light" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+
+        <a href="v060_cyberpunk_demo.html" class="btn btn--small">
+          MAIN_DEMO
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <h1 class="hero__title glitch neon-pulse" data-text="FILTER_PLAYGROUND">
+        FILTER_PLAYGROUND
+      </h1>
+      <p class="hero__subtitle">
+        SQL-like Metadata Queries // <span class="neon-text--green">VISUAL BUILDER</span> // Copy-paste Examples
+      </p>
+
+      <!-- Status Bar -->
+      <div class="status-bar" role="status" aria-live="polite">
+        <div class="status-bar__item">
+          <span class="status-bar__label">WASM</span>
+          <span class="status-bar__value status-bar__value--loading" id="wasmStatus">LOADING...</span>
+        </div>
+        <div class="status-bar__item">
+          <span class="status-bar__label">VECTORS</span>
+          <span class="status-bar__value" id="vectorCount">0</span>
+        </div>
+        <div class="status-bar__item">
+          <span class="status-bar__label">QUERY_TIME</span>
+          <span class="status-bar__value" id="queryTime">--</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Content -->
+  <main class="main">
+    <div class="container">
+      <!-- Filter Builder Section -->
+      <section class="section" id="builder">
+        <h2 class="section__title glitch-hover">FILTER_BUILDER</h2>
+        <div class="panel">
+          <div class="builder-content">
+            <!-- Build Area -->
+            <div class="builder-area">
+              <div class="panel__header">
+                <span class="panel__icon">BUILD_FILTER</span>
+              </div>
+              <div id="clauseContainer" class="clause-container">
+                <!-- Clauses will be added dynamically -->
+              </div>
+              <div class="builder-actions">
+                <button id="addClauseBtn" class="btn btn--primary">+ ADD CLAUSE</button>
+                <button id="addAndBtn" class="btn btn--secondary">+ AND</button>
+                <button id="addOrBtn" class="btn btn--secondary">+ OR</button>
+                <button id="clearBuilderBtn" class="btn btn--ghost">CLEAR</button>
+              </div>
+            </div>
+
+            <!-- Preview Panel -->
+            <div class="preview-panel">
+              <div class="preview-label">LIVE_PREVIEW</div>
+              <div id="filterPreview" class="preview-expression">
+                <!-- Filter expression appears here -->
+              </div>
+              <div id="filterStatus" class="preview-status valid">
+                <span>READY</span>
+              </div>
+              <div class="preview-actions">
+                <button id="copyFilterBtn" class="btn btn--primary btn--sm">COPY</button>
+                <button id="tryFilterBtn" class="btn btn--secondary btn--sm">TRY IN SANDBOX</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Syntax Reference -->
+          <div class="syntax-reference">
+            <div class="syntax-title">OPERATOR_REFERENCE</div>
+            <div class="syntax-grid">
+              <div class="syntax-item">
+                <div class="syntax-op">=, !=</div>
+                <div class="syntax-desc">Equality comparison</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">&gt;, &lt;, &gt;=, &lt;=</div>
+                <div class="syntax-desc">Numeric comparison</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">AND, OR</div>
+                <div class="syntax-desc">Logical operators</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">NOT</div>
+                <div class="syntax-desc">Negation</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">IN [...]</div>
+                <div class="syntax-desc">Array membership</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">ANY [...]</div>
+                <div class="syntax-desc">Array contains any</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Example Gallery Section -->
+      <section class="section" id="examples">
+        <h2 class="section__title glitch-hover">EXAMPLE_GALLERY</h2>
+        <div class="panel">
+          <div id="exampleGrid" class="example-grid">
+            <!-- Examples will be populated by JavaScript -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Sandbox Section -->
+      <section class="section" id="sandbox">
+        <h2 class="section__title glitch-hover">LIVE_SANDBOX</h2>
+        <div class="panel">
+          <div class="sandbox-content">
+            <div class="sandbox-header">
+              <div class="sandbox-stats">
+                <span><span class="stat-label">Vectors:</span> <span class="stat-value" id="sandboxVectorCount">0</span></span>
+                <span><span class="stat-label">Filter:</span> <span class="stat-value" id="activeFilter">--</span></span>
+                <span><span class="stat-label">Results:</span> <span class="stat-value" id="resultCount">--</span></span>
+                <span><span class="stat-label">Time:</span> <span class="stat-value" id="searchTime">--</span></span>
+              </div>
+              <div class="sandbox-actions">
+                <button id="loadDataBtn" class="btn btn--secondary">LOAD_DATA</button>
+                <button id="clearSandboxBtn" class="btn btn--ghost">CLEAR</button>
+              </div>
+            </div>
+
+            <div class="sandbox-input">
+              <input type="text" id="filterInput" class="filter-input" placeholder='Enter filter: category = "electronics" AND price < 500'>
+              <button id="searchBtn" class="btn btn--primary">SEARCH</button>
+            </div>
+
+            <div id="sandboxStatus" class="sandbox-status">
+              Enter a filter expression and click SEARCH to see results
+            </div>
+
+            <div id="resultsContainer" class="sandbox-results" style="display: none;">
+              <div class="result-header">
+                <span>RANK</span>
+                <span>ID</span>
+                <span>DISTANCE</span>
+                <span>METADATA</span>
+              </div>
+              <div id="resultsList">
+                <!-- Results will be populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Code Snippets Section -->
+      <section class="section" id="snippets">
+        <h2 class="section__title glitch-hover">CODE_SNIPPETS</h2>
+        <div class="panel">
+          <div class="snippets-content">
+            <div class="snippet-tabs">
+              <button class="snippet-tab active" data-tab="javascript">JavaScript</button>
+              <button class="snippet-tab" data-tab="typescript">TypeScript</button>
+              <button class="snippet-tab" data-tab="react">React</button>
+            </div>
+
+            <div class="snippet-content">
+              <!-- JavaScript -->
+              <div class="snippet-panel active" data-panel="javascript">
+                <pre class="snippet-code"><code><span class="comment">// Initialize EdgeVec</span>
+<span class="keyword">import</span> init, { EdgeVec, EdgeVecConfig } <span class="keyword">from</span> <span class="string">'edgevec'</span>;
+
+<span class="keyword">await</span> <span class="function">init</span>();
+
+<span class="keyword">const</span> config = <span class="keyword">new</span> <span class="function">EdgeVecConfig</span>(<span class="number">768</span>);
+<span class="keyword">const</span> db = <span class="keyword">new</span> <span class="function">EdgeVec</span>(config);
+
+<span class="comment">// Insert vectors with metadata</span>
+<span class="keyword">const</span> vector = <span class="keyword">new</span> <span class="function">Float32Array</span>(<span class="number">768</span>).<span class="function">fill</span>(<span class="number">0.1</span>);
+db.<span class="function">insertWithMetadata</span>(vector, {
+    category: <span class="string">"electronics"</span>,
+    price: <span class="number">299.99</span>,
+    inStock: <span class="keyword">true</span>
+});
+
+<span class="comment">// Search with filter (simplified API)</span>
+<span class="keyword">const</span> query = <span class="keyword">new</span> <span class="function">Float32Array</span>(<span class="number">768</span>).<span class="function">fill</span>(<span class="number">0.1</span>);
+<span class="keyword">const</span> results = db.<span class="function">searchWithFilter</span>(
+    query,
+    <span class="string">'category = "electronics" AND price < 500'</span>,
+    <span class="number">10</span>
+);
+
+<span class="function">console</span>.<span class="function">log</span>(results); <span class="comment">// [{id, distance}, ...]</span></code></pre>
+                <button class="btn btn--sm btn--secondary snippet-copy" data-copy="javascript">COPY</button>
+              </div>
+
+              <!-- TypeScript -->
+              <div class="snippet-panel" data-panel="typescript">
+                <pre class="snippet-code"><code><span class="keyword">import</span> init, { EdgeVec, EdgeVecConfig } <span class="keyword">from</span> <span class="string">'edgevec'</span>;
+
+<span class="keyword">interface</span> ProductMetadata {
+    category: <span class="keyword">string</span>;
+    price: <span class="keyword">number</span>;
+    inStock: <span class="keyword">boolean</span>;
+}
+
+<span class="keyword">async function</span> <span class="function">searchProducts</span>(): <span class="keyword">Promise</span>&lt;<span class="keyword">void</span>&gt; {
+    <span class="keyword">await</span> <span class="function">init</span>();
+
+    <span class="keyword">const</span> config = <span class="keyword">new</span> <span class="function">EdgeVecConfig</span>(<span class="number">768</span>);
+    <span class="keyword">const</span> db: EdgeVec = <span class="keyword">new</span> <span class="function">EdgeVec</span>(config);
+
+    <span class="comment">// Insert with typed metadata</span>
+    <span class="keyword">const</span> metadata: ProductMetadata = {
+        category: <span class="string">"electronics"</span>,
+        price: <span class="number">299.99</span>,
+        inStock: <span class="keyword">true</span>
+    };
+
+    <span class="keyword">const</span> vector = <span class="keyword">new</span> <span class="function">Float32Array</span>(<span class="number">768</span>).<span class="function">fill</span>(<span class="number">0.1</span>);
+    db.<span class="function">insertWithMetadata</span>(vector, metadata);
+
+    <span class="comment">// Filtered search (simplified API)</span>
+    <span class="keyword">const</span> filter = <span class="string">'category = "electronics" AND price < 500'</span>;
+    <span class="keyword">const</span> results = db.<span class="function">searchWithFilter</span>(vector, filter, <span class="number">10</span>);
+}</code></pre>
+                <button class="btn btn--sm btn--secondary snippet-copy" data-copy="typescript">COPY</button>
+              </div>
+
+              <!-- React -->
+              <div class="snippet-panel" data-panel="react">
+                <pre class="snippet-code"><code><span class="keyword">import</span> { useState, useEffect } <span class="keyword">from</span> <span class="string">'react'</span>;
+<span class="keyword">import</span> init, { EdgeVec, EdgeVecConfig } <span class="keyword">from</span> <span class="string">'edgevec'</span>;
+
+<span class="keyword">function</span> <span class="function">useEdgeVec</span>(dimensions: <span class="keyword">number</span>) {
+    <span class="keyword">const</span> [db, setDb] = <span class="function">useState</span>&lt;EdgeVec | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+    <span class="keyword">const</span> [loading, setLoading] = <span class="function">useState</span>(<span class="keyword">true</span>);
+
+    <span class="function">useEffect</span>(() =&gt; {
+        <span class="keyword">async function</span> <span class="function">initialize</span>() {
+            <span class="keyword">await</span> <span class="function">init</span>();
+            <span class="keyword">const</span> config = <span class="keyword">new</span> <span class="function">EdgeVecConfig</span>(dimensions);
+            <span class="function">setDb</span>(<span class="keyword">new</span> <span class="function">EdgeVec</span>(config));
+            <span class="function">setLoading</span>(<span class="keyword">false</span>);
+        }
+        <span class="function">initialize</span>();
+    }, [dimensions]);
+
+    <span class="keyword">return</span> { db, loading };
+}
+
+<span class="keyword">function</span> <span class="function">ProductSearch</span>() {
+    <span class="keyword">const</span> { db, loading } = <span class="function">useEdgeVec</span>(<span class="number">768</span>);
+    <span class="keyword">const</span> [filter, setFilter] = <span class="function">useState</span>(<span class="string">''</span>);
+    <span class="keyword">const</span> [results, setResults] = <span class="function">useState</span>([]);
+
+    <span class="keyword">const</span> <span class="function">handleSearch</span> = () =&gt; {
+        <span class="keyword">if</span> (!db) <span class="keyword">return</span>;
+        <span class="keyword">const</span> query = <span class="keyword">new</span> <span class="function">Float32Array</span>(<span class="number">768</span>).<span class="function">fill</span>(<span class="number">0.1</span>);
+        <span class="keyword">const</span> res = db.<span class="function">searchWithFilter</span>(query, filter, <span class="number">10</span>);
+        <span class="function">setResults</span>(res);
+    };
+
+    <span class="keyword">return</span> (
+        &lt;<span class="keyword">div</span>&gt;
+            &lt;<span class="keyword">input</span> value={filter} onChange={e =&gt; <span class="function">setFilter</span>(e.target.value)} /&gt;
+            &lt;<span class="keyword">button</span> onClick={<span class="function">handleSearch</span>}&gt;Search&lt;/<span class="keyword">button</span>&gt;
+        &lt;/<span class="keyword">div</span>&gt;
+    );
+}</code></pre>
+                <button class="btn btn--sm btn--secondary snippet-copy" data-copy="react">COPY</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /.container -->
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p><strong>EdgeVec v0.7.0</strong> // Filter Playground</p>
+      <p>Built with Rust + WebAssembly // <a href="https://github.com/matte1782/edgevec" class="footer__link">GitHub</a></p>
+    </div>
+  </footer>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- JavaScript Module -->
+  <script type="module">
+    /**
+     * EdgeVec Filter Playground v0.7.0
+     * Main entry point - imports from filter-playground.js module
+     */
+    import { initFilterPlayground } from './js/filter-playground.js';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Gather DOM elements
+      const elements = {
+        wasmStatus: document.getElementById('wasmStatus'),
+        vectorCount: document.getElementById('vectorCount'),
+        queryTime: document.getElementById('queryTime'),
+        clauseContainer: document.getElementById('clauseContainer'),
+        filterPreview: document.getElementById('filterPreview'),
+        filterStatus: document.getElementById('filterStatus'),
+        exampleGrid: document.getElementById('exampleGrid'),
+        filterInput: document.getElementById('filterInput'),
+        sandboxStatus: document.getElementById('sandboxStatus'),
+        resultsContainer: document.getElementById('resultsContainer'),
+        resultsList: document.getElementById('resultsList'),
+        sandboxVectorCount: document.getElementById('sandboxVectorCount'),
+        activeFilter: document.getElementById('activeFilter'),
+        resultCount: document.getElementById('resultCount'),
+        searchTime: document.getElementById('searchTime'),
+        toastContainer: document.getElementById('toastContainer')
+      };
+
+      // Initialize the Filter Playground
+      try {
+        await initFilterPlayground(elements);
+      } catch (error) {
+        console.error('Filter Playground initialization error:', error);
+      }
+    });
+  </script>
+</body>
+</html>

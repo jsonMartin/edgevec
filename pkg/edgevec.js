@@ -1,4 +1,4 @@
-import { IndexedDbBackend } from './snippets/edgevec-98e271a617b3aceb/src/js/storage.js';
+import { IndexedDbBackend } from './snippets/edgevec-78d8c49bd24b079a/src/js/storage.js';
 
 let wasm;
 
@@ -297,12 +297,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_1815(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_1815(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1816(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1816(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_2344(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_2344(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_2345(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_2345(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -3278,7 +3278,7 @@ export function benchmarkHammingBatch(vectors_js, query_js, iterations) {
     let deferred1_1;
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        wasm.benchmarkHammingBatch(retptr, addBorrowedObject(vectors_js), addHeapObject(query_js), iterations);
+        wasm.benchmarkHammingBatch(retptr, addBorrowedObject(vectors_js), addBorrowedObject(query_js), iterations);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         deferred1_0 = r0;
@@ -3286,6 +3286,7 @@ export function benchmarkHammingBatch(vectors_js, query_js, iterations) {
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
+        heap[stack_pointer++] = undefined;
         heap[stack_pointer++] = undefined;
         wasm.__wbindgen_export4(deferred1_0, deferred1_1, 1);
     }
@@ -3807,7 +3808,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_2344(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_2345(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -3880,7 +3881,7 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_randomFillSync_ac0988aba3254290 = function() { return handleError(function (arg0, arg1) {
         getObject(arg0).randomFillSync(takeObject(arg1));
     }, arguments) };
-    imports.wbg.__wbg_read_4b87ebfb9daf2382 = function() { return handleError(function (arg0, arg1) {
+    imports.wbg.__wbg_read_034630817ee5f3b2 = function() { return handleError(function (arg0, arg1) {
         const ret = IndexedDbBackend.read(getStringFromWasm0(arg0, arg1));
         return addHeapObject(ret);
     }, arguments) };
@@ -3944,7 +3945,7 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_warn_6e567d0d926ff881 = function(arg0) {
         console.warn(getObject(arg0));
     };
-    imports.wbg.__wbg_write_eab4b5dfa9d6d182 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
+    imports.wbg.__wbg_write_a14711ba121961c2 = function() { return handleError(function (arg0, arg1, arg2, arg3) {
         const ret = IndexedDbBackend.write(getStringFromWasm0(arg0, arg1), getArrayU8FromWasm0(arg2, arg3));
         return addHeapObject(ret);
     }, arguments) };
@@ -3960,7 +3961,7 @@ function __wbg_get_imports() {
     };
     imports.wbg.__wbindgen_cast_902a70736b89c8fd = function(arg0, arg1) {
         // Cast intrinsic for `Closure(Closure { dtor_idx: 119, function: Function { arguments: [Externref], shim_idx: 120, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1800, __wasm_bindgen_func_elem_1815);
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1801, __wasm_bindgen_func_elem_1816);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {

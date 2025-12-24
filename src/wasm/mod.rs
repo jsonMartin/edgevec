@@ -217,7 +217,7 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
 #[wasm_bindgen(js_name = "benchmarkHammingBatch")]
 pub fn benchmark_hamming_batch(
     vectors_js: &js_sys::Array,
-    query_js: Uint8Array,
+    query_js: &Uint8Array,
     iterations: usize,
 ) -> String {
     use crate::simd::popcount::simd_popcount_xor;
@@ -530,9 +530,10 @@ impl EdgeVecConfig {
 #[serde(tag = "variant_type")]
 pub(crate) enum IndexVariant {
     /// HNSW graph index with separate storage.
+    /// Box is used to reduce enum size (HnswIndex is 736 bytes vs BinaryFlatIndex 48 bytes).
     #[serde(rename = "hnsw")]
     Hnsw {
-        index: HnswIndex,
+        index: Box<HnswIndex>,
         storage: VectorStorage,
     },
     /// Flat (brute-force) index with internal storage.
@@ -772,7 +773,10 @@ impl EdgeVec {
                 }
 
                 let index = HnswIndex::new(hnsw_config, &storage).map_err(EdgeVecError::from)?;
-                IndexVariant::Hnsw { index, storage }
+                IndexVariant::Hnsw {
+                    index: Box::new(index),
+                    storage,
+                }
             }
         };
 
@@ -1664,7 +1668,6 @@ impl EdgeVec {
     /// The returned iterator holds a reference to this `EdgeVec` instance.
     /// You MUST ensure `EdgeVec` is not garbage collected or freed while using the iterator.
     #[wasm_bindgen]
-    #[must_use]
     pub fn save_stream(&self, chunk_size: Option<usize>) -> Result<PersistenceIterator, JsValue> {
         // HNSW-only: Chunked streaming is only implemented for HNSW
         let (index, storage) = self.inner.as_hnsw()?;
@@ -1954,7 +1957,7 @@ impl EdgeVec {
 
         // Replace internal state with compacted versions
         self.inner = IndexVariant::Hnsw {
-            index: new_index,
+            index: Box::new(new_index),
             storage: new_storage,
         };
 

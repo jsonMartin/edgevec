@@ -1,10 +1,10 @@
-# EdgeVec Roadmap v4.0
+# EdgeVec Roadmap v5.1
 
 **Date:** 2025-12-23
 **Author:** PLANNER
-**Status:** [REVISED] — v0.6.0 Released, v0.7.0 Planning
+**Status:** [REVISED v2] — v0.6.0 Released, v0.7.0 Plan Optimized + Reddit Feedback Integrated
 **Current Version:** v0.6.0 (released 2025-12-23)
-**Next Version:** v0.7.0 (planned — Week 30+)
+**Next Version:** v0.7.0 (planned — Week 30, 25.5 hours)
 
 ---
 
@@ -211,79 +211,175 @@ git commit -m "chore: remove internal development files before v0.6.0 release"
 
 ---
 
-## Phase 8: v0.7.0 Performance & Documentation (Week 30+)
+## Phase 8: v0.7.0 SIMD Enablement & Metadata Docs (Week 30)
 
-### Milestone 8.1: RFC-003 WASM SIMD Optimization
-**Status:** APPROVED — Ready for Implementation
+> **REVISED 2025-12-23:** Hostile review discovered SIMD is ALREADY IMPLEMENTED.
+> RFC-003 scope changed from "implement" to "enable" (22h → 4h).
+> Focus shifted to metadata filtering documentation per user request.
+>
+> **REVISED v2 2025-12-23:** Reddit feedback from user "chillfish8" integrated.
+> Added Day 0 code quality fixes (7.5h): comment cleanup, AVX2 popcount optimization,
+> code consolidation audit, and safety doc placement fix.
+
+### Milestone 8.0: Code Quality Fixes (Reddit Feedback)
+**Status:** CRITICAL — Day 0 priority
 **Target:** v0.7.0
-**Duration:** 3 weeks (22 hours)
+**Duration:** 7.5 hours
+**Source:** Reddit user "chillfish8" code review
 
-**Objective:** 2-3x dot product speedup via WASM SIMD128.
+**Issues Addressed:**
+| Issue | File | Fix | Hours |
+|:------|:-----|:----|:------|
+| Comment crisis | `src/persistence/chunking.rs` | Clean rambling comments | 1 |
+| AVX2 popcount | `src/quantization/simd/avx2.rs` | Use native popcnt | 2 |
+| Duplicate logic | Multiple | Audit + document | 2 |
+| Consolidation plan | N/A | Create v0.8.0 refactor plan | 2 |
+| Safety doc placement | `src/quantization/simd/*.rs` | Move docs to function level | 0.5 |
 
 **Deliverables:**
-- [ ] `simd` feature flag in Cargo.toml
-- [ ] `src/simd/wasm_simd.rs` — SIMD128 dot product
-- [ ] Scalar fallback for iOS Safari
-- [ ] Runtime SIMD detection
-- [ ] Benchmark suite (`benches/simd_bench.rs`)
+- [ ] No rambling comments in `chunking.rs`
+- [ ] AVX2 popcount uses native `popcnt` instruction
+- [ ] `docs/audits/CODE_CONSOLIDATION_AUDIT.md` created
+- [ ] Safety docs on function level for all SIMD functions
+
+### Milestone 8.1: Enable WASM SIMD (REVISED)
+**Status:** READY — Code exists, needs build flag
+**Target:** v0.7.0
+**Duration:** 4 hours (was 22 hours)
+
+**What Exists:**
+- `src/metric/simd.rs` — 854+ lines of WASM SIMD128 code (L2, dot, cosine)
+- x86 AVX2 implementations with FMA support
+- Auto-dispatchers via `cfg_if!`
+
+**What's Missing:**
+- RUSTFLAGS not set in wasm-pack build
+- Benchmark validation
+
+**Deliverables:**
+- [ ] Add `RUSTFLAGS="-C target-feature=+simd128"` to build scripts
+- [ ] Verify with `wasm2wat` inspection
+- [ ] Benchmark 2-3x speedup
+- [ ] Update performance claims in README
 
 **Success Metrics:**
-| Metric | Current | Target |
-|:-------|:--------|:-------|
-| Dot Product Latency | ~500ns | <200ns |
+| Metric | Scalar | SIMD Target |
+|:-------|:-------|:------------|
+| Dot Product (768-dim) | ~500ns | <200ns |
 | Search (100k, k=10) | ~5ms | ~2ms |
-| Speedup Factor | 1x | 2.5-3x |
 
-### Milestone 8.2: Documentation Improvements
-**Status:** PLANNED — User Feedback
+### Milestone 8.2: Metadata Filtering GitHub Pages (USER REQUEST)
+**Status:** PLANNED — Priority from Reddit feedback
 **Target:** v0.7.0
+**Duration:** 10 hours
 
-**Objective:** Add more code examples per Reddit user feedback.
+**User Feedback:** `docs/release/v0.6.0/comments/add_more_snippet.txt`
+> "Add more code snippet for the meta data filtering part, everyone asking"
 
 **Deliverables:**
-- [ ] README expanded with 10+ code examples
-- [ ] TypeScript usage guide
-- [ ] Common patterns guide
-- [ ] Embedding provider integration examples
-- [ ] Error handling examples
+- [ ] `wasm/examples/v070_filter_playground.html` (cyberpunk theme)
+- [ ] Interactive filter builder with live preview
+- [ ] 10+ copy-paste filter examples
+- [ ] Live sandbox with real EdgeVec WASM
+- [ ] Deploy to GitHub Pages
 
-### Milestone 8.3: v0.7.0 Release
+**Demo Features:**
+- Drag-and-drop filter construction
+- Example gallery (e-commerce, documents, content)
+- Syntax validation with error messages
+- Copy button for code snippets
+
+### Milestone 8.3: README & Documentation Updates
 **Status:** PLANNED
-**Target:** Week 33
+**Target:** v0.7.0
+**Duration:** 4 hours
+
+**Deliverables:**
+- [ ] Add "Metadata Filtering" section to README with examples
+- [ ] Add SIMD performance section with benchmarks
+- [ ] Link to interactive filter playground
+- [ ] Update CHANGELOG
+
+### Milestone 8.4: v0.7.0 Release
+**Status:** PLANNED
+**Target:** Week 30 (end)
 
 **Deliverables:**
 - [ ] v0.7.0 on crates.io
 - [ ] v0.7.0 on npm
-- [ ] Updated demos with SIMD toggle
-- [ ] Performance blog post
+- [ ] Filter playground live on GitHub Pages
+- [ ] Performance blog post (optional)
+
+**Total v0.7.0 Hours:** 25.5 (18 base + 7.5 Reddit fixes)
 
 ---
 
-## Phase 9: v0.8.0+ Advanced Features (Future)
+## Phase 9: v0.8.0 Advanced Features (Week 31+)
 
 ### Milestone 9.1: RFC-004 Query Result Caching
 **Status:** CONDITIONAL — Needs Fixes Before Approval
 **Target:** v0.8.0
+**Estimated Duration:** 29 hours (after fixes)
 
-**Blocking Issues (must fix):**
-1. Add memory budget specification
-2. Add mutation invalidation mechanism
-3. Measure cache overhead (<100ns required)
-4. Specify hash algorithm
+**Blocking Issues (must fix before implementation):**
+1. **Memory budget specification** — Define max cache size (e.g., 10MB default, configurable)
+2. **Mutation invalidation mechanism** — Clear cache on insert/delete/update operations
+3. **Cache overhead measurement** — Verify <100ns lookup overhead
+4. **Hash algorithm specification** — Use FxHash or similar for speed
+
+**Design Decisions:**
+```rust
+// Proposed cache config
+pub struct CacheConfig {
+    max_memory_bytes: usize,     // Default: 10MB
+    max_entries: usize,          // Default: 1000
+    ttl_seconds: Option<u64>,    // Default: None (no expiry)
+    invalidate_on_mutation: bool // Default: true
+}
+```
 
 **Planned Features:**
-- In-memory LRU cache
-- Semantic similarity detection
-- Cache invalidation on mutations
+- In-memory LRU cache with configurable memory budget
+- Automatic cache invalidation on mutations
+- Cache statistics API (`cache_hits()`, `cache_misses()`, `cache_size()`)
+- Optional: Semantic similarity detection for near-hit queries
+
+**Success Metrics:**
+| Metric | Target |
+|:-------|:-------|
+| Cache lookup overhead | <100ns |
+| Cache hit rate (repeated queries) | >90% |
+| Memory overhead per entry | <1KB |
 
 ### Milestone 9.2: Production Hardening
 **Status:** PLANNED
-**Target:** v0.8.0+
+**Target:** v0.8.0
 
 **Planned Features:**
-- ACORN in-algorithm filtering (if needed)
-- Metadata indexing for large collections
-- Mobile Safari testing suite
+- ACORN in-algorithm filtering (if post-filter selectivity <10%)
+- Metadata B-tree indexing for large collections (>100k vectors)
+- iOS Safari testing suite with real device matrix
+- Memory pressure event handling improvements
+
+### Milestone 9.3: TypeScript SDK Improvements
+**Status:** PLANNED
+**Target:** v0.8.0
+
+**Planned Features:**
+- Typed filter builder (compile-time filter validation)
+- React hooks (`useEdgeVec`, `useSearch`, `useFilter`)
+- Vue composables
+- Better TypeScript generics for metadata types
+
+### Milestone 9.4: v0.8.0 Release
+**Status:** PLANNED
+**Target:** Week 33-34
+
+**Deliverables:**
+- [ ] RFC-004 query caching implemented
+- [ ] Production hardening complete
+- [ ] TypeScript SDK improvements
+- [ ] v0.8.0 on crates.io and npm
 
 ---
 
@@ -430,6 +526,9 @@ Per SCALE_UP_ANALYSIS_2025-12-20.md HOSTILE_REVIEWER verdict:
 | v2.0 | 2025-12-16 | Week 19 reconciliation — Weeks 16-18 complete |
 | v3.0 | 2025-12-20 | Week 25 update — RFC-002 APPROVED, v0.6.0 planning complete |
 | v3.1 | 2025-12-22 | Week 28 update — Added pre-release cleanup, publication strategy |
+| v4.0 | 2025-12-23 | Week 29 — v0.6.0 released, v0.7.0 initial planning |
+| v5.0 | 2025-12-23 | Week 30 REVISED — SIMD already implemented, v0.7.0 optimized (18h) |
+| v5.1 | 2025-12-23 | Reddit feedback integrated — v0.7.0 updated to 25.5h with code quality fixes |
 
 ---
 
