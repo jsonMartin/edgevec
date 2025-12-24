@@ -426,10 +426,8 @@ export class ThemeManager {
     const stored = localStorage.getItem(this.storageKey);
     if (stored) return stored;
 
-    // Check system preference
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-      return 'light';
-    }
+    // Default to dark for cyberpunk theme - only use stored preference if user explicitly toggled
+    // This respects the HTML data-theme="dark" attribute
     return 'dark';
   }
 

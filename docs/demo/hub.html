@@ -2,129 +2,866 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="description" content="EdgeVec Demo Hub - Interactive demos for the WASM-native vector database">
-  <title>EdgeVec Demo Hub</title>
+  <title>EdgeVec // Demo Hub</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/cyberpunk.css">
-  <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/components.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800&display=swap" rel="stylesheet">
+
   <style>
-    .demo-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 1.5rem;
-      margin: 2rem 0;
+    :root {
+      --bg-void: #030306;
+      --bg-primary: #0a0a0f;
+      --bg-card: #0f0f18;
+      --bg-card-hover: #151525;
+      --cyan: #00ffff;
+      --cyan-dim: #00aaaa;
+      --magenta: #ff00ff;
+      --green: #00ff88;
+      --purple: #9945ff;
+      --white: #e8e8f0;
+      --gray-100: #b0b0c0;
+      --gray-200: #6a6a80;
+      --border: rgba(0, 255, 255, 0.1);
+      --border-hover: rgba(0, 255, 255, 0.3);
+      --font-display: 'Orbitron', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
     }
-    .demo-card {
-      background: var(--bg-elevated);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1.5rem;
-      transition: all 0.3s ease;
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; overflow-x: hidden; }
+    body {
+      font-family: var(--font-mono);
+      background: var(--bg-void);
+      color: var(--white);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
     }
-    .demo-card:hover {
-      border-color: var(--neon-cyan);
-      box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
-      transform: translateY(-2px);
+
+    /* Matrix Canvas */
+    #matrix {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      opacity: 0.15;
+      pointer-events: none;
     }
-    .demo-card__title {
+
+    /* Gradient overlay */
+    .gradient-overlay {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0, 255, 255, 0.08), transparent),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(255, 0, 255, 0.05), transparent);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Header */
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 15, 0.9);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header__inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 16px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header__logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header__brand {
       font-family: var(--font-display);
-      font-size: 1.25rem;
-      color: var(--neon-cyan);
-      margin-bottom: 0.5rem;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--cyan);
+      text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+      letter-spacing: 0.1em;
     }
-    .demo-card__desc {
-      color: var(--text-secondary);
-      font-size: 0.9rem;
-      margin-bottom: 1rem;
-    }
-    .demo-card__tag {
-      display: inline-block;
-      background: var(--bg-tertiary);
-      color: var(--neon-magenta);
-      font-size: 0.75rem;
-      padding: 0.25rem 0.5rem;
+
+    .header__tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 4px 10px;
+      background: linear-gradient(135deg, var(--magenta), var(--purple));
       border-radius: 4px;
-      margin-right: 0.5rem;
+      letter-spacing: 0.05em;
     }
-    .demo-card__tag--new {
-      background: var(--neon-green);
-      color: var(--bg-primary);
+
+    .header__nav { display: flex; gap: 24px; }
+
+    .header__link {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--gray-100);
+      text-decoration: none;
+      letter-spacing: 0.08em;
+      transition: all 0.2s;
     }
-    .hero-hub {
+
+    .header__link:hover {
+      color: var(--cyan);
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      z-index: 10;
+      padding: 120px 16px 60px;
       text-align: center;
-      padding: 3rem 0;
     }
-    .hero-hub__title {
-      font-family: var(--font-display);
-      font-size: 2.5rem;
-      color: var(--neon-cyan);
-      text-shadow: var(--text-glow-cyan);
-    }
-    .hero-hub__subtitle {
-      color: var(--text-secondary);
-      margin-top: 0.5rem;
-    }
-    .back-link {
+
+    .hero__eyebrow {
       display: inline-flex;
       align-items: center;
-      gap: 0.5rem;
-      color: var(--neon-cyan);
-      text-decoration: none;
-      margin-bottom: 1rem;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--green);
+      margin-bottom: 16px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease forwards;
     }
-    .back-link:hover {
-      text-decoration: underline;
+
+    .hero__dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--green); }
+      50% { opacity: 0.5; box-shadow: 0 0 20px var(--green); }
+    }
+
+    .hero__title {
+      font-family: var(--font-display);
+      font-size: clamp(28px, 8vw, 56px);
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: var(--cyan);
+      text-shadow: 0 0 30px rgba(0, 255, 255, 0.6), 0 0 60px rgba(0, 255, 255, 0.3);
+      margin-bottom: 16px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.1s forwards;
+    }
+
+    .hero__subtitle {
+      font-size: clamp(13px, 3vw, 16px);
+      color: var(--gray-100);
+      max-width: 500px;
+      margin: 0 auto 32px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.2s forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(15px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .hero__stats {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      flex-wrap: wrap;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.3s forwards;
+    }
+
+    .hero__stat { text-align: center; }
+
+    .hero__stat-value {
+      font-family: var(--font-display);
+      font-size: clamp(24px, 5vw, 32px);
+      font-weight: 700;
+      color: var(--green);
+      text-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+    }
+
+    .hero__stat-label {
+      font-size: 10px;
+      color: var(--gray-200);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* Main content */
+    .main {
+      position: relative;
+      z-index: 10;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 16px 80px;
+    }
+
+    /* Category */
+    .category { margin-top: 48px; }
+    .category:first-child { margin-top: 0; }
+
+    .category__header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .category__icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: rgba(0, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .category__icon svg {
+      width: 14px;
+      height: 14px;
+      stroke: var(--cyan);
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .category__title {
+      font-family: var(--font-display);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--gray-200);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    /* Grid */
+    .grid { display: grid; gap: 12px; }
+
+    /* Card */
+    .card {
+      display: block;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-hover);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(0, 255, 255, 0.1);
+    }
+
+    .card:hover::before { opacity: 1; }
+
+    .card--featured {
+      background: linear-gradient(145deg, rgba(0, 255, 255, 0.05), var(--bg-card));
+      border-color: rgba(0, 255, 255, 0.2);
+      padding: 24px;
+    }
+
+    .card--local { border-style: dashed; }
+
+    .card__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      gap: 8px;
+    }
+
+    .card__badges { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .card__badge {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .card__badge--version {
+      background: rgba(0, 255, 255, 0.15);
+      color: var(--cyan);
+    }
+
+    .card__badge--new {
+      background: linear-gradient(135deg, var(--green), #00cc66);
+      color: #000;
+    }
+
+    .card__badge--featured {
+      background: linear-gradient(135deg, var(--magenta), var(--purple));
+      color: #fff;
+    }
+
+    .card__badge--local {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--gray-200);
+    }
+
+    .card__arrow {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(0, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.5;
+      transition: all 0.3s;
+      flex-shrink: 0;
+    }
+
+    .card:hover .card__arrow {
+      opacity: 1;
+      background: rgba(0, 255, 255, 0.2);
+    }
+
+    .card__arrow svg {
+      width: 14px;
+      height: 14px;
+      stroke: var(--cyan);
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .card__icon {
+      width: 36px;
+      height: 36px;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, rgba(0, 255, 255, 0.15), rgba(255, 0, 255, 0.08));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card__icon svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--cyan);
+      stroke-width: 1.5;
+      fill: none;
+    }
+
+    .card__title {
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      margin-bottom: 6px;
+      transition: all 0.2s;
+    }
+
+    .card:hover .card__title {
+      color: var(--cyan);
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+    }
+
+    .card--featured .card__title { font-size: clamp(17px, 4vw, 22px); }
+
+    .card__desc {
+      font-size: 13px;
+      color: var(--gray-100);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    .card__meta {
+      font-size: 10px;
+      color: var(--gray-200);
+      margin-bottom: 12px;
+    }
+
+    .card__features { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .card__feature {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 4px 8px;
+      background: rgba(0, 255, 255, 0.05);
+      border: 1px solid rgba(0, 255, 255, 0.1);
+      border-radius: 4px;
+      color: var(--gray-100);
+    }
+
+    /* Footer */
+    .footer {
+      position: relative;
+      z-index: 10;
+      padding: 40px 16px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer__brand {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--cyan);
+      text-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+      margin-bottom: 16px;
+    }
+
+    .footer__links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .footer__link {
+      font-size: 12px;
+      color: var(--gray-100);
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .footer__link:hover { color: var(--cyan); }
+
+    .footer__copy {
+      font-size: 10px;
+      color: var(--gray-200);
+    }
+
+    /* Responsive */
+    @media (min-width: 600px) {
+      .grid--2 { grid-template-columns: repeat(2, 1fr); }
+      .card { padding: 24px; }
+      .card--featured { padding: 32px; }
+      .hero { padding: 140px 24px 80px; }
+      .main { padding: 60px 24px 100px; }
+      .category { margin-top: 64px; }
+    }
+
+    @media (min-width: 900px) {
+      .grid--3 { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @media (max-width: 599px) {
+      .header__nav { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="noise-overlay" aria-hidden="true"></div>
+  <!-- Matrix Rain Canvas -->
+  <canvas id="matrix"></canvas>
+  <div class="gradient-overlay"></div>
 
-  <main class="container" style="padding: 2rem;">
-    <a href="https://github.com/matte1782/edgevec" class="back-link">
-      &larr; Back to GitHub
-    </a>
+  <!-- Header -->
+  <header class="header">
+    <div class="header__inner">
+      <div class="header__logo">
+        <span class="header__brand">EDGEVEC</span>
+        <span class="header__tag">DEMO HUB</span>
+      </div>
+      <nav class="header__nav">
+        <a href="https://github.com/matte1782/edgevec" class="header__link" target="_blank">GITHUB</a>
+        <a href="https://www.npmjs.com/package/edgevec" class="header__link" target="_blank">NPM</a>
+        <a href="https://crates.io/crates/edgevec" class="header__link" target="_blank">CRATES.IO</a>
+      </nav>
+    </div>
+  </header>
 
-    <section class="hero-hub">
-      <h1 class="hero-hub__title glitch" data-text="EDGEVEC_DEMOS">EDGEVEC_DEMOS</h1>
-      <p class="hero-hub__subtitle">Interactive demos for the WASM-native vector database</p>
-    </section>
+  <!-- Hero -->
+  <section class="hero">
+    <p class="hero__eyebrow">
+      <span class="hero__dot"></span>
+      WASM-NATIVE VECTOR DATABASE
+    </p>
+    <h1 class="hero__title">DEMO_HUB</h1>
+    <p class="hero__subtitle">
+      Explore EdgeVec capabilities. From visual filter building to performance benchmarks.
+    </p>
+    <div class="hero__stats">
+      <div class="hero__stat">
+        <div class="hero__stat-value">32x</div>
+        <div class="hero__stat-label">Memory</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-value">2x+</div>
+        <div class="hero__stat-label">SIMD</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-value">&lt;1ms</div>
+        <div class="hero__stat-label">Latency</div>
+      </div>
+    </div>
+  </section>
 
-    <div class="demo-grid">
-      <!-- Filter Playground -->
-      <a href="index.html" class="demo-card">
-        <span class="demo-card__tag demo-card__tag--new">v0.7.0</span>
-        <span class="demo-card__tag">NEW</span>
-        <h2 class="demo-card__title">Filter Playground</h2>
-        <p class="demo-card__desc">
-          Visual filter builder with live sandbox. Build SQL-like queries, see live results, copy-paste code snippets.
-        </p>
-      </a>
+  <!-- Main -->
+  <main class="main">
 
-      <!-- Cyberpunk Demo -->
-      <a href="cyberpunk.html" class="demo-card">
-        <span class="demo-card__tag">v0.6.0</span>
-        <h2 class="demo-card__title">Cyberpunk Demo</h2>
-        <p class="demo-card__desc">
-          Full-featured demo with BQ vs F32 comparison, metadata filtering, memory pressure monitoring.
-        </p>
-      </a>
-
-      <!-- More demos can be added here -->
+    <!-- Featured -->
+    <div class="category">
+      <div class="grid">
+        <a href="index.html" class="card card--featured">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.7.0</span>
+              <span class="card__badge card__badge--new">LATEST</span>
+              <span class="card__badge card__badge--featured">FEATURED</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+          </div>
+          <h2 class="card__title">FILTER_PLAYGROUND</h2>
+          <p class="card__desc">Build SQL-like metadata queries visually. Test in real-time with WASM. Copy production-ready code.</p>
+          <p class="card__meta">December 2024 // SIMD Acceleration</p>
+          <div class="card__features">
+            <span class="card__feature">Visual Builder</span>
+            <span class="card__feature">Live Sandbox</span>
+            <span class="card__feature">10+ Examples</span>
+            <span class="card__feature">Code Snippets</span>
+          </div>
+        </a>
+      </div>
     </div>
 
-    <footer style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-      <p>
-        <span class="neon-text">EDGEVEC</span> // MIT License //
-        <a href="https://crates.io/crates/edgevec" target="_blank" style="color: var(--neon-cyan);">crates.io</a> //
-        <a href="https://www.npmjs.com/package/edgevec" target="_blank" style="color: var(--neon-cyan);">npm</a>
-      </p>
-    </footer>
+    <!-- Core Features -->
+    <div class="category">
+      <div class="category__header">
+        <div class="category__icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <span class="category__title">Core Features</span>
+      </div>
+      <div class="grid grid--2">
+        <a href="cyberpunk.html" class="card">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.6.0</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <h2 class="card__title">CYBERPUNK_DEMO</h2>
+          <p class="card__desc">Binary Quantization vs F32. Memory pressure. Performance benchmarks.</p>
+          <p class="card__meta">Binary Quantization // 32x Memory</p>
+          <div class="card__features">
+            <span class="card__feature">BQ vs F32</span>
+            <span class="card__feature">Memory API</span>
+            <span class="card__feature">Filtering</span>
+          </div>
+        </a>
+
+        <a href="../../wasm/examples/index.html" class="card card--local">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.5.x</span>
+              <span class="card__badge card__badge--local">LOCAL</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+          </div>
+          <h2 class="card__title">MAIN_DEMO</h2>
+          <p class="card__desc">Original demo. Insert, search, persistence.</p>
+          <p class="card__meta">Metadata Filtering // Persistence</p>
+          <div class="card__features">
+            <span class="card__feature">Insert</span>
+            <span class="card__feature">Search</span>
+            <span class="card__feature">Save/Load</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- Performance -->
+    <div class="category">
+      <div class="category__header">
+        <div class="category__icon">
+          <svg viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+        </div>
+        <span class="category__title">Performance</span>
+      </div>
+      <div class="grid grid--2">
+        <a href="../../wasm/examples/simd_benchmark.html" class="card card--local">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.7.0</span>
+              <span class="card__badge card__badge--local">LOCAL</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </div>
+          <h2 class="card__title">SIMD_BENCHMARK</h2>
+          <p class="card__desc">Measure WASM SIMD128. Vectorized vs scalar.</p>
+          <p class="card__meta">SIMD128 // 2x+ Speedup</p>
+          <div class="card__features">
+            <span class="card__feature">Throughput</span>
+            <span class="card__feature">Latency</span>
+          </div>
+        </a>
+
+        <a href="../../wasm/examples/benchmark-dashboard.html" class="card card--local">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.4.0</span>
+              <span class="card__badge card__badge--local">LOCAL</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M3 3v18h18M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+          </div>
+          <h2 class="card__title">BENCHMARK_DASHBOARD</h2>
+          <p class="card__desc">Insert, search, memory at scale.</p>
+          <p class="card__meta">Scaling Analysis // Charts</p>
+          <div class="card__features">
+            <span class="card__feature">Charts</span>
+            <span class="card__feature">Reports</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- Operations -->
+    <div class="category">
+      <div class="category__header">
+        <div class="category__icon">
+          <svg viewBox="0 0 24 24"><path d="M12 3v18M5 10l7-7 7 7M5 14l7 7 7-7"/></svg>
+        </div>
+        <span class="category__title">Operations</span>
+      </div>
+      <div class="grid grid--2 grid--3">
+        <a href="../../wasm/examples/soft_delete.html" class="card card--local">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.3.0</span>
+              <span class="card__badge card__badge--local">LOCAL</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </div>
+          <h2 class="card__title">SOFT_DELETE</h2>
+          <p class="card__desc">O(1) delete. Tombstones. Compaction.</p>
+          <div class="card__features">
+            <span class="card__feature">Tombstones</span>
+            <span class="card__feature">Compaction</span>
+          </div>
+        </a>
+
+        <a href="../../wasm/examples/batch_insert.html" class="card card--local">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.2.0</span>
+              <span class="card__badge card__badge--local">LOCAL</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          </div>
+          <h2 class="card__title">BATCH_INSERT</h2>
+          <p class="card__desc">Bulk insert with progress.</p>
+          <div class="card__features">
+            <span class="card__feature">Bulk Ops</span>
+            <span class="card__feature">Progress</span>
+          </div>
+        </a>
+
+        <a href="../../wasm/examples/batch_delete.html" class="card card--local">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.2.0</span>
+              <span class="card__badge card__badge--local">LOCAL</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>
+          </div>
+          <h2 class="card__title">BATCH_DELETE</h2>
+          <p class="card__desc">Bulk delete with progress.</p>
+          <div class="card__features">
+            <span class="card__feature">Bulk Delete</span>
+            <span class="card__feature">Progress</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <!-- Testing -->
+    <div class="category">
+      <div class="category__header">
+        <div class="category__icon">
+          <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+        </div>
+        <span class="category__title">Testing</span>
+      </div>
+      <div class="grid grid--2">
+        <a href="../../wasm/examples/stress-test.html" class="card card--local">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.4.0</span>
+              <span class="card__badge card__badge--local">LOCAL</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </div>
+          <h2 class="card__title">STRESS_TEST</h2>
+          <p class="card__desc">Continuous ops. Memory under load.</p>
+          <div class="card__features">
+            <span class="card__feature">Load Test</span>
+            <span class="card__feature">Memory</span>
+          </div>
+        </a>
+
+        <a href="../../wasm/examples/simd_test.html" class="card card--local">
+          <div class="card__header">
+            <div class="card__badges">
+              <span class="card__badge card__badge--version">v0.7.0</span>
+              <span class="card__badge card__badge--local">LOCAL</span>
+            </div>
+            <div class="card__arrow">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
+          </div>
+          <div class="card__icon">
+            <svg viewBox="0 0 24 24"><path d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+          </div>
+          <h2 class="card__title">SIMD_TEST</h2>
+          <p class="card__desc">Verify SIMD128 support. Correctness.</p>
+          <div class="card__features">
+            <span class="card__feature">Verification</span>
+            <span class="card__feature">Correctness</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
   </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer__brand">EDGEVEC</div>
+    <div class="footer__links">
+      <a href="https://github.com/matte1782/edgevec" class="footer__link">GitHub</a>
+      <a href="https://www.npmjs.com/package/edgevec" class="footer__link">npm</a>
+      <a href="https://crates.io/crates/edgevec" class="footer__link">crates.io</a>
+    </div>
+    <p class="footer__copy">Rust + WebAssembly // MIT License</p>
+  </footer>
+
+  <!-- Matrix Rain Script -->
+  <script>
+    (function() {
+      const canvas = document.getElementById('matrix');
+      const ctx = canvas.getContext('2d');
+
+      let w, h, cols, drops;
+      const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+      const fontSize = 14;
+
+      function resize() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        cols = Math.floor(w / fontSize);
+        drops = Array(cols).fill(1);
+      }
+
+      function draw() {
+        ctx.fillStyle = 'rgba(3, 3, 6, 0.05)';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.fillStyle = '#00ff88';
+        ctx.font = fontSize + 'px monospace';
+
+        for (let i = 0; i < drops.length; i++) {
+          const char = chars[Math.floor(Math.random() * chars.length)];
+          ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+
+          if (drops[i] * fontSize > h && Math.random() > 0.975) {
+            drops[i] = 0;
+          }
+          drops[i]++;
+        }
+      }
+
+      resize();
+      window.addEventListener('resize', resize);
+
+      // Respect reduced motion
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        setInterval(draw, 50);
+      }
+    })();
+  </script>
 </body>
 </html>
