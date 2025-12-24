@@ -407,10 +407,10 @@
     </div>
 
     <script type="module">
-        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, BinaryFlatVec, getSimdBackend, benchmarkHamming, benchmarkHammingComparison, benchmarkHammingBatch } from '../../pkg/edgevec.js';
+        import init, { EdgeVec, EdgeVecConfig, VectorType, MetricType, JsMetadataValue, JsIndexType, getSimdBackend, benchmarkHamming, benchmarkHammingComparison, benchmarkHammingBatch } from '../../pkg/edgevec.js';
 
         let db = null;           // HNSW index
-        let flatDb = null;       // Flat index
+        let flatDb = null;       // Flat index (now uses unified EdgeVec API)
         let isReady = false;
         let vectorCount = 0;
         let flatVectorCount = 0;
@@ -488,12 +488,16 @@
 
             // Generate vectors in JS (same path as real usage)
             const vectors = [];
-            const tempIndex = new BinaryFlatVec(selectedDims);
+            // Use unified EdgeVec API with Flat index type
+            const tempConfig = new EdgeVecConfig(selectedDims);
+            tempConfig.indexType = JsIndexType.Flat;
+            tempConfig.setMetricType(MetricType.Hamming);
+            const tempIndex = new EdgeVec(tempConfig);
             for (let i = 0; i < numVectors; i++) {
                 const v = new Uint8Array(selectedBytes);
                 crypto.getRandomValues(v);
                 vectors.push(v);
-                tempIndex.insert(v);
+                tempIndex.insertBinary(v);
 
                 // Yield periodically for large datasets
                 if (i > 0 && i % 5000 === 0) {
@@ -654,7 +658,11 @@
 
             try {
                 if (indexType === 'flat') {
-                    flatDb = new BinaryFlatVec(dimensions);
+                    // Use unified EdgeVec API with Flat index type
+                    const flatConfig = new EdgeVecConfig(dimensions);
+                    flatConfig.indexType = JsIndexType.Flat;
+                    flatConfig.setMetricType(MetricType.Hamming);
+                    flatDb = new EdgeVec(flatConfig);
                     flatVectorCount = 0;
 
                     const elapsed = (performance.now() - start).toFixed(2);
@@ -700,7 +708,7 @@
                 let id;
                 if (indexType === 'flat') {
                     if (!flatDb) return;
-                    id = flatDb.insert(vector);
+                    id = flatDb.insertBinary(vector);
                     flatVectorCount = 1;
                 } else {
                     if (!db) return;
@@ -717,7 +725,7 @@
                 const searchStart = performance.now();
                 let results;
                 if (indexType === 'flat') {
-                    results = flatDb.search(vector, 1);
+                    results = flatDb.searchBinary(vector, 1);
                 } else {
                     results = db.searchBinary(vector, 1);
                 }
@@ -767,7 +775,7 @@
 
                         let id;
                         if (indexType === 'flat') {
-                            id = flatDb.insert(vector);
+                            id = flatDb.insertBinary(vector);
                         } else {
                             id = db.insertBinary(vector);
 
@@ -855,7 +863,7 @@
 
                 const start = performance.now();
                 if (indexType === 'flat') {
-                    results = flatDb.search(query, k);
+                    results = flatDb.searchBinary(query, k);
                 } else {
                     results = db.searchBinary(query, k);
                 }
@@ -1032,12 +1040,16 @@
             log('\n[FLAT INDEX] Inserting...', 'green');
             setStatus('busy', 'FLAT: Inserting...');
 
-            const flatIndex = new BinaryFlatVec(dimensions);
+            // Use unified EdgeVec API with Flat index type
+            const flatConfig = new EdgeVecConfig(dimensions);
+            flatConfig.indexType = JsIndexType.Flat;
+            flatConfig.setMetricType(MetricType.Hamming);
+            const flatIndex = new EdgeVec(flatConfig);
             const flatInsertStart = performance.now();
             let flatInserted = 0;
 
             for (const v of vectors) {
-                flatIndex.insert(v);
+                flatIndex.insertBinary(v);
                 flatInserted++;
 
                 // Progress update at batch boundaries
@@ -1059,7 +1071,7 @@
             for (let i = 0; i < 50; i++) {
                 const query = vectors[Math.floor(Math.random() * vectors.length)];
                 const start = performance.now();
-                flatIndex.search(query, k);
+                flatIndex.searchBinary(query, k);
                 flatSearchTimes.push(performance.now() - start);
             }
             const flatAvgSearch = flatSearchTimes.reduce((a, b) => a + b, 0) / flatSearchTimes.length;
@@ -1123,6 +1135,11 @@
             const insertSpeedup = (hnswInsertTime / flatInsertTime).toFixed(1);
             const memoryRatio = (hnswMemory / flatMemory).toFixed(1);
 
+            // Get disk size (serialized size) for both indexes
+            const flatDiskSize = flatIndex.serializedSize();
+            const hnswDiskSize = hnswIndex.serializedSize();
+            const diskRatio = (hnswDiskSize / flatDiskSize).toFixed(1);
+
             log('\n' + '═'.repeat(60), 'green');
             log('📊 COMPARISON SUMMARY', 'green');
             log('═'.repeat(60), 'green');
@@ -1147,6 +1164,15 @@
             const rawDataSize = numVectors * bytesPerVector;
             log(`  (raw data: ${formatBytes(rawDataSize)}, Vec capacity overhead included)`, 'purple');
             log(`  → HNSW uses ${memoryRatio}x more memory (graph overhead)`, 'purple');
+            log(``, '');
+            log(`Disk Size (serialized):`, '');
+            log(`  • FLAT:  ${formatBytes(flatDiskSize).padStart(10)}`, 'green');
+            log(`  • HNSW:  ${formatBytes(hnswDiskSize).padStart(10)}`, 'cyan');
+            if (flatDiskSize < hnswDiskSize) {
+                log(`  → FLAT is ${diskRatio}x SMALLER on disk`, 'green');
+            } else {
+                log(`  → HNSW is ${(flatDiskSize / hnswDiskSize).toFixed(1)}x smaller on disk`, 'purple');
+            }
             log('═'.repeat(60), 'green');
 
             setStatus('active', 'Comparison complete');

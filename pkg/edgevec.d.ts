@@ -34,102 +34,6 @@ export class BatchInsertResult {
   readonly ids: BigUint64Array;
 }
 
-export class BinaryFlatVec {
-  free(): void;
-  [Symbol.dispose](): void;
-  /**
-   * Create a new binary flat index.
-   *
-   * # Arguments
-   *
-   * * `dimensions` - Number of bits per vector (must be divisible by 8).
-   *
-   * # Panics
-   *
-   * Panics if dimensions is not divisible by 8.
-   */
-  constructor(dimensions: number);
-  /**
-   * Create a new binary flat index with pre-allocated capacity.
-   *
-   * # Arguments
-   *
-   * * `dimensions` - Number of bits per vector (must be divisible by 8).
-   * * `capacity` - Number of vectors to pre-allocate space for.
-   */
-  static withCapacity(dimensions: number, capacity: number): BinaryFlatVec;
-  /**
-   * Insert a binary vector into the index.
-   *
-   * This is O(1) - just a memcpy to contiguous storage.
-   *
-   * # Arguments
-   *
-   * * `vector` - Binary vector as packed bytes (length = dimensions / 8).
-   *
-   * # Returns
-   *
-   * The assigned Vector ID (u32).
-   *
-   * # Panics
-   *
-   * Panics if vector length doesn't match expected bytes.
-   */
-  insert(vector: Uint8Array): number;
-  /**
-   * Search for the k nearest neighbors using Hamming distance.
-   *
-   * This is O(n) but SIMD-accelerated, so still fast for <100K vectors.
-   * Returns exact results (100% recall).
-   *
-   * # Arguments
-   *
-   * * `query` - Query vector as packed bytes.
-   * * `k` - Number of neighbors to return.
-   *
-   * # Returns
-   *
-   * Array of `{ id: u32, distance: f32 }` sorted by distance (ascending).
-   */
-  search(query: Uint8Array, k: number): any;
-  /**
-   * Get a vector by ID.
-   *
-   * # Returns
-   *
-   * The vector bytes as Uint8Array, or null if ID not found.
-   */
-  get(id: number): any;
-  /**
-   * Get approximate memory usage in bytes.
-   */
-  memoryUsage(): number;
-  /**
-   * Clear all vectors from the index.
-   */
-  clear(): void;
-  /**
-   * Shrink internal storage to fit current number of vectors.
-   */
-  shrinkToFit(): void;
-  /**
-   * Get the number of vectors in the index.
-   */
-  readonly len: number;
-  /**
-   * Check if the index is empty.
-   */
-  readonly isEmpty: boolean;
-  /**
-   * Get the dimensions (bits) per vector.
-   */
-  readonly dimensions: number;
-  /**
-   * Get the bytes per vector.
-   */
-  readonly bytesPerVector: number;
-}
-
 export class EdgeVec {
   free(): void;
   [Symbol.dispose](): void;
@@ -2088,23 +1992,10 @@ export interface InitOutput {
   readonly wasmbatchdeleteresult_uniqueCount: (a: number) => number;
   readonly wasmbatchdeleteresult_allValid: (a: number) => number;
   readonly wasmbatchdeleteresult_anyDeleted: (a: number) => number;
-  readonly __wbg_binaryflatvec_free: (a: number, b: number) => void;
-  readonly binaryflatvec_new: (a: number) => number;
-  readonly binaryflatvec_withCapacity: (a: number, b: number) => number;
-  readonly binaryflatvec_insert: (a: number, b: number) => number;
-  readonly binaryflatvec_search: (a: number, b: number, c: number) => number;
-  readonly binaryflatvec_get: (a: number, b: number) => number;
-  readonly binaryflatvec_len: (a: number) => number;
-  readonly binaryflatvec_isEmpty: (a: number) => number;
-  readonly binaryflatvec_dimensions: (a: number) => number;
-  readonly binaryflatvec_bytesPerVector: (a: number) => number;
-  readonly binaryflatvec_memoryUsage: (a: number) => number;
-  readonly binaryflatvec_clear: (a: number) => void;
-  readonly binaryflatvec_shrinkToFit: (a: number) => void;
   readonly edgevec_getVectorMetadata: (a: number, b: number) => number;
-  readonly __wasm_bindgen_func_elem_1853: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_1838: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_2382: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_1815: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_1800: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_2344: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;
