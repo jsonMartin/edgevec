@@ -1425,6 +1425,14 @@ export class EdgeVec {
    * ```
    */
   memoryUsage(): number;
+  /**
+   * Get estimated serialized size in bytes.
+   *
+   * Returns an estimate of the size when saved to disk.
+   * For Flat indexes, this is just the header + vector data.
+   * For HNSW indexes, includes graph overhead.
+   */
+  serializedSize(): number;
 }
 
 export class EdgeVecConfig {
@@ -2029,17 +2037,17 @@ export interface InitOutput {
   readonly edgevec_insertBatch: (a: number, b: number, c: number, d: number) => void;
   readonly edgevec_insertBatchWithProgress: (a: number, b: number, c: number, d: number) => void;
   readonly edgevec_search: (a: number, b: number, c: number, d: number) => void;
-  readonly edgevec_save_stream: (a: number, b: number) => number;
+  readonly edgevec_save_stream: (a: number, b: number, c: number) => void;
   readonly edgevec_save: (a: number, b: number, c: number) => number;
   readonly edgevec_load: (a: number, b: number) => number;
   readonly edgevec_softDelete: (a: number, b: number, c: number) => void;
   readonly edgevec_isDeleted: (a: number, b: number, c: number) => void;
-  readonly edgevec_deletedCount: (a: number) => number;
-  readonly edgevec_liveCount: (a: number) => number;
-  readonly edgevec_tombstoneRatio: (a: number) => number;
-  readonly edgevec_needsCompaction: (a: number) => number;
-  readonly edgevec_compactionThreshold: (a: number) => number;
-  readonly edgevec_setCompactionThreshold: (a: number, b: number) => void;
+  readonly edgevec_deletedCount: (a: number, b: number) => void;
+  readonly edgevec_liveCount: (a: number, b: number) => void;
+  readonly edgevec_tombstoneRatio: (a: number, b: number) => void;
+  readonly edgevec_needsCompaction: (a: number, b: number) => void;
+  readonly edgevec_compactionThreshold: (a: number, b: number) => void;
+  readonly edgevec_setCompactionThreshold: (a: number, b: number, c: number) => void;
   readonly edgevec_compactionWarning: (a: number, b: number) => void;
   readonly edgevec_compact: (a: number, b: number) => void;
   readonly edgevec_softDeleteBatch: (a: number, b: number, c: number) => void;
@@ -2067,6 +2075,7 @@ export interface InitOutput {
   readonly edgevec_getMemoryRecommendation: (a: number, b: number) => void;
   readonly edgevec_getMemoryConfig: (a: number, b: number) => void;
   readonly edgevec_memoryUsage: (a: number) => number;
+  readonly edgevec_serializedSize: (a: number) => number;
   readonly __wbg_wasmcompactionresult_free: (a: number, b: number) => void;
   readonly __wbg_get_wasmcompactionresult_tombstones_removed: (a: number) => number;
   readonly __wbg_get_wasmcompactionresult_new_size: (a: number) => number;
@@ -2093,9 +2102,9 @@ export interface InitOutput {
   readonly binaryflatvec_clear: (a: number) => void;
   readonly binaryflatvec_shrinkToFit: (a: number) => void;
   readonly edgevec_getVectorMetadata: (a: number, b: number) => number;
-  readonly __wasm_bindgen_func_elem_1898: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_1883: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_2439: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_1853: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_1838: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_2382: (a: number, b: number, c: number, d: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;

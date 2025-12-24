@@ -21,9 +21,10 @@
 
 use crate::hnsw::VectorId;
 use crate::metric::{Hamming, Metric};
+use serde::{Deserialize, Serialize};
 
 /// Search result from flat index.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct FlatSearchResult {
     /// Vector ID.
     pub id: VectorId,
@@ -35,7 +36,7 @@ pub struct FlatSearchResult {
 ///
 /// Stores vectors in a contiguous array for cache-friendly linear scan.
 /// Insert is O(1), search is O(n) with SIMD-accelerated Hamming distance.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BinaryFlatIndex {
     /// Contiguous storage for all vectors.
     vectors: Vec<u8>,
@@ -245,6 +246,21 @@ impl BinaryFlatIndex {
     #[must_use]
     pub fn memory_usage(&self) -> usize {
         std::mem::size_of::<Self>() + self.vectors.capacity()
+    }
+
+    /// Get the length of the internal vectors buffer.
+    #[inline]
+    #[must_use]
+    pub fn vectors_len(&self) -> usize {
+        self.vectors.len()
+    }
+
+    /// Estimate the serialized size in bytes.
+    ///
+    /// Format: header (8 bytes: dimensions u32 + count u32) + vector data.
+    #[must_use]
+    pub fn serialized_size(&self) -> usize {
+        8 + self.vectors.len()
     }
 
     /// Clear all vectors from the index.

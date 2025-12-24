@@ -297,12 +297,12 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-function __wasm_bindgen_func_elem_1898(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_1898(arg0, arg1, addHeapObject(arg2));
+function __wasm_bindgen_func_elem_1853(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_1853(arg0, arg1, addHeapObject(arg2));
 }
 
-function __wasm_bindgen_func_elem_2439(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_2439(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
+function __wasm_bindgen_func_elem_2382(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_2382(arg0, arg1, addHeapObject(arg2), addHeapObject(arg3));
 }
 
 const BatchInsertConfigFinalization = (typeof FinalizationRegistry === 'undefined')
@@ -652,6 +652,10 @@ if (Symbol.dispose) BinaryFlatVec.prototype[Symbol.dispose] = BinaryFlatVec.prot
  *
  * This struct is serializable for persistence via `postcard`.
  * The `liveness` field is skipped as it is runtime state.
+ *
+ * Supports both Flat and HNSW index types via the `indexType` configuration.
+ * Use `IndexType.Flat` for insert-heavy workloads with exact search,
+ * or `IndexType.Hnsw` (default) for large-scale approximate search.
  *
  * # Safety Note
  *
@@ -1223,8 +1227,19 @@ export class EdgeVec {
      * @returns {PersistenceIterator}
      */
     save_stream(chunk_size) {
-        const ret = wasm.edgevec_save_stream(this.__wbg_ptr, isLikeNone(chunk_size) ? 0x100000001 : (chunk_size) >>> 0);
-        return PersistenceIterator.__wrap(ret);
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_save_stream(retptr, this.__wbg_ptr, isLikeNone(chunk_size) ? 0x100000001 : (chunk_size) >>> 0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return PersistenceIterator.__wrap(r0);
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Saves the database to IndexedDB.
@@ -1359,8 +1374,19 @@ export class EdgeVec {
      * @returns {number}
      */
     deletedCount() {
-        const ret = wasm.edgevec_deletedCount(this.__wbg_ptr);
-        return ret >>> 0;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_deletedCount(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 >>> 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Get the count of live (non-deleted) vectors.
@@ -1371,8 +1397,19 @@ export class EdgeVec {
      * @returns {number}
      */
     liveCount() {
-        const ret = wasm.edgevec_liveCount(this.__wbg_ptr);
-        return ret >>> 0;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_liveCount(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 >>> 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Get the ratio of deleted to total vectors.
@@ -1384,8 +1421,19 @@ export class EdgeVec {
      * @returns {number}
      */
     tombstoneRatio() {
-        const ret = wasm.edgevec_tombstoneRatio(this.__wbg_ptr);
-        return ret;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_tombstoneRatio(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getFloat64(retptr + 8 * 0, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            if (r3) {
+                throw takeObject(r2);
+            }
+            return r0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Check if compaction is recommended.
@@ -1400,8 +1448,19 @@ export class EdgeVec {
      * @returns {boolean}
      */
     needsCompaction() {
-        const ret = wasm.edgevec_needsCompaction(this.__wbg_ptr);
-        return ret !== 0;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_needsCompaction(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            if (r2) {
+                throw takeObject(r1);
+            }
+            return r0 !== 0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Get the current compaction threshold.
@@ -1413,8 +1472,19 @@ export class EdgeVec {
      * @returns {number}
      */
     compactionThreshold() {
-        const ret = wasm.edgevec_compactionThreshold(this.__wbg_ptr);
-        return ret;
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_compactionThreshold(retptr, this.__wbg_ptr);
+            var r0 = getDataViewMemory0().getFloat64(retptr + 8 * 0, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            if (r3) {
+                throw takeObject(r2);
+            }
+            return r0;
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Set the compaction threshold.
@@ -1425,7 +1495,17 @@ export class EdgeVec {
      * @param {number} ratio
      */
     setCompactionThreshold(ratio) {
-        wasm.edgevec_setCompactionThreshold(this.__wbg_ptr, ratio);
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            wasm.edgevec_setCompactionThreshold(retptr, this.__wbg_ptr, ratio);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * Get a warning message if compaction is recommended.
@@ -1452,6 +1532,11 @@ export class EdgeVec {
             wasm.edgevec_compactionWarning(retptr, this.__wbg_ptr);
             var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
             var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            var r2 = getDataViewMemory0().getInt32(retptr + 4 * 2, true);
+            var r3 = getDataViewMemory0().getInt32(retptr + 4 * 3, true);
+            if (r3) {
+                throw takeObject(r2);
+            }
             let v1;
             if (r0 !== 0) {
                 v1 = getStringFromWasm0(r0, r1).slice();
@@ -2589,6 +2674,18 @@ export class EdgeVec {
      */
     memoryUsage() {
         const ret = wasm.edgevec_memoryUsage(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * Get estimated serialized size in bytes.
+     *
+     * Returns an estimate of the size when saved to disk.
+     * For Flat indexes, this is just the header + vector data.
+     * For HNSW indexes, includes graph overhead.
+     * @returns {number}
+     */
+    serializedSize() {
+        const ret = wasm.edgevec_serializedSize(this.__wbg_ptr);
         return ret >>> 0;
     }
 }
@@ -3914,7 +4011,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wasm_bindgen_func_elem_2439(a, state0.b, arg0, arg1);
+                    return __wasm_bindgen_func_elem_2382(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -4065,6 +4162,11 @@ function __wbg_get_imports() {
         const ret = BigInt.asUintN(64, arg0);
         return addHeapObject(ret);
     };
+    imports.wbg.__wbindgen_cast_902a70736b89c8fd = function(arg0, arg1) {
+        // Cast intrinsic for `Closure(Closure { dtor_idx: 119, function: Function { arguments: [Externref], shim_idx: 120, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1838, __wasm_bindgen_func_elem_1853);
+        return addHeapObject(ret);
+    };
     imports.wbg.__wbindgen_cast_cb9088102bce6b30 = function(arg0, arg1) {
         // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
         const ret = getArrayU8FromWasm0(arg0, arg1);
@@ -4073,11 +4175,6 @@ function __wbg_get_imports() {
     imports.wbg.__wbindgen_cast_d6cd19b81560fd6e = function(arg0) {
         // Cast intrinsic for `F64 -> Externref`.
         const ret = arg0;
-        return addHeapObject(ret);
-    };
-    imports.wbg.__wbindgen_cast_f1c9170db27db6a8 = function(arg0, arg1) {
-        // Cast intrinsic for `Closure(Closure { dtor_idx: 125, function: Function { arguments: [Externref], shim_idx: 126, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-        const ret = makeMutClosure(arg0, arg1, wasm.__wasm_bindgen_func_elem_1883, __wasm_bindgen_func_elem_1898);
         return addHeapObject(ret);
     };
     imports.wbg.__wbindgen_object_clone_ref = function(arg0) {
