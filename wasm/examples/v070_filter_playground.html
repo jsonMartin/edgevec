@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="EdgeVec Filter Playground v0.7.0 - Interactive metadata filter builder with live sandbox and code examples">
+  <title>EdgeVec v0.7.0 // FILTER_PLAYGROUND</title>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+
+  <!-- Reuse v0.6.0 CSS Files -->
+  <link rel="stylesheet" href="css/cyberpunk.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/mobile.css">
+
+  <!-- Filter Playground Specific Styles -->
+  <link rel="stylesheet" href="css/filter-playground.css">
+</head>
+<body>
+  <!-- Canvas Backgrounds for Effects -->
+  <canvas id="particleCanvas" class="effect-canvas"></canvas>
+  <canvas id="matrixCanvas" class="effect-canvas effect-canvas--matrix"></canvas>
+
+  <!-- Noise Overlay -->
+  <div class="noise-overlay" aria-hidden="true"></div>
+
+  <!-- Scanline Overlay -->
+  <div class="scanline-overlay"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="container header__inner">
+      <div class="header__logo">
+        <span class="glitch neon-text" data-text="EDGEVEC">EDGEVEC</span>
+        <span class="header__version">v0.7.0</span>
+      </div>
+
+      <nav class="header__nav" role="navigation" aria-label="Main navigation">
+        <a href="#builder" class="header__link">BUILDER</a>
+        <a href="#examples" class="header__link">EXAMPLES</a>
+        <a href="#sandbox" class="header__link">SANDBOX</a>
+        <a href="#snippets" class="header__link">CODE</a>
+      </nav>
+
+      <div class="header__actions">
+        <button
+          class="theme-toggle"
+          id="themeToggle"
+          aria-label="Toggle dark/light mode"
+        >
+          <svg class="theme-toggle__icon theme-toggle__icon--dark" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+          </svg>
+          <svg class="theme-toggle__icon theme-toggle__icon--light" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+
+        <a href="v060_cyberpunk_demo.html" class="btn btn--small">
+          MAIN_DEMO
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <h1 class="hero__title glitch neon-pulse" data-text="FILTER_PLAYGROUND">
+        FILTER_PLAYGROUND
+      </h1>
+      <p class="hero__subtitle">
+        SQL-like Metadata Queries // <span class="neon-text--green">VISUAL BUILDER</span> // Copy-paste Examples
+      </p>
+
+      <!-- Status Bar -->
+      <div class="status-bar" role="status" aria-live="polite">
+        <div class="status-bar__item">
+          <span class="status-bar__label">WASM</span>
+          <span class="status-bar__value status-bar__value--loading" id="wasmStatus">LOADING...</span>
+        </div>
+        <div class="status-bar__item">
+          <span class="status-bar__label">VECTORS</span>
+          <span class="status-bar__value" id="vectorCount">0</span>
+        </div>
+        <div class="status-bar__item">
+          <span class="status-bar__label">QUERY_TIME</span>
+          <span class="status-bar__value" id="queryTime">--</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Content -->
+  <main class="main">
+    <div class="container">
+      <!-- Filter Builder Section -->
+      <section class="section" id="builder">
+        <h2 class="section__title glitch-hover">FILTER_BUILDER</h2>
+        <div class="panel">
+          <div class="builder-content">
+            <!-- Build Area -->
+            <div class="builder-area">
+              <div class="panel__header">
+                <span class="panel__icon">BUILD_FILTER</span>
+              </div>
+              <div id="clauseContainer" class="clause-container">
+                <!-- Clauses will be added dynamically -->
+              </div>
+              <div class="builder-actions">
+                <button id="addClauseBtn" class="btn btn--primary">+ ADD CLAUSE</button>
+                <button id="addAndBtn" class="btn btn--secondary">+ AND</button>
+                <button id="addOrBtn" class="btn btn--secondary">+ OR</button>
+                <button id="clearBuilderBtn" class="btn btn--ghost">CLEAR</button>
+              </div>
+            </div>
+
+            <!-- Preview Panel -->
+            <div class="preview-panel">
+              <div class="preview-label">LIVE_PREVIEW</div>
+              <div id="filterPreview" class="preview-expression">
+                <!-- Filter expression appears here -->
+              </div>
+              <div id="filterStatus" class="preview-status valid">
+                <span>READY</span>
+              </div>
+              <div class="preview-actions">
+                <button id="copyFilterBtn" class="btn btn--primary btn--sm">COPY</button>
+                <button id="tryFilterBtn" class="btn btn--secondary btn--sm">TRY IN SANDBOX</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Syntax Reference -->
+          <div class="syntax-reference">
+            <div class="syntax-title">OPERATOR_REFERENCE</div>
+            <div class="syntax-grid">
+              <div class="syntax-item">
+                <div class="syntax-op">=, !=</div>
+                <div class="syntax-desc">Equality comparison</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">&gt;, &lt;, &gt;=, &lt;=</div>
+                <div class="syntax-desc">Numeric comparison</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">AND, OR</div>
+                <div class="syntax-desc">Logical operators</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">NOT</div>
+                <div class="syntax-desc">Negation</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">IN [...]</div>
+                <div class="syntax-desc">Array membership</div>
+              </div>
+              <div class="syntax-item">
+                <div class="syntax-op">ANY [...]</div>
+                <div class="syntax-desc">Array contains any</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Example Gallery Section -->
+      <section class="section" id="examples">
+        <h2 class="section__title glitch-hover">EXAMPLE_GALLERY</h2>
+        <div class="panel">
+          <div id="exampleGrid" class="example-grid">
+            <!-- Examples will be populated by JavaScript -->
+          </div>
+        </div>
+      </section>
+
+      <!-- Live Sandbox Section -->
+      <section class="section" id="sandbox">
+        <h2 class="section__title glitch-hover">LIVE_SANDBOX</h2>
+        <div class="panel">
+          <div class="sandbox-content">
+            <div class="sandbox-header">
+              <div class="sandbox-stats">
+                <span><span class="stat-label">Vectors:</span> <span class="stat-value" id="sandboxVectorCount">0</span></span>
+                <span><span class="stat-label">Filter:</span> <span class="stat-value" id="activeFilter">--</span></span>
+                <span><span class="stat-label">Results:</span> <span class="stat-value" id="resultCount">--</span></span>
+                <span><span class="stat-label">Time:</span> <span class="stat-value" id="searchTime">--</span></span>
+              </div>
+              <div class="sandbox-actions">
+                <button id="loadDataBtn" class="btn btn--secondary">LOAD_DATA</button>
+                <button id="clearSandboxBtn" class="btn btn--ghost">CLEAR</button>
+              </div>
+            </div>
+
+            <div class="sandbox-input">
+              <input type="text" id="filterInput" class="filter-input" placeholder='Enter filter: category = "electronics" AND price < 500'>
+              <button id="searchBtn" class="btn btn--primary">SEARCH</button>
+            </div>
+
+            <div id="sandboxStatus" class="sandbox-status">
+              Enter a filter expression and click SEARCH to see results
+            </div>
+
+            <div id="resultsContainer" class="sandbox-results" style="display: none;">
+              <div class="result-header">
+                <span>RANK</span>
+                <span>ID</span>
+                <span>DISTANCE</span>
+                <span>METADATA</span>
+              </div>
+              <div id="resultsList">
+                <!-- Results will be populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Code Snippets Section -->
+      <section class="section" id="snippets">
+        <h2 class="section__title glitch-hover">CODE_SNIPPETS</h2>
+        <div class="panel">
+          <div class="snippets-content">
+            <div class="snippet-tabs">
+              <button class="snippet-tab active" data-tab="javascript">JavaScript</button>
+              <button class="snippet-tab" data-tab="typescript">TypeScript</button>
+              <button class="snippet-tab" data-tab="react">React</button>
+            </div>
+
+            <div class="snippet-content">
+              <!-- JavaScript -->
+              <div class="snippet-panel active" data-panel="javascript">
+                <pre class="snippet-code"><code><span class="comment">// Initialize EdgeVec</span>
+<span class="keyword">import</span> init, { EdgeVec, EdgeVecConfig } <span class="keyword">from</span> <span class="string">'edgevec'</span>;
+
+<span class="keyword">await</span> <span class="function">init</span>();
+
+<span class="keyword">const</span> config = <span class="keyword">new</span> <span class="function">EdgeVecConfig</span>(<span class="number">768</span>);
+<span class="keyword">const</span> db = <span class="keyword">new</span> <span class="function">EdgeVec</span>(config);
+
+<span class="comment">// Insert vectors with metadata</span>
+<span class="keyword">const</span> vector = <span class="keyword">new</span> <span class="function">Float32Array</span>(<span class="number">768</span>).<span class="function">fill</span>(<span class="number">0.1</span>);
+db.<span class="function">insertWithMetadata</span>(vector, {
+    category: <span class="string">"electronics"</span>,
+    price: <span class="number">299.99</span>,
+    inStock: <span class="keyword">true</span>
+});
+
+<span class="comment">// Search with filter</span>
+<span class="keyword">const</span> query = <span class="keyword">new</span> <span class="function">Float32Array</span>(<span class="number">768</span>).<span class="function">fill</span>(<span class="number">0.1</span>);
+<span class="keyword">const</span> results = db.<span class="function">searchFiltered</span>(
+    query,
+    <span class="string">'category = "electronics" AND price < 500'</span>,
+    <span class="number">10</span>
+);
+
+<span class="function">console</span>.<span class="function">log</span>(results); <span class="comment">// [{id, distance, metadata}, ...]</span></code></pre>
+                <button class="btn btn--sm btn--secondary snippet-copy" data-copy="javascript">COPY</button>
+              </div>
+
+              <!-- TypeScript -->
+              <div class="snippet-panel" data-panel="typescript">
+                <pre class="snippet-code"><code><span class="keyword">import</span> init, { EdgeVec, EdgeVecConfig } <span class="keyword">from</span> <span class="string">'edgevec'</span>;
+
+<span class="keyword">interface</span> ProductMetadata {
+    category: <span class="keyword">string</span>;
+    price: <span class="keyword">number</span>;
+    inStock: <span class="keyword">boolean</span>;
+}
+
+<span class="keyword">async function</span> <span class="function">searchProducts</span>(): <span class="keyword">Promise</span>&lt;<span class="keyword">void</span>&gt; {
+    <span class="keyword">await</span> <span class="function">init</span>();
+
+    <span class="keyword">const</span> config = <span class="keyword">new</span> <span class="function">EdgeVecConfig</span>(<span class="number">768</span>);
+    <span class="keyword">const</span> db: EdgeVec = <span class="keyword">new</span> <span class="function">EdgeVec</span>(config);
+
+    <span class="comment">// Insert with typed metadata</span>
+    <span class="keyword">const</span> metadata: ProductMetadata = {
+        category: <span class="string">"electronics"</span>,
+        price: <span class="number">299.99</span>,
+        inStock: <span class="keyword">true</span>
+    };
+
+    <span class="keyword">const</span> vector = <span class="keyword">new</span> <span class="function">Float32Array</span>(<span class="number">768</span>).<span class="function">fill</span>(<span class="number">0.1</span>);
+    db.<span class="function">insertWithMetadata</span>(vector, metadata);
+
+    <span class="comment">// Filtered search</span>
+    <span class="keyword">const</span> filter = <span class="string">'category = "electronics" AND price < 500'</span>;
+    <span class="keyword">const</span> results = db.<span class="function">searchFiltered</span>(vector, filter, <span class="number">10</span>);
+}</code></pre>
+                <button class="btn btn--sm btn--secondary snippet-copy" data-copy="typescript">COPY</button>
+              </div>
+
+              <!-- React -->
+              <div class="snippet-panel" data-panel="react">
+                <pre class="snippet-code"><code><span class="keyword">import</span> { useState, useEffect } <span class="keyword">from</span> <span class="string">'react'</span>;
+<span class="keyword">import</span> init, { EdgeVec, EdgeVecConfig } <span class="keyword">from</span> <span class="string">'edgevec'</span>;
+
+<span class="keyword">function</span> <span class="function">useEdgeVec</span>(dimensions: <span class="keyword">number</span>) {
+    <span class="keyword">const</span> [db, setDb] = <span class="function">useState</span>&lt;EdgeVec | <span class="keyword">null</span>&gt;(<span class="keyword">null</span>);
+    <span class="keyword">const</span> [loading, setLoading] = <span class="function">useState</span>(<span class="keyword">true</span>);
+
+    <span class="function">useEffect</span>(() =&gt; {
+        <span class="keyword">async function</span> <span class="function">initialize</span>() {
+            <span class="keyword">await</span> <span class="function">init</span>();
+            <span class="keyword">const</span> config = <span class="keyword">new</span> <span class="function">EdgeVecConfig</span>(dimensions);
+            <span class="function">setDb</span>(<span class="keyword">new</span> <span class="function">EdgeVec</span>(config));
+            <span class="function">setLoading</span>(<span class="keyword">false</span>);
+        }
+        <span class="function">initialize</span>();
+    }, [dimensions]);
+
+    <span class="keyword">return</span> { db, loading };
+}
+
+<span class="keyword">function</span> <span class="function">ProductSearch</span>() {
+    <span class="keyword">const</span> { db, loading } = <span class="function">useEdgeVec</span>(<span class="number">768</span>);
+    <span class="keyword">const</span> [filter, setFilter] = <span class="function">useState</span>(<span class="string">''</span>);
+    <span class="keyword">const</span> [results, setResults] = <span class="function">useState</span>([]);
+
+    <span class="keyword">const</span> <span class="function">handleSearch</span> = () =&gt; {
+        <span class="keyword">if</span> (!db) <span class="keyword">return</span>;
+        <span class="keyword">const</span> query = <span class="keyword">new</span> <span class="function">Float32Array</span>(<span class="number">768</span>).<span class="function">fill</span>(<span class="number">0.1</span>);
+        <span class="keyword">const</span> res = db.<span class="function">searchFiltered</span>(query, filter, <span class="number">10</span>);
+        <span class="function">setResults</span>(res);
+    };
+
+    <span class="keyword">return</span> (
+        &lt;<span class="keyword">div</span>&gt;
+            &lt;<span class="keyword">input</span> value={filter} onChange={e =&gt; <span class="function">setFilter</span>(e.target.value)} /&gt;
+            &lt;<span class="keyword">button</span> onClick={<span class="function">handleSearch</span>}&gt;Search&lt;/<span class="keyword">button</span>&gt;
+        &lt;/<span class="keyword">div</span>&gt;
+    );
+}</code></pre>
+                <button class="btn btn--sm btn--secondary snippet-copy" data-copy="react">COPY</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /.container -->
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p><strong>EdgeVec v0.7.0</strong> // Filter Playground</p>
+      <p>Built with Rust + WebAssembly // <a href="https://github.com/matte1782/edgevec" class="footer__link">GitHub</a></p>
+    </div>
+  </footer>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- JavaScript -->
+  <script type="module">
+    // ==========================================================================
+    // IMPORTS
+    // ==========================================================================
+    import { ParticleSystem, MatrixRain, EffectManager } from './js/effects.js';
+
+    // ==========================================================================
+    // STATE
+    // ==========================================================================
+    const state = {
+      edgevec: null,
+      db: null,
+      wasmLoaded: false,
+      clauses: [],
+      sampleData: []
+    };
+
+    // ==========================================================================
+    // EXAMPLES DATA
+    // ==========================================================================
+    const examples = [
+      {
+        id: 'ecommerce-1',
+        title: 'Product Filter',
+        category: 'E-Commerce',
+        icon: '&#x1F6D2;',
+        filter: 'category = "gpu" AND price < 500',
+        description: 'Find GPUs under $500'
+      },
+      {
+        id: 'ecommerce-2',
+        title: 'Brand + Stock',
+        category: 'E-Commerce',
+        icon: '&#x1F4E6;',
+        filter: '(brand = "nvidia" OR brand = "amd") AND inStock = true',
+        description: 'Available products from top brands'
+      },
+      {
+        id: 'ecommerce-3',
+        title: 'Rating Filter',
+        category: 'E-Commerce',
+        icon: '&#x2B50;',
+        filter: 'rating >= 4.5 AND reviews > 100',
+        description: 'Highly rated products'
+      },
+      {
+        id: 'docs-1',
+        title: 'Author Search',
+        category: 'Documents',
+        icon: '&#x1F4C4;',
+        filter: 'author = "John Doe" AND year >= 2023',
+        description: 'Recent documents by author'
+      },
+      {
+        id: 'docs-2',
+        title: 'Tag-based Search',
+        category: 'Documents',
+        icon: '&#x1F3F7;',
+        filter: 'tags ANY ["tutorial", "guide"] AND language = "en"',
+        description: 'English tutorials and guides'
+      },
+      {
+        id: 'docs-3',
+        title: 'Date Range',
+        category: 'Documents',
+        icon: '&#x1F4C5;',
+        filter: 'status = "published" AND year >= 2024',
+        description: 'Recently published content'
+      },
+      {
+        id: 'content-1',
+        title: 'Video Filter',
+        category: 'Content',
+        icon: '&#x1F3AC;',
+        filter: 'type = "video" AND duration < 600 AND views >= 1000',
+        description: 'Popular short videos'
+      },
+      {
+        id: 'content-2',
+        title: 'Category + Rating',
+        category: 'Content',
+        icon: '&#x1F4FA;',
+        filter: 'category IN ["tech", "science"] AND rating >= 4.0',
+        description: 'Quality tech/science content'
+      },
+      {
+        id: 'advanced-1',
+        title: 'Nested Groups',
+        category: 'Advanced',
+        icon: '&#x1F9E9;',
+        filter: '(category = "electronics" AND price < 100) OR (category = "books" AND price < 20)',
+        description: 'Complex grouped conditions'
+      },
+      {
+        id: 'advanced-2',
+        title: 'NOT Operator',
+        category: 'Advanced',
+        icon: '&#x26A0;',
+        filter: 'status != "deleted" AND NOT (archived = true)',
+        description: 'Exclude deleted/archived items'
+      }
+    ];
+
+    // Sample data for sandbox
+    const sampleProducts = [
+      { name: 'RTX 4070', category: 'gpu', brand: 'nvidia', price: 450, rating: 4.7, inStock: true },
+      { name: 'RTX 4080', category: 'gpu', brand: 'nvidia', price: 850, rating: 4.8, inStock: true },
+      { name: 'RX 7800', category: 'gpu', brand: 'amd', price: 420, rating: 4.5, inStock: true },
+      { name: 'RX 7900', category: 'gpu', brand: 'amd', price: 750, rating: 4.6, inStock: false },
+      { name: 'Arc A770', category: 'gpu', brand: 'intel', price: 350, rating: 4.2, inStock: true },
+      { name: 'Core i9', category: 'cpu', brand: 'intel', price: 550, rating: 4.9, inStock: true },
+      { name: 'Ryzen 9', category: 'cpu', brand: 'amd', price: 480, rating: 4.8, inStock: true },
+      { name: 'DDR5 32GB', category: 'memory', brand: 'corsair', price: 180, rating: 4.6, inStock: true },
+      { name: 'NVMe 2TB', category: 'storage', brand: 'samsung', price: 220, rating: 4.7, inStock: true },
+      { name: 'PSU 850W', category: 'power', brand: 'seasonic', price: 160, rating: 4.8, inStock: false }
+    ];
+
+    // ==========================================================================
+    // DOM ELEMENTS
+    // ==========================================================================
+    const elements = {
+      wasmStatus: document.getElementById('wasmStatus'),
+      vectorCount: document.getElementById('vectorCount'),
+      queryTime: document.getElementById('queryTime'),
+      clauseContainer: document.getElementById('clauseContainer'),
+      filterPreview: document.getElementById('filterPreview'),
+      filterStatus: document.getElementById('filterStatus'),
+      exampleGrid: document.getElementById('exampleGrid'),
+      filterInput: document.getElementById('filterInput'),
+      sandboxStatus: document.getElementById('sandboxStatus'),
+      resultsContainer: document.getElementById('resultsContainer'),
+      resultsList: document.getElementById('resultsList'),
+      sandboxVectorCount: document.getElementById('sandboxVectorCount'),
+      activeFilter: document.getElementById('activeFilter'),
+      resultCount: document.getElementById('resultCount'),
+      searchTime: document.getElementById('searchTime'),
+      toastContainer: document.getElementById('toastContainer')
+    };
+
+    // ==========================================================================
+    // UTILITY FUNCTIONS
+    // ==========================================================================
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `<span>${message}</span>`;
+      elements.toastContainer.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard!', 'success');
+      }).catch(() => {
+        showToast('Failed to copy', 'error');
+      });
+    }
+
+    // ==========================================================================
+    // FILTER BUILDER
+    // ==========================================================================
+    function createClauseRow(connector = null) {
+      const id = Date.now();
+      const row = document.createElement('div');
+      row.className = 'clause-row';
+      row.dataset.id = id;
+
+      if (connector) {
+        row.innerHTML = `<span class="clause-connector">${connector}</span>`;
+      }
+
+      row.innerHTML += `
+        <select class="clause-field">
+          <option value="">Field...</option>
+          <option value="category">category</option>
+          <option value="brand">brand</option>
+          <option value="price">price</option>
+          <option value="rating">rating</option>
+          <option value="inStock">inStock</option>
+          <option value="tags">tags</option>
+          <option value="status">status</option>
+          <option value="year">year</option>
+        </select>
+        <select class="clause-operator">
+          <option value="=">=</option>
+          <option value="!=">!=</option>
+          <option value=">">&gt;</option>
+          <option value="<">&lt;</option>
+          <option value=">=">&gt;=</option>
+          <option value="<=">&lt;=</option>
+          <option value="IN">IN</option>
+          <option value="ANY">ANY</option>
+        </select>
+        <input type="text" class="clause-value" placeholder="Value...">
+        <button class="clause-remove" title="Remove clause">&#x2715;</button>
+      `;
+
+      // Event listeners
+      row.querySelector('.clause-remove').addEventListener('click', () => {
+        row.remove();
+        updateFilterPreview();
+      });
+
+      row.querySelectorAll('select, input').forEach(el => {
+        el.addEventListener('change', updateFilterPreview);
+        el.addEventListener('input', updateFilterPreview);
+      });
+
+      return row;
+    }
+
+    function updateFilterPreview() {
+      const rows = document.querySelectorAll('.clause-row');
+      let filter = '';
+
+      rows.forEach((row, index) => {
+        const field = row.querySelector('.clause-field')?.value;
+        const operator = row.querySelector('.clause-operator')?.value;
+        const value = row.querySelector('.clause-value')?.value;
+        const connector = row.querySelector('.clause-connector')?.textContent;
+
+        if (field && operator && value) {
+          if (index > 0 && connector) {
+            filter += ` ${connector} `;
+          }
+
+          // Format value based on type
+          let formattedValue = value;
+          if (operator === 'IN' || operator === 'ANY') {
+            formattedValue = `[${value}]`;
+          } else if (isNaN(value) && value !== 'true' && value !== 'false') {
+            formattedValue = `"${value}"`;
+          }
+
+          filter += `${field} ${operator} ${formattedValue}`;
+        }
+      });
+
+      elements.filterPreview.textContent = filter || 'Build your filter using the controls above';
+
+      if (filter) {
+        elements.filterStatus.className = 'preview-status valid';
+        elements.filterStatus.innerHTML = '<span>&#x2713; VALID</span>';
+      } else {
+        elements.filterStatus.className = 'preview-status';
+        elements.filterStatus.innerHTML = '<span>READY</span>';
+      }
+    }
+
+    // ==========================================================================
+    // EXAMPLES
+    // ==========================================================================
+    function renderExamples() {
+      elements.exampleGrid.innerHTML = examples.map(ex => `
+        <div class="example-card" data-id="${ex.id}">
+          <div class="example-header">
+            <span class="example-icon">${ex.icon}</span>
+            <span class="example-title">${ex.title}</span>
+            <span class="example-category">${ex.category}</span>
+          </div>
+          <div class="example-filter">${ex.filter}</div>
+          <p class="example-description">${ex.description}</p>
+          <div class="example-actions">
+            <button class="btn btn--primary btn--sm try-btn" data-filter="${ex.filter}">TRY IT</button>
+            <button class="btn btn--secondary btn--sm copy-btn" data-filter="${ex.filter}">COPY</button>
+          </div>
+        </div>
+      `).join('');
+
+      // Attach event listeners
+      elements.exampleGrid.querySelectorAll('.try-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          elements.filterInput.value = btn.dataset.filter;
+          document.getElementById('sandbox').scrollIntoView({ behavior: 'smooth' });
+          showToast('Filter loaded in sandbox', 'info');
+        });
+      });
+
+      elements.exampleGrid.querySelectorAll('.copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          copyToClipboard(btn.dataset.filter);
+        });
+      });
+    }
+
+    // ==========================================================================
+    // SANDBOX
+    // ==========================================================================
+    async function loadSampleData() {
+      if (!state.wasmLoaded) {
+        showToast('WASM not loaded yet', 'error');
+        return;
+      }
+
+      try {
+        // Insert sample products
+        for (let i = 0; i < sampleProducts.length; i++) {
+          const product = sampleProducts[i];
+          const vector = new Float32Array(128);
+          // Create pseudo-embedding based on product properties
+          for (let j = 0; j < 128; j++) {
+            vector[j] = Math.sin(i * 0.1 + j * 0.01) * 0.5 + Math.random() * 0.1;
+          }
+
+          state.db.insertWithMetadata(vector, product);
+        }
+
+        elements.sandboxVectorCount.textContent = sampleProducts.length;
+        elements.vectorCount.textContent = sampleProducts.length;
+        showToast(`Loaded ${sampleProducts.length} sample products`, 'success');
+      } catch (error) {
+        showToast(`Error loading data: ${error.message}`, 'error');
+      }
+    }
+
+    async function executeSearch() {
+      if (!state.wasmLoaded) {
+        showToast('WASM not loaded yet', 'error');
+        return;
+      }
+
+      const filter = elements.filterInput.value.trim();
+      if (!filter) {
+        showToast('Enter a filter expression', 'error');
+        return;
+      }
+
+      try {
+        const query = new Float32Array(128).fill(0.1);
+        const startTime = performance.now();
+
+        const results = state.db.searchFiltered(query, filter, 10);
+
+        const elapsed = (performance.now() - startTime).toFixed(2);
+
+        elements.activeFilter.textContent = filter.length > 30 ? filter.substring(0, 27) + '...' : filter;
+        elements.resultCount.textContent = results.length;
+        elements.searchTime.textContent = `${elapsed}ms`;
+        elements.queryTime.textContent = `${elapsed}ms`;
+
+        if (results.length > 0) {
+          elements.sandboxStatus.style.display = 'none';
+          elements.resultsContainer.style.display = 'block';
+
+          elements.resultsList.innerHTML = results.map((r, i) => {
+            const metadata = r.metadata || {};
+            const metaTags = Object.entries(metadata).map(([k, v]) =>
+              `<span class="meta-tag"><span class="meta-key">${k}:</span> <span class="meta-value">${v}</span></span>`
+            ).join('');
+
+            return `
+              <div class="result-row">
+                <span class="result-rank">#${i + 1}</span>
+                <span class="result-id">ID: ${r.id}</span>
+                <span class="result-distance">${r.distance.toFixed(4)}</span>
+                <div class="result-metadata">${metaTags || '<span class="meta-tag">No metadata</span>'}</div>
+              </div>
+            `;
+          }).join('');
+
+          showToast(`Found ${results.length} results`, 'success');
+        } else {
+          elements.resultsContainer.style.display = 'none';
+          elements.sandboxStatus.style.display = 'block';
+          elements.sandboxStatus.className = 'sandbox-status';
+          elements.sandboxStatus.textContent = 'No results match the filter';
+        }
+      } catch (error) {
+        elements.resultsContainer.style.display = 'none';
+        elements.sandboxStatus.style.display = 'block';
+        elements.sandboxStatus.className = 'sandbox-status error';
+        elements.sandboxStatus.textContent = `Error: ${error.message}`;
+        showToast(`Search error: ${error.message}`, 'error');
+      }
+    }
+
+    // ==========================================================================
+    // CODE SNIPPETS
+    // ==========================================================================
+    function initSnippetTabs() {
+      const tabs = document.querySelectorAll('.snippet-tab');
+      const panels = document.querySelectorAll('.snippet-panel');
+
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          tabs.forEach(t => t.classList.remove('active'));
+          panels.forEach(p => p.classList.remove('active'));
+
+          tab.classList.add('active');
+          document.querySelector(`[data-panel="${tab.dataset.tab}"]`).classList.add('active');
+        });
+      });
+
+      // Copy buttons
+      document.querySelectorAll('.snippet-copy').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const panel = btn.closest('.snippet-panel');
+          const code = panel.querySelector('code').textContent;
+          copyToClipboard(code);
+        });
+      });
+    }
+
+    // ==========================================================================
+    // WASM INITIALIZATION
+    // ==========================================================================
+    async function initWasm() {
+      try {
+        const { default: init, EdgeVec, EdgeVecConfig } = await import('../../pkg/edgevec.js');
+        await init();
+
+        const config = new EdgeVecConfig(128);
+        state.db = new EdgeVec(config);
+        state.edgevec = { EdgeVec, EdgeVecConfig };
+        state.wasmLoaded = true;
+
+        elements.wasmStatus.textContent = 'READY';
+        elements.wasmStatus.classList.remove('status-bar__value--loading');
+        elements.wasmStatus.classList.add('status-bar__value--success');
+
+        showToast('EdgeVec WASM loaded successfully', 'success');
+      } catch (error) {
+        elements.wasmStatus.textContent = 'ERROR';
+        elements.wasmStatus.classList.add('status-bar__value--error');
+        showToast(`WASM error: ${error.message}`, 'error');
+        console.error('WASM init error:', error);
+      }
+    }
+
+    // ==========================================================================
+    // EVENT LISTENERS
+    // ==========================================================================
+    function initEventListeners() {
+      // Filter Builder
+      document.getElementById('addClauseBtn').addEventListener('click', () => {
+        elements.clauseContainer.appendChild(createClauseRow());
+        updateFilterPreview();
+      });
+
+      document.getElementById('addAndBtn').addEventListener('click', () => {
+        elements.clauseContainer.appendChild(createClauseRow('AND'));
+        updateFilterPreview();
+      });
+
+      document.getElementById('addOrBtn').addEventListener('click', () => {
+        elements.clauseContainer.appendChild(createClauseRow('OR'));
+        updateFilterPreview();
+      });
+
+      document.getElementById('clearBuilderBtn').addEventListener('click', () => {
+        elements.clauseContainer.innerHTML = '';
+        updateFilterPreview();
+      });
+
+      document.getElementById('copyFilterBtn').addEventListener('click', () => {
+        const filter = elements.filterPreview.textContent;
+        if (filter && !filter.includes('Build your filter')) {
+          copyToClipboard(filter);
+        }
+      });
+
+      document.getElementById('tryFilterBtn').addEventListener('click', () => {
+        const filter = elements.filterPreview.textContent;
+        if (filter && !filter.includes('Build your filter')) {
+          elements.filterInput.value = filter;
+          document.getElementById('sandbox').scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+
+      // Sandbox
+      document.getElementById('loadDataBtn').addEventListener('click', loadSampleData);
+      document.getElementById('searchBtn').addEventListener('click', executeSearch);
+      document.getElementById('clearSandboxBtn').addEventListener('click', () => {
+        elements.filterInput.value = '';
+        elements.resultsContainer.style.display = 'none';
+        elements.sandboxStatus.style.display = 'block';
+        elements.sandboxStatus.className = 'sandbox-status';
+        elements.sandboxStatus.textContent = 'Enter a filter expression and click SEARCH to see results';
+      });
+
+      elements.filterInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') executeSearch();
+      });
+
+      // Theme Toggle (SVG-based like v0.6.0)
+      document.getElementById('themeToggle').addEventListener('click', () => {
+        const html = document.documentElement;
+        const isDark = html.dataset.theme === 'dark';
+        html.dataset.theme = isDark ? 'light' : 'dark';
+      });
+    }
+
+    // ==========================================================================
+    // INITIALIZATION
+    // ==========================================================================
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Check for reduced motion preference
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      // Initialize visual effects (unless reduced motion)
+      if (!prefersReducedMotion) {
+        try {
+          const effectManager = new EffectManager();
+          effectManager.add(new ParticleSystem('particleCanvas'));
+          effectManager.add(new MatrixRain('matrixCanvas'));
+          // Effects auto-start when added via EffectManager.add()
+        } catch (e) {
+          console.warn('Effects not available:', e);
+        }
+      }
+
+      // Initialize components
+      renderExamples();
+      initSnippetTabs();
+      initEventListeners();
+
+      // Add initial clause
+      elements.clauseContainer.appendChild(createClauseRow());
+
+      // Initialize WASM
+      await initWasm();
+    });
+  </script>
+</body>
+</html>
