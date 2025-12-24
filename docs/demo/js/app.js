@@ -89,9 +89,9 @@ async function initWasm() {
     elements.wasmStatus.classList.add('status-bar__value--loading');
 
     // Dynamic import of WASM module
-    // Path is relative to the JS module location (wasm/examples/js/), not the HTML file
-    // From wasm/examples/js/ go up 3 levels to project root: ../../../pkg/edgevec.js
-    const wasmPath = '../../../pkg/edgevec.js';
+    // Path is relative to the JS module location (docs/demo/js/), not the HTML file
+    // From docs/demo/js/ go up 1 level to docs/demo/pkg/edgevec.js
+    const wasmPath = '../pkg/edgevec.js';
     const { default: init, EdgeVec, EdgeVecConfig } = await import(wasmPath);
 
     await init();

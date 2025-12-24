@@ -607,9 +607,7 @@ export class LiveSandbox {
       throw new Error('WASM not loaded yet');
     }
 
-    // Store metadata locally for demo display
-    // Note: Full metadata API (insertWithMetadata, searchWithFilter) is available
-    // This demo uses local storage for simplicity in showing UI behavior
+    // Store metadata in the database using the full metadata API
     this.vectorMetadata = {};
 
     for (let i = 0; i < sampleProducts.length; i++) {
@@ -620,8 +618,8 @@ export class LiveSandbox {
         vector[j] = Math.sin(i * 0.1 + j * 0.01) * 0.5 + Math.random() * 0.1;
       }
 
-      // Using basic insert for demo; production would use insertWithMetadata()
-      const id = this.db.insert(vector);
+      // Use insertWithMetadata to enable filtered search
+      const id = this.db.insertWithMetadata(vector, product);
       this.vectorMetadata[id] = product;
     }
 
@@ -661,11 +659,10 @@ export class LiveSandbox {
     const query = new Float32Array(128).fill(0.1);
     const startTime = performance.now();
 
-    // Demo uses basic search for UI demonstration
-    // Production code should use: db.searchWithFilter(query, filter, k)
-    const rawResults = this.db.search(query, 10);
+    // Use searchWithFilter for proper metadata filtering
+    const rawResults = this.db.searchWithFilter(query, filter, 10);
 
-    // Attach metadata and simulate filter (client-side for demo)
+    // Attach metadata from local cache for display
     const results = rawResults.map(r => ({
       id: r.id,
       distance: r.score || r.distance || 0,
