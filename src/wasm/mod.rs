@@ -55,6 +55,7 @@ pub fn init_logging() {
 /// Get the SIMD backend being used for distance calculations.
 /// Returns: "wasm_simd128", "avx2", or "scalar"
 #[wasm_bindgen(js_name = "getSimdBackend")]
+#[must_use]
 pub fn get_simd_backend() -> String {
     cfg_if::cfg_if! {
         if #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))] {
@@ -70,34 +71,33 @@ pub fn get_simd_backend() -> String {
 /// Microbenchmark: measure raw Hamming distance speed.
 /// Returns time in microseconds for `iterations` distance calculations.
 #[wasm_bindgen(js_name = "benchmarkHamming")]
+#[allow(clippy::cast_possible_truncation)] // Intentional truncation for pseudo-random test data
 pub fn benchmark_hamming(bytes: usize, iterations: usize) -> f64 {
     use crate::metric::{Hamming, Metric};
 
-    // Create two random-ish vectors
+    // Create two random-ish vectors (truncation is intentional for test data)
     let a: Vec<u8> = (0..bytes).map(|i| (i * 17 + 31) as u8).collect();
     let b: Vec<u8> = (0..bytes).map(|i| (i * 13 + 47) as u8).collect();
 
-    let start = web_sys::window()
-        .and_then(|w| w.performance())
-        .map(|p| p.now())
-        .unwrap_or(0.0);
+    let perf = web_sys::window().and_then(|w| w.performance());
+    let start = perf.as_ref().map_or(0.0, web_sys::Performance::now);
 
     let mut sum: f32 = 0.0;
     for _ in 0..iterations {
         sum += Hamming::distance(&a, &b);
     }
 
-    let end = web_sys::window()
-        .and_then(|w| w.performance())
-        .map(|p| p.now())
-        .unwrap_or(0.0);
+    let end = perf.as_ref().map_or(0.0, web_sys::Performance::now);
 
     // Prevent optimizer from removing the loop
     if sum < 0.0 {
-        web_sys::console::log_1(&format!("sum={}", sum).into());
+        web_sys::console::log_1(&format!("sum={sum}").into());
     }
 
-    (end - start) * 1000.0 / iterations as f64 // Return microseconds per iteration
+    // iterations is always < 2^53, precision loss is acceptable for benchmark timing
+    #[allow(clippy::cast_precision_loss)]
+    let result = (end - start) * 1000.0 / iterations as f64;
+    result // Return microseconds per iteration
 }
 
 /// Side-by-side benchmark: New WASM SIMD128 vs Current runtime dispatcher.
@@ -111,11 +111,12 @@ pub fn benchmark_hamming(bytes: usize, iterations: usize) -> f64 {
 /// {"new_us": 0.15, "current_us": 0.42, "speedup": 2.8, "new_backend": "wasm_simd128", "current_backend": "scalar"}
 /// ```
 #[wasm_bindgen(js_name = "benchmarkHammingComparison")]
+#[allow(clippy::cast_possible_truncation)] // Intentional truncation for pseudo-random test data
 pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
     // Current implementation - uses runtime detection, falls to scalar in WASM
     use crate::simd::popcount::simd_popcount_xor;
 
-    // Create two random-ish vectors
+    // Create two random-ish vectors (truncation is intentional for test data)
     let a: Vec<u8> = (0..bytes).map(|i| (i * 17 + 31) as u8).collect();
     let b: Vec<u8> = (0..bytes).map(|i| (i * 13 + 47) as u8).collect();
 
@@ -129,39 +130,38 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
 
     // Benchmark NEW: metric::simd::hamming_distance
     // Uses compile-time #[cfg(target_feature = "simd128")] → WASM SIMD128
-    let start_new = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let start_new = perf.as_ref().map_or(0.0, web_sys::Performance::now);
     let mut sum_new: u32 = 0;
     for _ in 0..iterations {
         sum_new = sum_new.wrapping_add(crate::metric::simd::hamming_distance(&a, &b));
     }
-    let end_new = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let end_new = perf.as_ref().map_or(0.0, web_sys::Performance::now);
 
     // Benchmark CURRENT: simd::popcount::simd_popcount_xor
     // Uses runtime is_x86_feature_detected!() → falls to scalar in WASM
-    let start_current = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let start_current = perf.as_ref().map_or(0.0, web_sys::Performance::now);
     let mut sum_current: u32 = 0;
     for _ in 0..iterations {
         sum_current = sum_current.wrapping_add(simd_popcount_xor(&a, &b));
     }
-    let end_current = perf.as_ref().map(|p| p.now()).unwrap_or(0.0);
+    let end_current = perf.as_ref().map_or(0.0, web_sys::Performance::now);
 
     // Verify both produce same result
     if sum_new != sum_current {
         web_sys::console::warn_1(
-            &format!(
-                "WARNING: Results differ! new={} current={}",
-                sum_new, sum_current
-            )
-            .into(),
+            &format!("WARNING: Results differ! new={sum_new} current={sum_current}").into(),
         );
     }
 
     // Prevent optimizer from removing the loops
     if sum_new == 0 || sum_current == 0 {
-        web_sys::console::log_1(&format!("sums: {} {}", sum_new, sum_current).into());
+        web_sys::console::log_1(&format!("sums: {sum_new} {sum_current}").into());
     }
 
+    // iterations is always < 2^53, precision loss is acceptable for benchmark timing
+    #[allow(clippy::cast_precision_loss)]
     let new_us = (end_new - start_new) * 1000.0 / iterations as f64;
+    #[allow(clippy::cast_precision_loss)]
     let current_us = (end_current - start_current) * 1000.0 / iterations as f64;
     let speedup = current_us / new_us;
 
@@ -182,8 +182,7 @@ pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
     };
 
     format!(
-        r#"{{"new_us": {:.3}, "current_us": {:.3}, "speedup": {:.2}, "bytes": {}, "iterations": {}, "new_backend": "{}", "current_backend": "{}"}}"#,
-        new_us, current_us, speedup, bytes, iterations, new_backend, current_backend
+        r#"{{"new_us": {new_us:.3}, "current_us": {current_us:.3}, "speedup": {speedup:.2}, "bytes": {bytes}, "iterations": {iterations}, "new_backend": "{new_backend}", "current_backend": "{current_backend}"}}"#
     )
 }
 
