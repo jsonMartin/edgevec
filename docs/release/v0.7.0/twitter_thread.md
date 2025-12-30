@@ -8,133 +8,129 @@
 ## Tweet 1 (Hook)
 
 ```
-Just shipped EdgeVec v0.7.0 🦀
-
-A vector database that runs entirely in your browser via WebAssembly.
+I built a vector database that runs entirely in your browser.
 
 No server. No API calls. No data leaving your device.
 
-Here's what's new 🧵
+EdgeVec v0.7.0 is out. Here's what's new 🧵
 ```
 
-**Character count:** 196
+**Character count:** 175
 
 ---
 
-## Tweet 2 (Binary Quantization)
+## Tweet 2 (The Problem)
 
 ```
-32x memory reduction with Binary Quantization
+The problem: most vector DBs require a server.
+
+If you're building privacy-sensitive apps (medical notes, legal docs, personal journals) or offline-first tools, that's a blocker.
+
+EdgeVec runs 100% client-side via WebAssembly.
+```
+
+**Character count:** 248
+
+---
+
+## Tweet 3 (Binary Quantization)
+
+```
+32x memory reduction with Binary Quantization.
 
 Store 1M vectors in ~125MB instead of 4GB.
 
-Perfect for browser memory constraints, and we're seeing 95%+ recall on standard benchmarks.
+95%+ recall retention. Perfect for browser memory constraints.
 ```
 
-**Character count:** 199
+**Character count:** 167
 
 ---
 
-## Tweet 3 (SIMD - Community Contribution)
+## Tweet 4 (SIMD - Community Contribution)
 
 ```
-8.75x faster Hamming distance via WASM SIMD128
+8.75x faster Hamming distance via WASM SIMD.
 
-This came from our FIRST community contributor @jsonMartin 🙌
+This came from our first community contributor @jsonMartin.
 
-Open source works. One PR, massive impact.
+One PR. Massive impact. Open source works.
 ```
 
-**Character count:** 168
-
----
-
-## Tweet 4 (Use Cases)
-
-```
-Use cases:
-
-• Browser-based RAG with Transformers.js
-• Offline semantic search
-• Privacy-preserving AI (medical, legal, personal data)
-• Local codebase search
-
-Your embeddings never leave the device.
-```
-
-**Character count:** 222
+**Character count:** 161
 
 ---
 
 ## Tweet 5 (Code Example)
 
 ```
-Dead simple API:
+The API:
 
 import init, { EdgeVec, EdgeVecConfig } from 'edgevec';
 await init();
 
 const db = new EdgeVec(new EdgeVecConfig(768));
-db.insert(new Float32Array(vec));
-db.search(new Float32Array(q), 10);
+db.insert(new Float32Array(embedding));
+const results = db.search(new Float32Array(query), 10);
 
-Works offline.
+That's it.
 ```
 
-**Character count:** 217
+**Character count:** 237
 
 ---
 
-## Tweet 6 (Demo + Links)
+## Tweet 6 (Use Cases)
 
 ```
-Try it yourself:
+Use cases:
 
-🔗 Live demo: https://matte1782.github.io/edgevec/demo/
-📦 npm: npm install edgevec
-🦀 crates.io: cargo add edgevec
-⭐ GitHub: https://github.com/matte1782/edgevec
+→ Browser RAG with Transformers.js or Ollama
+→ Offline semantic search
+→ Privacy-preserving AI (data never leaves device)
+→ Local codebase search
 
-~220KB gzipped. Works in all modern browsers.
+Works with OpenAI, Cohere, HuggingFace embeddings.
 ```
 
-**Character count:** 265
+**Character count:** 232
 
 ---
 
-## Tweet 7 (CTA)
+## Tweet 7 (Links + CTA)
 
 ```
-What's next:
+Try it:
 
-• HNSW indexing for sub-linear search
-• Product quantization
-• More embedding model integrations
+🔗 Demo: https://matte1782.github.io/edgevec/demo/
+📦 npm install edgevec
+🦀 cargo add edgevec
+⭐ https://github.com/matte1782/edgevec
 
-If you're building local-first AI apps, I'd love to hear what features would help your workflow.
+220KB gzipped. MIT licensed.
 
-MIT licensed. PRs welcome.
+What would make this useful for your workflow?
 ```
 
 **Character count:** 243
 
 ---
 
-## Hashtags (Add to Tweet 1 or 7)
+## Hashtags (Optional - add to Tweet 1)
 
 ```
-#rustlang #webassembly #vectordatabase #ai #machinelearning
+#rustlang #webassembly #vectordatabase
 ```
 
 ---
 
 ## Posting Strategy
 
-1. **Post Tweet 1** with the thread
-2. **Space tweets** ~30 seconds apart (or use thread feature)
-3. **Best time:** 9 AM - 12 PM EST (weekdays)
-4. **Engage with replies** within first hour
-5. **Quote tweet** from Rust community accounts if they engage
+1. **Post as thread** using Twitter's thread feature
+2. **Best time:** 9 AM - 12 PM EST (weekdays) or 6-9 AM Pacific
+3. **Engage with replies** within first hour – algorithm rewards quick responses
+4. **Quote tweet** if Rust community accounts engage
+5. **Don't over-hashtag** – 1-3 max, or none
 
 ---
 
@@ -142,23 +138,23 @@ MIT licensed. PRs welcome.
 
 | Tweet | Image |
 |:------|:------|
-| 1 | Screenshot of demo with "WASM READY" |
-| 2 | Memory comparison chart (F32 vs BQ) |
-| 3 | Benchmark numbers showing 8.75x |
-| 6 | Demo interface screenshot |
+| 1 | Demo screenshot showing "WASM READY" status |
+| 3 | Memory comparison visual (F32 vs BQ bar chart) |
+| 4 | Benchmark showing 8.75x speedup |
+| 7 | GitHub repo card or demo interface |
 
 ---
 
 ## Alternative Hook (Tweet 1)
 
-If the first hook doesn't resonate:
+If first hook doesn't resonate:
 
 ```
 What if your vector database ran entirely in the browser?
 
 No server costs. No network latency. No data leaving the device.
 
-EdgeVec v0.7.0 does exactly that. Built in Rust, compiled to WASM.
+EdgeVec v0.7.0 does exactly that.
 
 Here's what we shipped 🧵
 ```
