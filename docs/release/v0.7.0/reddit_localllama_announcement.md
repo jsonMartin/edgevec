@@ -16,24 +16,28 @@ Most vector DBs require:
 EdgeVec runs **in the same JavaScript context** as your application. Import it, use it. That's it.
 
 ```javascript
-import { EdgeVecIndex } from 'edgevec';
+import init, { EdgeVec, EdgeVecConfig } from 'edgevec';
 import { pipeline } from '@xenova/transformers';
+
+// Initialize WASM
+await init();
 
 // Your local embedding model
 const embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
 
 // Create index (384 dimensions for MiniLM)
-const index = new EdgeVecIndex({ dimensions: 384 });
+const config = new EdgeVecConfig(384);
+const db = new EdgeVec(config);
 
 // Index your documents locally
 for (const doc of documents) {
   const embedding = await embedder(doc.text, { pooling: 'mean', normalize: true });
-  index.insert(Array.from(embedding.data), { id: doc.id });
+  db.insertWithMetadata(new Float32Array(embedding.data), { id: doc.id });
 }
 
 // Search - everything happens on device
 const queryEmb = await embedder(query, { pooling: 'mean', normalize: true });
-const results = index.search(Array.from(queryEmb.data), 10);
+const results = db.search(new Float32Array(queryEmb.data), 10);
 ```
 
 ## What's New in v0.7.0
@@ -44,10 +48,9 @@ Store 1M vectors in ~125MB instead of 4GB. Perfect for browser memory constraint
 
 ```javascript
 // Enable binary quantization for massive collections
-const index = new EdgeVecIndex({
-  dimensions: 768,
-  quantization: 'binary'  // 32x smaller
-});
+const config = new EdgeVecConfig(768);
+const db = new EdgeVec(config);
+db.enableBQ();  // 32x smaller memory footprint
 ```
 
 The quality tradeoff is surprisingly small for many use cases (we're seeing 95%+ recall on standard benchmarks).
@@ -66,10 +69,10 @@ Your index survives browser refreshes. Build once, use forever (until you clear 
 
 ```javascript
 // Save to IndexedDB
-await index.saveToIndexedDB('my-local-rag');
+await db.save('my-local-rag');
 
 // Load on next session
-const index = await EdgeVecIndex.loadFromIndexedDB('my-local-rag');
+const db = await EdgeVec.load('my-local-rag');
 ```
 
 ### 4. Filter Expressions
@@ -77,14 +80,19 @@ const index = await EdgeVecIndex.loadFromIndexedDB('my-local-rag');
 Query with metadata filters — essential for any real RAG system:
 
 ```javascript
-const results = index.search(queryVector, 10, {
-  filter: {
-    $and: [
-      { category: 'documentation' },
-      { date: { $gte: '2024-01-01' } }
-    ]
-  }
-});
+// SQL-like filter expressions
+const results = db.searchWithFilter(
+  queryVector,
+  'category = "documentation" AND date >= "2024-01-01"',
+  10
+);
+
+// Array membership
+const tagged = db.searchWithFilter(
+  queryVector,
+  'tags ANY ["tutorial", "guide"]',
+  10
+);
 ```
 
 ## Real-World Use Cases

@@ -91,19 +91,22 @@ cargo add edgevec
 ```
 
 ```rust
-use edgevec::{Index, DistanceMetric};
+use edgevec::{HnswConfig, HnswIndex, VectorStorage};
 
-let mut index = Index::new(128, DistanceMetric::Cosine);
+// Create config and storage
+let config = HnswConfig::new(128);
+let mut storage = VectorStorage::new(&config, None);
+let mut index = HnswIndex::new(config, &storage)?;
 
 // Insert vectors
 for embedding in embeddings {
-    index.insert(&embedding)?;
+    index.insert(&embedding, &mut storage)?;
 }
 
 // Search
-let results = index.search(&query, 10)?;
+let results = index.search(&query, 10, &storage)?;
 for result in results {
-    println!("ID: {}, Score: {:.4}", result.id, result.score);
+    println!("ID: {}, Distance: {:.4}", result.vector_id, result.distance);
 }
 ```
 
@@ -114,18 +117,23 @@ npm install edgevec
 ```
 
 ```typescript
-import { EdgeVecIndex } from 'edgevec';
+import init, { EdgeVec, EdgeVecConfig } from 'edgevec';
 
-const index = new EdgeVecIndex(128);
+// Initialize WASM
+await init();
+
+// Create index
+const config = new EdgeVecConfig(128);
+const db = new EdgeVec(config);
 
 // Insert vectors
 for (const embedding of embeddings) {
-    index.insert(embedding);
+    db.insert(new Float32Array(embedding));
 }
 
 // Search
-const results = index.search(query, 10);
-console.log(results); // [{ id: 0n, score: 0.95 }, ...]
+const results = db.search(new Float32Array(query), 10);
+console.log(results); // [{ id: 0, distance: 0.05 }, ...]
 ```
 
 ---

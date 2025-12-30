@@ -69,13 +69,15 @@ Euclidean Distance (1536-dim):
 ### Code Example: RAG with OpenAI Embeddings
 
 ```javascript
-import { EdgeVecIndex } from 'edgevec';
+import init, { EdgeVec, EdgeVecConfig } from 'edgevec';
 
-// Create index for OpenAI embeddings
-const index = new EdgeVecIndex({
-  dimensions: 1536,  // text-embedding-3-small
-  quantization: 'binary'  // Enable 32x compression
-});
+// Initialize WASM
+await init();
+
+// Create index for OpenAI embeddings (1536D)
+const config = new EdgeVecConfig(1536);
+const db = new EdgeVec(config);
+db.enableBQ();  // Enable binary quantization for 32x compression
 
 // Index your documents
 for (const doc of documents) {
@@ -83,7 +85,10 @@ for (const doc of documents) {
     model: 'text-embedding-3-small',
     input: doc.text
   });
-  index.insert(embedding.data[0].embedding, { id: doc.id });
+  db.insertWithMetadata(
+    new Float32Array(embedding.data[0].embedding),
+    { id: doc.id, title: doc.title }
+  );
 }
 
 // Semantic search - runs locally, no API call
@@ -92,7 +97,12 @@ const queryEmbedding = await openai.embeddings.create({
   input: userQuery
 });
 
-const results = index.search(queryEmbedding.data[0].embedding, { k: 5 });
+// BQ search with rescoring for 95%+ recall
+const results = db.searchBQRescored(
+  new Float32Array(queryEmbedding.data[0].embedding),
+  5,   // k
+  3    // rescore_factor
+);
 // Use top-k results for RAG context
 ```
 
