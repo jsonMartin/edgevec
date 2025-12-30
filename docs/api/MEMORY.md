@@ -1,7 +1,7 @@
 # Memory Management API Reference
 
-**Version:** EdgeVec v0.6.0
-**Last Updated:** 2025-12-22
+**Version:** EdgeVec v0.7.0
+**Last Updated:** 2025-12-29
 
 EdgeVec provides a comprehensive memory pressure monitoring and management API for WASM environments where memory is limited.
 
