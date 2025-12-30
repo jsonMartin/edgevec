@@ -1,7 +1,7 @@
 # WasmIndex / EdgeVec API Reference
 
-**Version:** EdgeVec v0.6.0
-**Last Updated:** 2025-12-22
+**Version:** EdgeVec v0.7.0
+**Last Updated:** 2025-12-29
 
 The `EdgeVec` class (exported as `WasmIndex` in some contexts) is the main entry point for EdgeVec in JavaScript/TypeScript.
 

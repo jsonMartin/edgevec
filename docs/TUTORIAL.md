@@ -1,6 +1,6 @@
 # EdgeVec Tutorial: Getting Started
 
-**Version:** 0.3.0
+**Version:** 0.7.0
 **Audience:** Developers new to EdgeVec or vector databases
 **Prerequisites:** Basic JavaScript/TypeScript knowledge, Node.js 18+ or modern browser
 
@@ -84,7 +84,7 @@ yarn add edgevec
 
 ```html
 <script type="module">
-import init, { EdgeVec, EdgeVecConfig } from 'https://unpkg.com/edgevec@0.3.0/edgevec.js';
+import init, { EdgeVec, EdgeVecConfig } from 'https://unpkg.com/edgevec@0.7.0/edgevec.js';
 
 async function main() {
     await init();

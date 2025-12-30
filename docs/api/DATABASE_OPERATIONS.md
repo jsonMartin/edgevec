@@ -1,7 +1,7 @@
 # Database Operations Guide
 
-**Version:** EdgeVec v0.6.0
-**Last Updated:** 2025-12-22
+**Version:** EdgeVec v0.7.0
+**Last Updated:** 2025-12-29
 
 ---
 

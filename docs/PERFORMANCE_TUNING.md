@@ -1,6 +1,6 @@
 # EdgeVec Performance Tuning Guide
 
-**Version:** 0.3.0
+**Version:** 0.7.0
 **Audience:** Developers optimizing EdgeVec for specific workloads
 **Prerequisites:** Basic EdgeVec usage (see [Tutorial](./TUTORIAL.md))
 
