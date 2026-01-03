@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="EdgeVec - WASM-native vector database with HNSW indexing, binary quantization, and SIMD acceleration. 32x memory reduction, sub-millisecond search.">
+  <meta name="keywords" content="vector database, WASM, WebAssembly, HNSW, binary quantization, SIMD, Rust, similarity search, embeddings">
+  <meta name="author" content="Matteo Panzeri">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="EdgeVec - WASM-Native Vector Database">
+  <meta property="og:description" content="High-performance vector similarity search in the browser. 32x memory reduction with binary quantization.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://matte1782.github.io/edgevec/">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="EdgeVec - WASM-Native Vector Database">
+  <meta name="twitter:description" content="High-performance vector similarity search in the browser. 32x memory reduction.">
+
+  <title>EdgeVec // WASM-Native Vector Database</title>
+  <link rel="icon" type="image/svg+xml" href="demo/favicon.svg">
+  <link rel="canonical" href="https://matte1782.github.io/edgevec/">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-void: #030306;
+      --bg-primary: #0a0a0f;
+      --bg-card: #0f0f18;
+      --bg-card-hover: #151525;
+      --cyan: #00ffff;
+      --cyan-dim: #00aaaa;
+      --magenta: #ff00ff;
+      --green: #00ff88;
+      --purple: #9945ff;
+      --orange: #ff6b35;
+      --white: #e8e8f0;
+      --gray-100: #b0b0c0;
+      --gray-200: #6a6a80;
+      --border: rgba(0, 255, 255, 0.1);
+      --border-hover: rgba(0, 255, 255, 0.3);
+      --font-display: 'Orbitron', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; overflow-x: hidden; }
+    body {
+      font-family: var(--font-mono);
+      background: var(--bg-void);
+      color: var(--white);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* Matrix Canvas */
+    #matrix {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      opacity: 0.12;
+      pointer-events: none;
+    }
+
+    /* Gradient overlay */
+    .gradient-overlay {
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 100% 60% at 50% -20%, rgba(0, 255, 255, 0.12), transparent),
+        radial-gradient(ellipse 80% 50% at 100% 100%, rgba(255, 0, 255, 0.08), transparent),
+        radial-gradient(ellipse 60% 40% at 0% 80%, rgba(0, 255, 136, 0.06), transparent);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    .header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(10, 10, 15, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header__inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header__logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header__brand {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--cyan);
+      text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+      letter-spacing: 0.1em;
+    }
+
+    .header__version {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 4px 10px;
+      background: linear-gradient(135deg, var(--green), #00cc66);
+      color: #000;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .header__nav {
+      display: flex;
+      gap: 24px;
+    }
+
+    .header__link {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--gray-100);
+      text-decoration: none;
+      letter-spacing: 0.08em;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .header__link:hover {
+      color: var(--cyan);
+      text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+    }
+
+    .header__link svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      z-index: 10;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 100px 24px 60px;
+    }
+
+    .hero__eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--green);
+      margin-bottom: 20px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease forwards;
+    }
+
+    .hero__dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 15px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--green); }
+      50% { opacity: 0.6; box-shadow: 0 0 25px var(--green); }
+    }
+
+    .hero__title {
+      font-family: var(--font-display);
+      font-size: clamp(40px, 10vw, 80px);
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      color: var(--cyan);
+      text-shadow:
+        0 0 40px rgba(0, 255, 255, 0.6),
+        0 0 80px rgba(0, 255, 255, 0.3),
+        0 0 120px rgba(0, 255, 255, 0.15);
+      margin-bottom: 16px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.1s forwards;
+    }
+
+    .hero__tagline {
+      font-size: clamp(14px, 3vw, 18px);
+      color: var(--gray-100);
+      max-width: 600px;
+      margin-bottom: 40px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.2s forwards;
+    }
+
+    .hero__tagline strong {
+      color: var(--white);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Stats */
+    .hero__stats {
+      display: flex;
+      justify-content: center;
+      gap: 48px;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.3s forwards;
+    }
+
+    .hero__stat {
+      text-align: center;
+    }
+
+    .hero__stat-value {
+      font-family: var(--font-display);
+      font-size: clamp(32px, 6vw, 48px);
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--cyan), var(--green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: none;
+      filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.4));
+    }
+
+    .hero__stat-label {
+      font-size: 11px;
+      color: var(--gray-200);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    /* CTA Buttons */
+    .hero__cta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      opacity: 0;
+      animation: fadeIn 0.6s ease 0.4s forwards;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      padding: 14px 28px;
+      border-radius: 8px;
+      text-decoration: none;
+      transition: all 0.3s ease;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .btn--primary {
+      background: linear-gradient(135deg, var(--cyan), var(--cyan-dim));
+      color: #000;
+      box-shadow: 0 4px 20px rgba(0, 255, 255, 0.3);
+    }
+
+    .btn--primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 255, 255, 0.5);
+    }
+
+    .btn--secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--white);
+      border: 1px solid var(--border);
+    }
+
+    .btn--secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+    }
+
+    /* Features Section */
+    .features {
+      position: relative;
+      z-index: 10;
+      padding: 80px 24px;
+    }
+
+    .features__grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .feature {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      transition: all 0.3s ease;
+    }
+
+    .feature:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-hover);
+      transform: translateY(-4px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .feature__icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, rgba(0, 255, 255, 0.15), rgba(255, 0, 255, 0.08));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .feature__icon svg {
+      width: 22px;
+      height: 22px;
+      stroke: var(--cyan);
+      stroke-width: 1.5;
+      fill: none;
+    }
+
+    .feature__title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--white);
+      margin-bottom: 8px;
+      letter-spacing: 0.02em;
+    }
+
+    .feature__desc {
+      font-size: 13px;
+      color: var(--gray-100);
+      line-height: 1.6;
+    }
+
+    /* Quick Links */
+    .quick-links {
+      position: relative;
+      z-index: 10;
+      padding: 60px 24px 100px;
+    }
+
+    .quick-links__title {
+      font-family: var(--font-display);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-200);
+      letter-spacing: 0.2em;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .quick-links__grid {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .quick-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--gray-100);
+      text-decoration: none;
+      padding: 10px 18px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .quick-link:hover {
+      color: var(--cyan);
+      border-color: var(--border-hover);
+      background: var(--bg-card-hover);
+    }
+
+    .quick-link svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    /* Footer */
+    .footer {
+      position: relative;
+      z-index: 10;
+      padding: 40px 24px;
+      text-align: center;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer__brand {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--cyan);
+      text-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+      margin-bottom: 12px;
+    }
+
+    .footer__copy {
+      font-size: 11px;
+      color: var(--gray-200);
+    }
+
+    .footer__author {
+      font-size: 11px;
+      color: var(--gray-200);
+      margin-top: 8px;
+      opacity: 0.8;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .header__nav {
+        display: none;
+      }
+
+      .hero__stats {
+        gap: 32px;
+      }
+
+      .hero__cta {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .btn {
+        width: 100%;
+        max-width: 280px;
+        justify-content: center;
+      }
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Matrix Rain Canvas -->
+  <canvas id="matrix"></canvas>
+  <div class="gradient-overlay"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header__inner">
+      <div class="header__logo">
+        <span class="header__brand">EDGEVEC</span>
+        <span class="header__version">v0.7.0</span>
+      </div>
+      <nav class="header__nav">
+        <a href="demo/hub.html" class="header__link">
+          <svg viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          DEMOS
+        </a>
+        <a href="https://github.com/matte1782/edgevec" class="header__link" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+          GITHUB
+        </a>
+        <a href="https://www.npmjs.com/package/edgevec" class="header__link" target="_blank" rel="noopener">NPM</a>
+        <a href="https://crates.io/crates/edgevec" class="header__link" target="_blank" rel="noopener">CRATES.IO</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <p class="hero__eyebrow">
+      <span class="hero__dot"></span>
+      WASM-NATIVE VECTOR DATABASE
+    </p>
+    <h1 class="hero__title">EDGEVEC</h1>
+    <p class="hero__tagline">
+      <strong>High-performance vector similarity search</strong> that runs entirely in the browser.
+      HNSW indexing, binary quantization, and SIMD acceleration.
+    </p>
+
+    <div class="hero__stats">
+      <div class="hero__stat">
+        <div class="hero__stat-value">32x</div>
+        <div class="hero__stat-label">Memory Reduction</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-value">&lt;1ms</div>
+        <div class="hero__stat-label">Search Latency</div>
+      </div>
+      <div class="hero__stat">
+        <div class="hero__stat-value">2x+</div>
+        <div class="hero__stat-label">SIMD Speedup</div>
+      </div>
+    </div>
+
+    <div class="hero__cta">
+      <a href="demo/hub.html" class="btn btn--primary">
+        <svg viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        EXPLORE DEMOS
+      </a>
+      <a href="https://github.com/matte1782/edgevec" class="btn btn--secondary" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+        VIEW ON GITHUB
+      </a>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features">
+    <div class="features__grid">
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h3 class="feature__title">BINARY QUANTIZATION</h3>
+        <p class="feature__desc">32x memory reduction with minimal recall loss. Store millions of vectors in browser memory.</p>
+      </div>
+
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <h3 class="feature__title">SIMD ACCELERATION</h3>
+        <p class="feature__desc">WASM SIMD128 optimized distance calculations. 2x+ faster Hamming distance with @jsonMartin's contribution.</p>
+      </div>
+
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+        </div>
+        <h3 class="feature__title">METADATA FILTERING</h3>
+        <p class="feature__desc">SQL-like query syntax for pre/post filtering. Combine vector search with structured queries.</p>
+      </div>
+
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        </div>
+        <h3 class="feature__title">PURE WASM</h3>
+        <p class="feature__desc">No server required. Runs entirely in browser or Node.js. Zero external dependencies.</p>
+      </div>
+
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <h3 class="feature__title">HNSW INDEXING</h3>
+        <p class="feature__desc">Hierarchical Navigable Small World graphs for logarithmic search complexity.</p>
+      </div>
+
+      <div class="feature">
+        <div class="feature__icon">
+          <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        </div>
+        <h3 class="feature__title">PERSISTENCE</h3>
+        <p class="feature__desc">Save and load indexes. IndexedDB support for browser storage. Snapshot/restore capability.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Links -->
+  <section class="quick-links">
+    <h2 class="quick-links__title">QUICK ACCESS</h2>
+    <div class="quick-links__grid">
+      <a href="demo/index.html" class="quick-link">
+        <svg viewBox="0 0 24 24"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg>
+        Filter Playground
+      </a>
+      <a href="demo/simd_benchmark.html" class="quick-link">
+        <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        SIMD Benchmark
+      </a>
+      <a href="demo/cyberpunk.html" class="quick-link">
+        <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Cyberpunk Demo
+      </a>
+      <a href="API_REFERENCE.md" class="quick-link">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        API Reference
+      </a>
+      <a href="INTEGRATION_GUIDE.md" class="quick-link">
+        <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        Integration Guide
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer__brand">EDGEVEC v0.7.0</div>
+    <p class="footer__copy">Rust + WebAssembly // MIT License</p>
+    <p class="footer__author">Created by Matteo Panzeri // University of Pavia // BSc in AI</p>
+  </footer>
+
+  <!-- Matrix Rain Script -->
+  <script>
+    (function() {
+      const canvas = document.getElementById('matrix');
+      const ctx = canvas.getContext('2d');
+
+      let w, h, cols, drops;
+      const chars = '01';
+      const fontSize = 14;
+
+      function resize() {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        cols = Math.floor(w / fontSize);
+        drops = Array(cols).fill(1);
+      }
+
+      function draw() {
+        ctx.fillStyle = 'rgba(3, 3, 6, 0.05)';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.fillStyle = '#00ff88';
+        ctx.font = fontSize + 'px monospace';
+
+        for (let i = 0; i < drops.length; i++) {
+          const char = chars[Math.floor(Math.random() * chars.length)];
+          ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+
+          if (drops[i] * fontSize > h && Math.random() > 0.975) {
+            drops[i] = 0;
+          }
+          drops[i]++;
+        }
+      }
+
+      resize();
+      window.addEventListener('resize', resize);
+
+      // Respect reduced motion preference
+      if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        setInterval(draw, 50);
+      }
+    })();
+  </script>
+</body>
+</html>
