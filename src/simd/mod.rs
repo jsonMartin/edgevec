@@ -36,6 +36,13 @@
 
 pub mod detect;
 
+/// Unified SIMD dispatch macro for compile-time platform selection.
+///
+/// Provides the `simd_dispatch!` macro for generating functions that
+/// automatically select the best SIMD implementation at compile time.
+#[macro_use]
+pub mod dispatch;
+
 /// SIMD-accelerated popcount for Hamming distance computation.
 ///
 /// Provides hardware-accelerated XOR + popcount for variable-length

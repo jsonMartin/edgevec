@@ -1,5 +1,64 @@
 //! Scalar implementations for distance metrics.
 
+/// Euclidean distance for f32 vectors (Scalar fallback).
+///
+/// Computes `sqrt(sum((a[i] - b[i])^2))`.
+///
+/// # Panics
+///
+/// Panics if `a` and `b` have different lengths.
+///
+/// # Example
+///
+/// ```
+/// use edgevec::metric::scalar::euclidean_distance;
+/// let a = vec![0.0f32, 0.0, 0.0];
+/// let b = vec![3.0f32, 4.0, 0.0];
+/// let dist = euclidean_distance(&a, &b);
+/// assert!((dist - 5.0).abs() < 1e-6); // 3-4-5 triangle
+/// ```
+#[inline]
+#[must_use]
+pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
+    assert_eq!(a.len(), b.len());
+    let mut sum: f32 = 0.0;
+    for i in 0..a.len() {
+        let diff = a[i] - b[i];
+        sum += diff * diff;
+    }
+    sum.sqrt()
+}
+
+/// L2 Squared distance for f32 vectors (Scalar fallback).
+///
+/// Computes `sum((a[i] - b[i])^2)` without the square root.
+///
+/// # Panics
+///
+/// Panics if `a` and `b` have different lengths.
+///
+/// # Example
+///
+/// ```
+/// use edgevec::metric::scalar::l2_squared;
+/// let a = vec![1.0f32, 2.0, 3.0];
+/// let b = vec![4.0f32, 2.0, 1.0];
+/// // (1-4)^2 + (2-2)^2 + (3-1)^2 = 9 + 0 + 4 = 13
+/// let dist_sq = l2_squared(&a, &b);
+/// assert!((dist_sq - 13.0).abs() < 1e-6);
+/// ```
+#[inline]
+#[must_use]
+pub fn l2_squared(a: &[f32], b: &[f32]) -> f32 {
+    assert_eq!(a.len(), b.len());
+    let mut sum: f32 = 0.0;
+    for i in 0..a.len() {
+        let diff = a[i] - b[i];
+        sum += diff * diff;
+    }
+    sum
+}
+
 /// L2 Squared distance for u8 vectors (Scalar fallback).
 ///
 /// # Panics
@@ -75,5 +134,40 @@ mod tests {
         let b = vec![0; n];
         // 255^2 * 1000 = 65,025,000
         assert_eq!(l2_squared_u8(&a, &b), 65_025_000);
+    }
+
+    #[test]
+    fn test_euclidean_distance_scalar() {
+        // 3-4-5 triangle
+        let a = vec![0.0f32, 0.0, 0.0];
+        let b = vec![3.0f32, 4.0, 0.0];
+        let dist = euclidean_distance(&a, &b);
+        assert!((dist - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_euclidean_distance_single_element() {
+        let a = vec![5.0f32];
+        let b = vec![3.0f32];
+        // sqrt((5-3)^2) = sqrt(4) = 2
+        let dist = euclidean_distance(&a, &b);
+        assert!((dist - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_euclidean_distance_identical() {
+        let a = vec![1.0f32, 2.0, 3.0, 4.0];
+        let b = vec![1.0f32, 2.0, 3.0, 4.0];
+        let dist = euclidean_distance(&a, &b);
+        assert!(dist.abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_l2_squared_f32_scalar() {
+        let a = vec![1.0f32, 2.0, 3.0];
+        let b = vec![4.0f32, 2.0, 1.0];
+        // (1-4)^2 + (2-2)^2 + (3-1)^2 = 9 + 0 + 4 = 13
+        let dist = l2_squared(&a, &b);
+        assert!((dist - 13.0).abs() < 1e-6);
     }
 }

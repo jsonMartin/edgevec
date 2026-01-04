@@ -616,6 +616,52 @@ pub mod wasm {
             }
         }
     }
+
+    /// Euclidean distance using WASM SIMD128.
+    ///
+    /// Computes `sqrt(sum((a[i] - b[i])^2))` using SIMD for the squared sum,
+    /// then a single scalar sqrt at the end.
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Compute L2 squared using `l2_squared()` with SIMD acceleration
+    /// 2. Apply scalar `sqrt()` to the final result
+    ///
+    /// This approach matches the ARM NEON implementation pattern and provides
+    /// full accuracy with minimal overhead (sqrt is called only once).
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First f32 slice
+    /// * `b` - Second f32 slice (must be same length as `a`)
+    ///
+    /// # Returns
+    ///
+    /// The Euclidean distance between the two vectors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `a.len() != b.len()`.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// // Note: This example only compiles on wasm32 with simd128 enabled.
+    /// // Use the dispatcher `edgevec::metric::simd::euclidean_distance` for
+    /// // cross-platform code.
+    /// # #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    /// # {
+    /// use edgevec::metric::simd::wasm;
+    /// let a = vec![0.0f32, 0.0, 0.0];
+    /// let b = vec![3.0f32, 4.0, 0.0];
+    /// let dist = wasm::euclidean_distance(&a, &b);
+    /// assert!((dist - 5.0).abs() < 1e-6); // 3-4-5 triangle
+    /// # }
+    /// ```
+    #[inline]
+    pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
+        l2_squared(a, b).sqrt()
+    }
 }
 
 #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
@@ -1157,6 +1203,53 @@ pub mod x86 {
         result
     }
 
+    /// Euclidean distance using AVX2.
+    ///
+    /// Computes `sqrt(sum((a[i] - b[i])^2))` using AVX2 SIMD for the squared sum,
+    /// then a single scalar sqrt at the end.
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Compute L2 squared using `l2_squared()` with AVX2 acceleration
+    /// 2. Apply scalar `sqrt()` to the final result
+    ///
+    /// This approach matches the ARM NEON implementation pattern and provides
+    /// full accuracy with minimal overhead (sqrt is called only once).
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First f32 slice
+    /// * `b` - Second f32 slice (must be same length as `a`)
+    ///
+    /// # Returns
+    ///
+    /// The Euclidean distance between the two vectors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `a.len() != b.len()`.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// // Note: This example only compiles on x86_64 with AVX2 enabled.
+    /// // Use the dispatcher `edgevec::metric::simd::euclidean_distance` for
+    /// // cross-platform code.
+    /// # #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    /// # {
+    /// use edgevec::metric::simd::x86;
+    /// let a = vec![0.0f32, 0.0, 0.0];
+    /// let b = vec![3.0f32, 4.0, 0.0];
+    /// let dist = x86::euclidean_distance(&a, &b);
+    /// assert!((dist - 5.0).abs() < 1e-6); // 3-4-5 triangle
+    /// # }
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
+        l2_squared(a, b).sqrt()
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -1257,6 +1350,58 @@ pub fn hamming_distance(a: &[u8], b: &[u8]) -> u32 {
             }
             distance
         }
+    }
+}
+
+// Uses simd_dispatch! macro for compile-time platform selection
+crate::simd_dispatch! {
+    /// Dispatcher for Euclidean distance (f32 vectors).
+    ///
+    /// Automatically selects the best SIMD implementation based on available features:
+    /// - WASM SIMD128 for WebAssembly targets
+    /// - AVX2 for x86_64 targets
+    /// - NEON for aarch64 targets
+    /// - Scalar fallback for other platforms
+    ///
+    /// Computes `sqrt(sum((a[i] - b[i])^2))` - the L2 norm between two vectors.
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - First f32 slice
+    /// * `b` - Second f32 slice (must have same length as `a`)
+    ///
+    /// # Returns
+    ///
+    /// The Euclidean distance between the two vectors.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `a.len() != b.len()`.
+    ///
+    /// # Performance
+    ///
+    /// Typical speedups over scalar:
+    /// - WASM SIMD128: ~2x
+    /// - AVX2: ~2-4x
+    /// - NEON: ~2-4x
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use edgevec::metric::simd::euclidean_distance;
+    ///
+    /// let a = vec![0.0f32, 0.0, 0.0];
+    /// let b = vec![3.0f32, 4.0, 0.0];
+    /// let distance = euclidean_distance(&a, &b);
+    /// assert!((distance - 5.0).abs() < 1e-6); // 3-4-5 triangle
+    /// ```
+    #[inline]
+    #[must_use]
+    pub fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
+        wasm_simd: wasm::euclidean_distance(a, b),
+        avx2: x86::euclidean_distance(a, b),
+        neon: crate::simd::neon::euclidean_distance(a, b),
+        fallback: crate::metric::scalar::euclidean_distance(a, b),
     }
 }
 
@@ -1369,5 +1514,117 @@ mod hamming_tests {
         let a = vec![0u8; 10];
         let b = vec![0u8; 20];
         let _ = hamming_distance(&a, &b);
+    }
+}
+
+// =============================================================================
+// Unit Tests for Euclidean Distance
+// =============================================================================
+
+#[cfg(test)]
+mod euclidean_tests {
+    use super::euclidean_distance;
+
+    /// Reference scalar implementation for correctness verification.
+    fn scalar_euclidean(a: &[f32], b: &[f32]) -> f32 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| {
+                let diff = x - y;
+                diff * diff
+            })
+            .sum::<f32>()
+            .sqrt()
+    }
+
+    #[test]
+    fn test_euclidean_empty_vectors() {
+        let a: Vec<f32> = vec![];
+        let b: Vec<f32> = vec![];
+        let dist = euclidean_distance(&a, &b);
+        assert!(dist.abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_euclidean_identical_vectors() {
+        let a = vec![1.0f32, 2.0, 3.0, 4.0];
+        let b = vec![1.0f32, 2.0, 3.0, 4.0];
+        let dist = euclidean_distance(&a, &b);
+        assert!(dist.abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_euclidean_345_triangle() {
+        // 3-4-5 right triangle
+        let a = vec![0.0f32, 0.0, 0.0];
+        let b = vec![3.0f32, 4.0, 0.0];
+        let dist = euclidean_distance(&a, &b);
+        assert!((dist - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_euclidean_single_element() {
+        let a = vec![5.0f32];
+        let b = vec![3.0f32];
+        // sqrt((5-3)^2) = sqrt(4) = 2
+        let dist = euclidean_distance(&a, &b);
+        assert!((dist - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_euclidean_known_value() {
+        // Each diff is 1.0, squared is 1.0
+        // 4 elements -> sum = 4.0, sqrt = 2.0
+        let a = vec![1.0f32, 2.0, 3.0, 4.0];
+        let b = vec![2.0f32, 3.0, 4.0, 5.0];
+        let dist = euclidean_distance(&a, &b);
+        assert!((dist - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_euclidean_matches_scalar() {
+        // Test various sizes to exercise SIMD paths
+        for size in [1, 4, 15, 16, 17, 31, 32, 33, 63, 64, 65, 128, 256, 768] {
+            let a: Vec<f32> = (0..size).map(|i| i as f32).collect();
+            let b: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
+
+            let simd_result = euclidean_distance(&a, &b);
+            let scalar_result = scalar_euclidean(&a, &b);
+
+            assert!(
+                (simd_result - scalar_result).abs() < 1e-3,
+                "Mismatch at size {}: SIMD={}, scalar={}",
+                size,
+                simd_result,
+                scalar_result
+            );
+        }
+    }
+
+    #[test]
+    fn test_euclidean_768dim_embedding() {
+        // Common embedding size: 768 dimensions
+        let a = vec![1.0f32; 768];
+        let b = vec![2.0f32; 768];
+        // Each diff = 1.0, squared = 1.0, sum = 768.0, sqrt ≈ 27.71
+        let expected = (768.0f32).sqrt();
+        let dist = euclidean_distance(&a, &b);
+        assert!((dist - expected).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_euclidean_all_zeros() {
+        let a = vec![0.0f32; 128];
+        let b = vec![0.0f32; 128];
+        let dist = euclidean_distance(&a, &b);
+        assert!(dist.abs() < 1e-6);
+    }
+
+    #[test]
+    #[should_panic(expected = "assertion")]
+    fn test_euclidean_mismatched_lengths_panics() {
+        let a = vec![1.0f32; 10];
+        let b = vec![1.0f32; 20];
+        let _ = euclidean_distance(&a, &b);
     }
 }
