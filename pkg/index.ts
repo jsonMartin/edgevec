@@ -51,6 +51,41 @@ export {
 
 export { FilterBuilder, FieldCondition } from './filter-builder.js';
 
+// Re-export filter functions for functional composition
+export {
+  // Comparison
+  eq,
+  ne,
+  gt,
+  lt,
+  ge,
+  le,
+  between,
+  // String
+  contains,
+  startsWith,
+  endsWith,
+  like,
+  // Array/Set
+  inArray,
+  notInArray,
+  any,
+  all,
+  none,
+  // Null
+  isNull,
+  isNotNull,
+  // Logical
+  and,
+  or,
+  not,
+  // Wrapper
+  filter,
+  // Special
+  matchAll,
+  matchNone,
+} from './filter-functions.js';
+
 // Re-export high-level wrapper API
 export {
   EdgeVecIndex,

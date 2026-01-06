@@ -2,7 +2,7 @@
   "name": "edgevec",
   "type": "module",
   "description": "High-performance embedded vector database for Browser, Node, and Edge",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
@@ -25,6 +25,18 @@
     "database",
     "wasm",
     "hnsw",
-    "similarity-search"
-  ]
+    "similarity-search",
+    "react"
+  ],
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.7"
+  }
 }
