@@ -9,6 +9,7 @@
 - [Quick Start](#quick-start)
 - [Model Comparison](#model-comparison)
 - [Provider Examples](#provider-examples)
+  - [Ollama (Local Server)](#ollama-local-server)
   - [Transformers.js (Browser-Native)](#transformersjs-browser-native)
   - [OpenAI API](#openai-api)
   - [Cohere API](#cohere-api)
@@ -102,6 +103,127 @@ console.log('Top 3 results:', results);
 ---
 
 ## Provider Examples
+
+### Ollama (Local Server)
+
+**Best for:** Privacy-focused apps, no API costs, local inference with powerful models.
+
+Ollama runs embedding models locally on your machine. No data leaves your device.
+
+**Installation:**
+```bash
+# macOS / Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Windows: Download from https://ollama.com/download
+
+# Pull an embedding model
+ollama pull nomic-embed-text
+```
+
+**Recommended Models:**
+
+| Model | Dimensions | Size | Use Case |
+|:------|:-----------|:-----|:---------|
+| `nomic-embed-text` | 768 | 274MB | General purpose, excellent quality |
+| `all-minilm` | 384 | 45MB | Smaller, faster |
+| `mxbai-embed-large` | 1024 | 670MB | Highest quality |
+| `snowflake-arctic-embed` | 1024 | 670MB | High quality, multilingual |
+
+**Code Example:**
+```javascript
+import init, { EdgeVec, EdgeVecConfig } from 'edgevec';
+
+class OllamaEmbeddingService {
+    constructor(model = 'nomic-embed-text') {
+        this.model = model;
+        this.baseUrl = 'http://localhost:11434';
+        // nomic-embed-text: 768D, all-minilm: 384D, mxbai-embed-large: 1024D
+        this.dimension = model === 'all-minilm' ? 384 :
+                         model === 'mxbai-embed-large' ? 1024 : 768;
+        this.db = null;
+    }
+
+    async initialize() {
+        // Check if Ollama is running
+        try {
+            const health = await fetch(`${this.baseUrl}/api/tags`);
+            if (!health.ok) {
+                throw new Error('Ollama not responding');
+            }
+        } catch (error) {
+            throw new Error(
+                'Ollama is not running. Start it with: ollama serve\n' +
+                'Then pull a model: ollama pull nomic-embed-text'
+            );
+        }
+
+        await init();
+        const config = new EdgeVecConfig(this.dimension);
+        this.db = new EdgeVec(config);
+        console.log(`Ollama service ready with ${this.model} (${this.dimension}D)`);
+    }
+
+    async embed(text) {
+        const response = await fetch(`${this.baseUrl}/api/embeddings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: this.model,
+                prompt: text
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Ollama error: ${error}`);
+        }
+
+        const data = await response.json();
+        return new Float32Array(data.embedding);
+    }
+
+    async embedBatch(texts) {
+        // Ollama doesn't support native batching, process sequentially
+        const embeddings = [];
+        for (const text of texts) {
+            embeddings.push(await this.embed(text));
+        }
+        return embeddings;
+    }
+
+    insert(embedding, metadata = null) {
+        return this.db.insert(embedding, metadata);
+    }
+
+    search(queryEmbedding, k = 10) {
+        return this.db.search(queryEmbedding, k);
+    }
+}
+
+// Usage
+const service = new OllamaEmbeddingService('nomic-embed-text');
+await service.initialize();
+
+const vector = await service.embed("Your document text");
+const id = service.insert(vector, { category: 'notes' });
+
+const queryVector = await service.embed("search query");
+const results = service.search(queryVector, 5);
+```
+
+**Benefits:**
+- 100% local — no data leaves your machine
+- No API costs — run unlimited embeddings for free
+- Fast — nomic-embed-text averages ~50ms per embedding
+- Powerful models — access to latest open-source models
+
+**Limitations:**
+- Requires local installation
+- Browser-only apps need a local server or backend proxy
+- Resource intensive — needs decent CPU/GPU
+
+---
 
 ### Transformers.js (Browser-Native)
 
@@ -1054,19 +1176,32 @@ console.log(similar);
 ```
 Do you need 100% privacy (no server calls)?
 │
-├── YES → Use Transformers.js (browser-native)
+├── YES → Running in browser only?
 │   │
-│   ├── Need fastest loading?
-│   │   └── MiniLM-L6-v2 (384D, 23MB)
+│   ├── YES → Use Transformers.js (browser-native)
+│   │   │
+│   │   ├── Need fastest loading?
+│   │   │   └── MiniLM-L6-v2 (384D, 23MB)
+│   │   │
+│   │   ├── Need best English quality?
+│   │   │   └── BGE-base-en-v1.5 (768D, 110MB)
+│   │   │
+│   │   ├── Need long document support?
+│   │   │   └── Nomic-embed-text-v1 (768D, 8k tokens)
+│   │   │
+│   │   └── Need multi-language?
+│   │       └── Multilingual-E5-small (384D, 118MB)
 │   │
-│   ├── Need best English quality?
-│   │   └── BGE-base-en-v1.5 (768D, 110MB)
-│   │
-│   ├── Need long document support?
-│   │   └── Nomic-embed-text-v1 (768D, 8k tokens)
-│   │
-│   └── Need multi-language?
-│       └── Multilingual-E5-small (384D, 118MB)
+│   └── NO → Use Ollama (local server)
+│       │
+│       ├── Need general purpose?
+│       │   └── nomic-embed-text (768D, 274MB)
+│       │
+│       ├── Need smallest/fastest?
+│       │   └── all-minilm (384D, 45MB)
+│       │
+│       └── Need highest quality?
+│           └── mxbai-embed-large (1024D, 670MB)
 │
 └── NO → Use an API
     │
@@ -1106,6 +1241,7 @@ EdgeVec + Embeddings = Powerful semantic search in the browser.
 ## Links
 
 - [EdgeVec GitHub](https://github.com/matte1782/edgevec)
+- [Ollama](https://ollama.com/) — Local LLM and embedding models
 - [Transformers.js Documentation](https://huggingface.co/docs/transformers.js)
 - [OpenAI Embeddings Guide](https://platform.openai.com/docs/guides/embeddings)
 - [Cohere Embed API](https://docs.cohere.com/reference/embed)
@@ -1113,4 +1249,4 @@ EdgeVec + Embeddings = Powerful semantic search in the browser.
 
 ---
 
-*Last updated: 2025-12-20 | EdgeVec v0.5.4*
+*Last updated: 2026-01-25 | EdgeVec v0.8.0*
