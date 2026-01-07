@@ -19,7 +19,7 @@ pub mod wal;
 /// Persistence writer.
 pub mod writer;
 
-pub use chunking::ChunkedWriter;
+pub use chunking::{ChunkedWriter, MIN_CHUNK_SIZE};
 pub use header::{
     FileHeader, Flags, HeaderError, MetadataHeaderError, MetadataSectionHeader, FORMAT_JSON,
     FORMAT_POSTCARD, MAGIC, METADATA_MAGIC, METADATA_VERSION, VERSION_MAJOR, VERSION_MINOR,

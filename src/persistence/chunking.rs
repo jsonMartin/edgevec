@@ -3,11 +3,27 @@
 //! This module provides the [`ChunkedWriter`] trait and implementation
 //! to serialize the database into small, manageable chunks suitable for
 //! environment-constrained I/O (e.g., IndexedDB in browsers).
+//!
+//! # Chunk Size Requirements
+//!
+//! The minimum chunk size is [`MIN_CHUNK_SIZE`] (64 bytes), which is the size
+//! of the file header. Chunk sizes smaller than this are automatically clamped
+//! to the minimum to ensure the header can be written in a single chunk.
 
 use crate::hnsw::HnswIndex;
 use crate::persistence::header::{FileHeader, Flags, MetadataSectionHeader};
 use crate::storage::VectorStorage;
 use std::cmp::min;
+
+/// Minimum allowed chunk size in bytes.
+///
+/// This equals the file header size (64 bytes). Smaller chunk sizes would require
+/// splitting the header across multiple chunks, which adds complexity without
+/// practical benefit (no real-world I/O system has a 64-byte limit).
+///
+/// If a smaller `chunk_size` is passed to [`ChunkedWriter::export_chunked`],
+/// it will be silently clamped to this minimum.
+pub const MIN_CHUNK_SIZE: usize = 64;
 
 /// A trait for exporting data in chunks.
 pub trait ChunkedWriter {
@@ -15,7 +31,14 @@ pub trait ChunkedWriter {
     ///
     /// # Arguments
     ///
-    /// * `chunk_size` - Maximum size of each chunk in bytes.
+    /// * `chunk_size` - Maximum size of each chunk in bytes. Values below
+    ///   [`MIN_CHUNK_SIZE`] (64 bytes) are clamped to the minimum.
+    ///
+    /// # Chunk Size Constraints
+    ///
+    /// The minimum effective chunk size is 64 bytes (file header size).
+    /// Passing a smaller value will not cause an error; instead, the
+    /// implementation clamps it to [`MIN_CHUNK_SIZE`].
     fn export_chunked(&self, chunk_size: usize) -> ChunkIter<'_>;
 }
 
@@ -61,8 +84,9 @@ enum SerializationState {
 impl<'a> ChunkedWriter for (&'a VectorStorage, &'a HnswIndex) {
     fn export_chunked(&self, chunk_size: usize) -> ChunkIter<'a> {
         let (storage, index) = self;
-        // Clamp chunk size to ensure header fits (prevent panic in next())
-        let chunk_size = std::cmp::max(chunk_size, 64);
+        // Clamp chunk size to minimum (header must fit in one chunk).
+        // See MIN_CHUNK_SIZE documentation for rationale.
+        let chunk_size = chunk_size.max(MIN_CHUNK_SIZE);
 
         // Calculate offsets for header
         let dimensions = storage.dimensions();
@@ -167,15 +191,19 @@ impl Iterator for ChunkIter<'_> {
             match self.state {
                 SerializationState::Header => {
                     let bytes = &self.header_bytes;
-                    // Header is small (64 bytes), always fits in chunk_size (unless chunk_size < 64, which is pathological)
+                    // Header (MIN_CHUNK_SIZE bytes) always fits because constructor
+                    // clamps chunk_size to minimum. This branch is defensive only.
                     if space_left >= bytes.len() {
                         self.buffer.extend_from_slice(bytes);
                         self.state = SerializationState::VectorData;
                     } else {
-                        // Edge case: chunk_size < 64 bytes (header size).
-                        // Constructor clamps chunk_size to minimum 64 bytes.
-                        // If this branch executes, caller violated API contract.
-                        // Return partial chunk without panicking.
+                        // Defensive: should never execute due to MIN_CHUNK_SIZE clamp.
+                        // If reached, return partial chunk without panicking.
+                        debug_assert!(
+                            false,
+                            "chunk_size {} < MIN_CHUNK_SIZE {}",
+                            self.chunk_size, MIN_CHUNK_SIZE
+                        );
                         self.buffer.extend_from_slice(&bytes[..space_left]);
                         break;
                     }
@@ -413,5 +441,151 @@ mod tests {
         // No metadata section since index has no metadata
         let expected = 64 + 160 + 2; // Header + vector data + tombstones
         assert_eq!(total_bytes, expected);
+    }
+
+    /// Tests that chunk_size = 0 is clamped to MIN_CHUNK_SIZE and works correctly.
+    #[test]
+    fn test_chunk_size_zero_edge_case() {
+        let config = HnswConfig::new(4);
+        let mut storage = VectorStorage::new(&config, None);
+        storage.insert(&[1.0, 2.0, 3.0, 4.0]).unwrap();
+
+        let index = HnswIndex::new(config, &storage).unwrap();
+        let writer = (&storage, &index);
+
+        // chunk_size = 0 should be clamped to MIN_CHUNK_SIZE (64)
+        let iter = writer.export_chunked(0);
+
+        let chunks: Vec<_> = iter.collect();
+        assert!(!chunks.is_empty(), "Should produce at least one chunk");
+
+        // All chunks should be <= MIN_CHUNK_SIZE (since 0 was clamped to 64)
+        for chunk in &chunks {
+            assert!(
+                chunk.len() <= MIN_CHUNK_SIZE,
+                "Chunk size {} exceeds clamped minimum {}",
+                chunk.len(),
+                MIN_CHUNK_SIZE
+            );
+        }
+
+        // Verify header is valid
+        let header = FileHeader::from_bytes(&chunks[0][0..64]).unwrap();
+        assert_eq!(header.vector_count, 1);
+    }
+
+    /// Tests that chunk_size = 1 is clamped to MIN_CHUNK_SIZE.
+    #[test]
+    fn test_chunk_size_one_edge_case() {
+        let config = HnswConfig::new(4);
+        let storage = VectorStorage::new(&config, None);
+        let index = HnswIndex::new(config, &storage).unwrap();
+        let writer = (&storage, &index);
+
+        // chunk_size = 1 should be clamped to MIN_CHUNK_SIZE (64)
+        let iter = writer.export_chunked(1);
+
+        let chunks: Vec<_> = iter.collect();
+        assert!(!chunks.is_empty());
+
+        // First chunk should be exactly header (64 bytes)
+        assert_eq!(chunks[0].len(), MIN_CHUNK_SIZE);
+    }
+
+    /// Tests that chunk_size = 63 (one less than minimum) is clamped.
+    #[test]
+    fn test_chunk_size_just_below_minimum() {
+        let config = HnswConfig::new(4);
+        let storage = VectorStorage::new(&config, None);
+        let index = HnswIndex::new(config, &storage).unwrap();
+        let writer = (&storage, &index);
+
+        // chunk_size = 63 should be clamped to MIN_CHUNK_SIZE (64)
+        let iter = writer.export_chunked(63);
+
+        let chunks: Vec<_> = iter.collect();
+        assert!(!chunks.is_empty());
+        assert_eq!(chunks[0].len(), MIN_CHUNK_SIZE);
+    }
+
+    /// Tests that chunk_size = 64 (exactly minimum) works correctly.
+    #[test]
+    fn test_chunk_size_exactly_minimum() {
+        let config = HnswConfig::new(4);
+        let mut storage = VectorStorage::new(&config, None);
+        // Insert multiple vectors to force multiple chunks
+        #[allow(clippy::cast_precision_loss)]
+        for i in 0..5 {
+            storage.insert(&[i as f32; 4]).unwrap();
+        }
+
+        let index = HnswIndex::new(config, &storage).unwrap();
+        let writer = (&storage, &index);
+
+        // chunk_size = 64 (exactly MIN_CHUNK_SIZE)
+        let iter = writer.export_chunked(MIN_CHUNK_SIZE);
+
+        let mut total_bytes = 0;
+        let mut chunk_count = 0;
+        for chunk in iter {
+            assert!(
+                chunk.len() <= MIN_CHUNK_SIZE,
+                "Chunk {} has size {} > {}",
+                chunk_count,
+                chunk.len(),
+                MIN_CHUNK_SIZE
+            );
+            total_bytes += chunk.len();
+            chunk_count += 1;
+        }
+
+        // Should have multiple chunks due to small chunk size
+        assert!(
+            chunk_count > 1,
+            "Expected multiple chunks, got {}",
+            chunk_count
+        );
+
+        // Header (64) + 5 vectors * 4 dims * 4 bytes (80) + tombstones (1 byte for 5 bits) = 145 bytes
+        let expected = 64 + 80 + 1;
+        assert_eq!(total_bytes, expected);
+    }
+
+    /// Tests data integrity with edge case chunk sizes (round-trip verification).
+    #[test]
+    fn test_chunk_size_edge_case_data_integrity() {
+        let config = HnswConfig::new(4);
+        let mut storage = VectorStorage::new(&config, None);
+        let test_vectors = vec![
+            [1.0_f32, 2.0, 3.0, 4.0],
+            [5.0, 6.0, 7.0, 8.0],
+            [9.0, 10.0, 11.0, 12.0],
+        ];
+        for v in &test_vectors {
+            storage.insert(v).unwrap();
+        }
+
+        let index = HnswIndex::new(config, &storage).unwrap();
+        let writer = (&storage, &index);
+
+        // Test with chunk_size = 0 (clamped to 64)
+        let iter = writer.export_chunked(0);
+        let mut combined = Vec::new();
+        for chunk in iter {
+            combined.extend_from_slice(&chunk);
+        }
+
+        // Verify header
+        let header = FileHeader::from_bytes(&combined[0..64]).unwrap();
+        assert_eq!(header.vector_count, 3);
+        assert_eq!(header.dimensions, 4);
+
+        // Verify vector data (starts at offset 64)
+        let vector_bytes = &combined[64..64 + 48]; // 3 vectors * 4 dims * 4 bytes = 48
+        let vectors: &[f32] = bytemuck::cast_slice(vector_bytes);
+
+        assert_eq!(vectors[0..4], test_vectors[0]);
+        assert_eq!(vectors[4..8], test_vectors[1]);
+        assert_eq!(vectors[8..12], test_vectors[2]);
     }
 }
