@@ -224,11 +224,20 @@ Consider using both for different tiers:
 
 2. **Convert to EdgeVec format**:
    ```rust
-   let mut index = HnswIndex::new(HnswConfig::default());
+   use edgevec::{HnswConfig, HnswIndex, VectorStorage};
+   use edgevec::persistence::{write_snapshot, MemoryBackend};
+
+   let config = HnswConfig::new(768); // dimensions
+   let mut storage = VectorStorage::new(&config, None);
+   let mut index = HnswIndex::new(config, &storage)?;
+
    for (id, embedding) in csv_reader {
-       index.add(id, &embedding)?;
+       index.insert(&embedding, &mut storage)?;
    }
-   index.save("vectors.edgevec")?;
+
+   // Save to persistence backend
+   let mut backend = MemoryBackend::new();
+   write_snapshot(&index, &storage, &mut backend)?;
    ```
 
 3. **Migrate filters**: Convert SQL WHERE clauses to EdgeVec filter expressions.
@@ -237,7 +246,17 @@ Consider using both for different tiers:
 
 1. **Export from EdgeVec**:
    ```rust
-   let vectors = index.export_all()?;
+   use edgevec::persistence::{read_snapshot, MemoryBackend};
+
+   // Load existing index
+   let backend = MemoryBackend::from_bytes(&saved_data);
+   let (index, storage) = read_snapshot(&backend)?;
+
+   // Iterate vectors for export
+   for id in 0..storage.len() {
+       let vector = storage.get_vector(id);
+       // Write to CSV/SQL format
+   }
    ```
 
 2. **Import to pgvector**:
