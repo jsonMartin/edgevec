@@ -254,6 +254,8 @@ const results = await index.search(embedding, 10, { filter: query });
 - **Logic:** `and`, `or`, `not`, `filter`
 - **Special:** `matchAll`, `matchNone`
 
+[25 copy-paste ready filter examples ->](docs/guides/FILTER_EXAMPLES.md)
+
 ### Memory Pressure API (v0.6.0)
 
 Monitor and control WASM heap usage:
@@ -646,6 +648,7 @@ All reactive values are Vue refs (use `.value` to access).
 |:---------|:------------|
 | [Tutorial](docs/TUTORIAL.md) | Getting started guide |
 | [Filter Syntax](docs/api/FILTER_SYNTAX.md) | Complete filter expression reference |
+| [Filter Examples](docs/guides/FILTER_EXAMPLES.md) | 25 copy-paste ready filter examples |
 | [Database Operations](docs/api/DATABASE_OPERATIONS.md) | CRUD operations guide |
 | [Performance Tuning](docs/PERFORMANCE_TUNING.md) | HNSW parameter optimization |
 | [Migration Guide](docs/MIGRATION.md) | Migrating from hnswlib, FAISS, Pinecone |
