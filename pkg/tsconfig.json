@@ -21,7 +21,16 @@
     "index.ts",
     "filter.ts",
     "filter-builder.ts",
-    "edgevec-wrapper.ts"
+    "filter-functions.ts",
+    "edgevec-wrapper.ts",
+    "react/index.ts",
+    "react/types.ts",
+    "react/useEdgeVec.ts",
+    "react/useSearch.ts",
+    "vue/index.ts",
+    "vue/types.ts",
+    "vue/useEdgeVec.ts",
+    "vue/useSearch.ts"
   ],
   "exclude": [
     "node_modules",

@@ -484,6 +484,162 @@ export function SemanticSearch() {
 
 ---
 
+## Vue Integration (v0.8.0)
+
+EdgeVec provides Vue 3 composables for seamless integration with Vue 3.3+ applications.
+
+### Installation
+
+```bash
+npm install edgevec vue
+```
+
+### useEdgeVec
+
+Initialize an EdgeVec database with automatic WASM loading:
+
+```vue
+<script setup lang="ts">
+import { useEdgeVec } from 'edgevec/vue';
+
+const { db, isReady, isLoading, error, stats, save } = useEdgeVec({
+  dimensions: 384,
+  persistName: 'my-vectors',  // Optional: enables IndexedDB persistence
+});
+</script>
+
+<template>
+  <div v-if="isLoading">Loading EdgeVec...</div>
+  <div v-else-if="error">Error: {{ error.message }}</div>
+  <div v-else-if="isReady">{{ stats?.count }} vectors indexed</div>
+</template>
+```
+
+### useSearch
+
+Perform reactive searches that automatically update when the query changes:
+
+```vue
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { useEdgeVec, useSearch } from 'edgevec/vue';
+import { eq, and, gt } from 'edgevec';
+
+const { db, isReady } = useEdgeVec({ dimensions: 384 });
+const queryVector = ref<number[] | null>(null);
+
+const { results, isSearching, searchTime } = useSearch(db, {
+  vector: queryVector,
+  k: 10,
+  filter: and(eq('category', 'documents'), gt('score', 0.5)),
+  enabled: computed(() => isReady.value && queryVector.value !== null),
+  debounceMs: 300,  // Debounce rapid changes
+});
+</script>
+
+<template>
+  <div>
+    <span v-if="isSearching">Searching...</span>
+    <span v-if="searchTime">Found in {{ searchTime.toFixed(1) }}ms</span>
+    <ul>
+      <li v-for="result in results" :key="result.id">
+        Score: {{ result.score.toFixed(4) }}
+      </li>
+    </ul>
+  </div>
+</template>
+```
+
+### Complete Example
+
+```vue
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { useEdgeVec, useSearch } from 'edgevec/vue';
+import { and, eq, gt } from 'edgevec';
+
+const { db, isReady, stats, save } = useEdgeVec({
+  dimensions: 384,
+  persistName: 'semantic-search-demo'
+});
+
+const query = ref('');
+const queryVector = ref<number[] | null>(null);
+
+const { results, isSearching, searchTime } = useSearch(db, {
+  vector: queryVector,
+  k: 10,
+  filter: and(eq('type', 'document'), gt('relevance', 0.5)),
+  enabled: computed(() => isReady.value && queryVector.value !== null),
+  debounceMs: 300
+});
+
+async function handleSearch() {
+  if (query.value.trim()) {
+    // Your embedding function here
+    const embedding = await getEmbedding(query.value);
+    queryVector.value = embedding;
+  }
+}
+</script>
+
+<template>
+  <div v-if="!isReady">Initializing...</div>
+  <div v-else>
+    <input v-model="query" />
+    <button @click="handleSearch">Search</button>
+
+    <p>{{ stats?.count }} vectors | {{ isSearching ? 'Searching...' : `${searchTime?.toFixed(1)}ms` }}</p>
+
+    <ul>
+      <li v-for="r in results" :key="r.id">
+        ID: {{ r.id }}, Score: {{ r.score.toFixed(4) }}
+      </li>
+    </ul>
+  </div>
+</template>
+```
+
+### Composable API Reference
+
+#### useEdgeVec(options)
+
+| Option | Type | Default | Description |
+|:-------|:-----|:--------|:------------|
+| dimensions | number | required | Vector dimensions |
+| persistName | string | undefined | IndexedDB store name |
+| efConstruction | number | 200 | HNSW build parameter |
+| m | number | 16 | HNSW connections |
+
+**Returns:** `{ db, isReady, isLoading, error, stats, reload, save }`
+
+All reactive values are Vue refs (use `.value` to access).
+
+#### useSearch(db, options)
+
+| Option | Type | Default | Description |
+|:-------|:-----|:--------|:------------|
+| vector | Ref\<Float32Array \| number[] \| null\> | required | Query vector (can be ref) |
+| k | number \| Ref\<number\> | 10 | Number of results |
+| filter | FilterExpression \| string \| Ref | undefined | Filter expression |
+| enabled | boolean \| Ref\<boolean\> \| ComputedRef | true | Enable/disable search |
+| debounceMs | number | 0 | Debounce delay |
+| includeMetadata | boolean | false | Include metadata |
+| includeVectors | boolean | false | Include vectors |
+
+**Returns:** `{ results, isSearching, error, searchTime, refetch }`
+
+### Vue vs React: Key Differences
+
+| Feature | React | Vue |
+|:--------|:------|:----|
+| State | useState returns value | useEdgeVec returns refs (.value) |
+| Enabled condition | `enabled: isReady && vector !== null` | `enabled: computed(() => isReady.value && vector.value !== null)` |
+| Reactivity | Explicit dependency arrays | Automatic tracking |
+| Options | Raw values only | Supports both raw values and refs |
+
+---
+
 ## Documentation
 
 | Document | Description |
