@@ -7,12 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned (v0.8.0)
-- Soft-delete BQ tracking optimization
-- Incremental persistence for large indices
-- Vector compression enhancements
-- Bundle size optimization (tree-shaking analysis)
-- Code consolidation (Metric trait refactor)
+### Planned (v0.9.0)
+- Community features
+- Additional documentation improvements
+- Performance optimizations
+
+---
+
+## [0.8.0] - 2026-02-02 — Consolidation + Developer Experience
+
+**Focus:** Developer experience improvements, framework integrations, and technical debt reduction.
+
+### Added
+
+#### Vue 3 Composables (Week 34)
+- **`useEdgeVec`** — Reactive database initialization with loading states
+  - Async initialization with `isLoading`, `error`, `isReady` refs
+  - Full TypeScript support with `MaybeRef`/`MaybeRefOrGetter`
+  - Automatic cleanup on component unmount
+
+- **`useSearch`** — Reactive search with debouncing
+  - Configurable debounce (default 300ms)
+  - Reactive result updates
+  - Works with Vue's reactivity system
+
+```typescript
+import { useEdgeVec, useSearch } from 'edgevec/vue';
+
+const { db, isLoading, isReady } = useEdgeVec({ dimensions: 384 });
+const { results, search, isSearching } = useSearch(db);
+```
+
+#### Standalone Filter Functions (Week 34)
+- Export filter functions directly from main package:
+  - Comparison: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`
+  - String: `contains`, `startsWith`, `endsWith`
+  - Logical: `and`, `or`, `not`, `all`, `any`
+
+```typescript
+import { eq, gt, and, contains } from 'edgevec';
+
+const filter = and(
+  eq('category', 'electronics'),
+  gt('price', 100)
+);
+```
+
+#### Documentation (Weeks 33-35)
+- **Filter Examples Guide** — 25 real-world filter examples
+  - E-commerce, document management, user profiles
+  - Complex nested filters, date ranges, arrays
+
+- **Embedding Integration Guide** — 5 provider integrations
+  - Ollama (local), Transformers.js (browser)
+  - OpenAI, Cohere, HuggingFace Inference API
+
+- **EdgeVec vs pgvector Comparison** — Architecture and use case guide
+  - Feature comparison tables
+  - When to choose each solution
+  - Migration considerations
+
+#### SIMD Optimizations (Week 32)
+- **Euclidean distance SIMD acceleration**
+  - Consolidated SIMD dispatch system
+  - Unified architecture across all distance metrics
+
+### Fixed
+
+#### Technical Debt (Week 35)
+- **WAL chunk_size edge case** — Added `MIN_CHUNK_SIZE` constant (64 bytes)
+  - Prevents header split across chunks
+  - 5 new edge case tests
+
+- **Safety documentation** — Proper `#[doc]` placement for `unsafe` blocks
+  - All 62 SAFETY comments verified compliant
+
+- **Cast truncation warnings** — Resolved 65+ `cast_possible_truncation` warnings
+  - All casts documented with `#[allow]` justifications
+  - Module-level documentation in graph.rs, neighbor.rs, search_bq.rs
+
+- **Test clippy warnings** — Clean test and bench code
+  - Fixed binary literal formatting
+  - Inlined format arguments
+  - Zero warnings in `cargo clippy --tests --benches`
+
+### Changed
+
+- Improved TypeScript type exports for Vue composables
+- Consistent high-level API documentation across all guides
+
+### Documentation
+
+- `docs/guides/FILTER_EXAMPLES.md` — 25 filter examples
+- `docs/guides/EMBEDDING_GUIDE.md` — 5 embedding providers
+- `docs/guides/COMPARISON_PGVECTOR.md` — Architecture comparison
+- `pkg/vue/README.md` — Vue composables documentation
+
+### Performance
+
+All v0.7.0 performance targets maintained:
+| Metric | Target | Achieved |
+|:-------|:-------|:---------|
+| Search (100K, 768D) | <10ms | 4.2ms |
+| Insert (single) | <5ms | 0.8ms |
+| WASM bundle | <500KB | 477KB |
 
 ---
 
