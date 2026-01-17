@@ -1,6 +1,7 @@
 //! WASM Bindings for EdgeVec.
 
 use crate::error::EdgeVecError;
+use crate::flat::BinaryFlatIndex;
 use crate::hnsw::{GraphError, HnswConfig, HnswIndex};
 use crate::metadata::MetadataStore;
 use crate::persistence::{chunking::ChunkIter, ChunkedWriter, PersistenceError};
@@ -100,91 +101,189 @@ pub fn benchmark_hamming(bytes: usize, iterations: usize) -> f64 {
     result // Return microseconds per iteration
 }
 
-/// Side-by-side benchmark: New WASM SIMD128 vs Current runtime dispatcher.
+/// Batch benchmark: Compare SIMD implementations searching through N vectors.
 ///
-/// Compares:
-/// 1. **New** (`metric::simd::hamming_distance`): Compile-time SIMD128 detection → uses WASM SIMD
-/// 2. **Current** (`simd::popcount::simd_popcount_xor`): Runtime detection → falls to scalar in WASM
+/// This is a realistic benchmark that simulates searching through a dataset:
+/// - Accepts vectors from JavaScript (same path as real insertions)
+/// - For each iteration, computes hamming distance from query to ALL vectors
+/// - Compares new WASM SIMD128 vs current scalar fallback
 ///
-/// Returns a JSON string with timings:
+/// # Arguments
+///
+/// * `vectors_js` - Array of Uint8Array vectors (created in JavaScript)
+/// * `query_js` - Query vector as Uint8Array
+/// * `iterations` - Number of full scans to perform
+///
+/// Returns JSON with throughput metrics:
 /// ```json
-/// {"new_us": 0.15, "current_us": 0.42, "speedup": 2.8, "new_backend": "wasm_simd128", "current_backend": "scalar"}
+/// {
+///   "num_vectors": 10000,
+///   "bytes_per_vector": 128,
+///   "iterations": 100,
+///   "new_ms": 1.23,
+///   "current_ms": 3.45,
+///   "speedup": 2.8,
+///   "new_throughput": "8.1M vec/s",
+///   "current_throughput": "2.9M vec/s"
+/// }
 /// ```
-#[wasm_bindgen(js_name = "benchmarkHammingComparison")]
+#[wasm_bindgen(js_name = "benchmarkHammingBatch")]
+#[allow(clippy::needless_pass_by_value)] // wasm-bindgen requires pass-by-value for Uint8Array
 #[allow(clippy::cast_possible_truncation)] // Intentional truncation for pseudo-random test data
-pub fn benchmark_hamming_comparison(bytes: usize, iterations: usize) -> String {
-    // Current implementation - uses runtime detection, falls to scalar in WASM
+pub fn benchmark_hamming_batch(
+    vectors_js: &js_sys::Array,
+    query_js: Uint8Array,
+    iterations: usize,
+) -> String {
     use crate::simd::popcount::simd_popcount_xor;
 
-    // Create two random-ish vectors (truncation is intentional for test data)
-    let a: Vec<u8> = (0..bytes).map(|i| (i * 17 + 31) as u8).collect();
-    let b: Vec<u8> = (0..bytes).map(|i| (i * 13 + 47) as u8).collect();
+    // Convert JS vectors to Rust - same path as real insertions
+    let vectors: Vec<Vec<u8>> = vectors_js
+        .iter()
+        .map(|v| Uint8Array::from(v).to_vec())
+        .collect();
+
+    let num_vectors = vectors.len();
+    let bytes_per_vector = if num_vectors > 0 { vectors[0].len() } else { 0 };
+
+    // Convert query vector
+    let query: Vec<u8> = query_js.to_vec();
 
     let perf = web_sys::window().and_then(|w| w.performance());
 
-    // Warmup both implementations
-    for _ in 0..100 {
-        let _ = crate::metric::simd::hamming_distance(&a, &b);
-        let _ = simd_popcount_xor(&a, &b);
+    // Warmup
+    for v in vectors.iter().take(100.min(num_vectors)) {
+        let _ = crate::metric::simd::hamming_distance(&query, v);
+        let _ = simd_popcount_xor(&query, v);
     }
 
-    // Benchmark NEW: metric::simd::hamming_distance
-    // Uses compile-time #[cfg(target_feature = "simd128")] → WASM SIMD128
+    // Benchmark NEW: metric::simd::hamming_distance (WASM SIMD128)
     let start_new = perf.as_ref().map_or(0.0, web_sys::Performance::now);
-    let mut sum_new: u32 = 0;
+    let mut total_dist_new: u64 = 0;
     for _ in 0..iterations {
-        sum_new = sum_new.wrapping_add(crate::metric::simd::hamming_distance(&a, &b));
+        for v in &vectors {
+            total_dist_new += u64::from(crate::metric::simd::hamming_distance(&query, v));
+        }
     }
     let end_new = perf.as_ref().map_or(0.0, web_sys::Performance::now);
 
-    // Benchmark CURRENT: simd::popcount::simd_popcount_xor
-    // Uses runtime is_x86_feature_detected!() → falls to scalar in WASM
+    // Benchmark CURRENT: simd::popcount::simd_popcount_xor (scalar fallback in WASM)
     let start_current = perf.as_ref().map_or(0.0, web_sys::Performance::now);
-    let mut sum_current: u32 = 0;
+    let mut total_dist_current: u64 = 0;
     for _ in 0..iterations {
-        sum_current = sum_current.wrapping_add(simd_popcount_xor(&a, &b));
+        for v in &vectors {
+            total_dist_current += u64::from(simd_popcount_xor(&query, v));
+        }
     }
     let end_current = perf.as_ref().map_or(0.0, web_sys::Performance::now);
 
-    // Verify both produce same result
-    if sum_new != sum_current {
-        web_sys::console::warn_1(
-            &format!("WARNING: Results differ! new={sum_new} current={sum_current}").into(),
-        );
+    // Prevent optimizer removal
+    if total_dist_new == 0 || total_dist_current == 0 {
+        web_sys::console::log_1(&format!("sums: {total_dist_new} {total_dist_current}").into());
     }
 
-    // Prevent optimizer from removing the loops
-    if sum_new == 0 || sum_current == 0 {
-        web_sys::console::log_1(&format!("sums: {sum_new} {sum_current}").into());
-    }
+    let new_ms = end_new - start_new;
+    let current_ms = end_current - start_current;
+    let speedup = current_ms / new_ms;
 
-    // iterations is always < 2^53, precision loss is acceptable for benchmark timing
+    let total_comparisons = num_vectors * iterations;
     #[allow(clippy::cast_precision_loss)]
-    let new_us = (end_new - start_new) * 1000.0 / iterations as f64;
+    let new_throughput = (total_comparisons as f64) / (new_ms / 1000.0);
     #[allow(clippy::cast_precision_loss)]
-    let current_us = (end_current - start_current) * 1000.0 / iterations as f64;
-    let speedup = current_us / new_us;
+    let current_throughput = (total_comparisons as f64) / (current_ms / 1000.0);
 
-    // Determine which backend each is actually using
-    let new_backend = if cfg!(all(target_arch = "wasm32", target_feature = "simd128")) {
-        "WASM SIMD128"
-    } else if cfg!(all(target_arch = "x86_64", target_feature = "avx2")) {
-        "AVX2"
-    } else {
-        "Scalar"
-    };
-
-    // Current uses runtime detection - in WASM it's always scalar
-    let current_backend = if cfg!(target_arch = "wasm32") {
-        "Scalar"
-    } else {
-        "Runtime Dispatch"
+    // Format throughput with appropriate units
+    let format_throughput = |t: f64| -> String {
+        if t >= 1_000_000.0 {
+            format!("{:.1}M vec/s", t / 1_000_000.0)
+        } else if t >= 1_000.0 {
+            format!("{:.1}K vec/s", t / 1_000.0)
+        } else {
+            format!("{:.0} vec/s", t)
+        }
     };
 
     format!(
-        r#"{{"new_us": {new_us:.3}, "current_us": {current_us:.3}, "speedup": {speedup:.2}, "bytes": {bytes}, "iterations": {iterations}, "new_backend": "{new_backend}", "current_backend": "{current_backend}"}}"#
+        r#"{{"num_vectors": {num_vectors}, "bytes_per_vector": {bytes_per_vector}, "iterations": {iterations}, "new_ms": {new_ms:.2}, "current_ms": {current_ms:.2}, "speedup": {speedup:.2}, "new_throughput": "{}", "current_throughput": "{}"}}"#,
+        format_throughput(new_throughput),
+        format_throughput(current_throughput)
     )
 }
+
+/// Vector storage type for EdgeVec.
+///
+/// Determines how vectors are stored and processed.
+#[wasm_bindgen]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VectorType {
+    /// Standard 32-bit floating point vectors.
+    Float32 = 0,
+    /// Binary vectors (1-bit per dimension, packed into bytes).
+    /// Use with `metric = "hamming"`.
+    Binary = 1,
+}
+
+/// Distance metric type for EdgeVec.
+///
+/// Determines how vector similarity is calculated.
+#[wasm_bindgen]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MetricType {
+    /// L2 Squared (Euclidean) distance.
+    L2 = 0,
+    /// Cosine similarity (converted to distance).
+    Cosine = 1,
+    /// Dot product (converted to distance).
+    Dot = 2,
+    /// Hamming distance (for binary vectors).
+    Hamming = 3,
+}
+
+/// Index type for EdgeVec.
+///
+/// Determines the search algorithm and performance characteristics.
+///
+/// ## Performance Comparison
+///
+/// | Index Type | Insert | Search (1M) | Recall | Best For |
+/// |------------|--------|-------------|--------|----------|
+/// | Flat       | O(1) ~1μs | O(n) ~5-10ms | 100% (exact) | Real-time apps, <1M vectors |
+/// | HNSW       | O(log n) ~2ms | O(log n) ~2ms | 90-95% | Large datasets, batch insert |
+///
+/// ## Example (JavaScript)
+///
+/// ```javascript
+/// import { EdgeVecConfig, IndexType } from 'edgevec';
+///
+/// // Create a flat index for insert-heavy workloads
+/// const config = new EdgeVecConfig(1024);
+/// config.indexType = IndexType.Flat;
+///
+/// // Create an HNSW index for large-scale search (default)
+/// const hnswConfig = new EdgeVecConfig(1024);
+/// hnswConfig.indexType = IndexType.Hnsw; // This is the default
+/// ```
+#[wasm_bindgen]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum JsIndexType {
+    /// Brute force search (O(1) insert, O(n) search).
+    ///
+    /// Best for:
+    /// - Insert-heavy workloads (semantic caching)
+    /// - Datasets < 1M vectors
+    /// - When 100% recall (exact search) is required
+    Flat = 0,
+
+    /// HNSW graph index (O(log n) insert, O(log n) search).
+    ///
+    /// Best for:
+    /// - Large datasets (>1M vectors)
+    /// - Read-heavy workloads
+    /// - When approximate nearest neighbors is acceptable
+    #[default]
+    Hnsw = 1,
+}
+
 
 /// Configuration for EdgeVec database.
 #[wasm_bindgen]
@@ -196,6 +295,8 @@ pub struct EdgeVecConfig {
     ef_construction: Option<u32>,
     ef_search: Option<u32>,
     metric: Option<String>,
+    vector_type: Option<VectorType>,
+    index_type: Option<JsIndexType>,
 }
 
 #[wasm_bindgen]
@@ -211,6 +312,8 @@ impl EdgeVecConfig {
             ef_construction: None,
             ef_search: None,
             metric: None,
+            vector_type: None,
+            index_type: None, // Defaults to HNSW
         }
     }
 
@@ -238,10 +341,239 @@ impl EdgeVecConfig {
         self.ef_search = Some(ef);
     }
 
-    /// Set distance metric ("l2", "cosine", "dot").
+    /// Set distance metric ("l2", "cosine", "dot", "hamming").
     #[wasm_bindgen(setter)]
     pub fn set_metric(&mut self, metric: String) {
         self.metric = Some(metric);
+    }
+
+    /// Set distance metric using typed enum.
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(768);
+    /// config.setMetricType(MetricType.Cosine);
+    /// ```
+    #[wasm_bindgen(js_name = "setMetricType")]
+    pub fn set_metric_type(&mut self, metric_type: MetricType) {
+        let metric_str = match metric_type {
+            MetricType::L2 => "l2",
+            MetricType::Cosine => "cosine",
+            MetricType::Dot => "dot",
+            MetricType::Hamming => "hamming",
+        };
+        self.metric = Some(metric_str.to_string());
+    }
+
+    /// Set vector storage type.
+    ///
+    /// Use `VectorType.Binary` with `MetricType.Hamming` for binary vectors.
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(1024);
+    /// config.setVectorType(VectorType.Binary);
+    /// config.setMetricType(MetricType.Hamming);
+    /// ```
+    #[wasm_bindgen(setter)]
+    pub fn set_vector_type(&mut self, vt: VectorType) {
+        self.vector_type = Some(vt);
+        // Auto-set hamming metric for binary vectors if not already set
+        if vt == VectorType::Binary && self.metric.is_none() {
+            self.metric = Some("hamming".to_string());
+        }
+    }
+
+    /// Get the configured vector type.
+    #[wasm_bindgen(getter)]
+    pub fn vector_type(&self) -> Option<VectorType> {
+        self.vector_type
+    }
+
+    /// Set the index type (Flat or HNSW).
+    ///
+    /// - `Flat`: Brute force search (O(1) insert, O(n) search). Best for insert-heavy
+    ///   workloads, datasets < 1M vectors, or when 100% recall is required.
+    /// - `HNSW`: Graph-based search (O(log n) insert, O(log n) search). Best for
+    ///   large datasets and read-heavy workloads.
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// // For insert-heavy workloads (semantic caching)
+    /// const config = new EdgeVecConfig(1024);
+    /// config.indexType = IndexType.Flat;
+    ///
+    /// // For large-scale search (default)
+    /// const config2 = new EdgeVecConfig(1024);
+    /// config2.indexType = IndexType.Hnsw;
+    /// ```
+    #[wasm_bindgen(setter, js_name = "indexType")]
+    pub fn set_index_type(&mut self, index_type: JsIndexType) {
+        self.index_type = Some(index_type);
+    }
+
+    /// Get the configured index type.
+    #[wasm_bindgen(getter, js_name = "indexType")]
+    pub fn index_type(&self) -> JsIndexType {
+        self.index_type.unwrap_or_default()
+    }
+
+    /// Check if this configuration uses a Flat index.
+    #[wasm_bindgen(js_name = "isFlat")]
+    pub fn is_flat(&self) -> bool {
+        matches!(self.index_type, Some(JsIndexType::Flat))
+    }
+
+    /// Check if this configuration uses an HNSW index (default).
+    #[wasm_bindgen(js_name = "isHnsw")]
+    pub fn is_hnsw(&self) -> bool {
+        !self.is_flat()
+    }
+}
+
+/// Internal index variant for unified Flat/HNSW support.
+///
+/// This enum allows EdgeVec to wrap either a BinaryFlatIndex or an HnswIndex,
+/// enabling a single API for both index types.
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "variant_type")]
+pub(crate) enum IndexVariant {
+    /// HNSW graph index with separate storage.
+    /// Box is used to reduce enum size (HnswIndex is 736 bytes vs BinaryFlatIndex 48 bytes).
+    #[serde(rename = "hnsw")]
+    Hnsw {
+        index: Box<HnswIndex>,
+        storage: VectorStorage,
+    },
+    /// Flat (brute-force) index with internal storage.
+    #[serde(rename = "flat")]
+    Flat { index: BinaryFlatIndex },
+}
+
+#[allow(dead_code)]
+impl IndexVariant {
+    /// Get dimensions (bits for binary, floats for HNSW).
+    #[inline]
+    pub fn dimensions(&self) -> u32 {
+        match self {
+            IndexVariant::Hnsw { index, .. } => index.config.dimensions,
+            IndexVariant::Flat { index } => index.dimensions() as u32,
+        }
+    }
+
+    /// Get number of vectors in the index.
+    #[inline]
+    pub fn len(&self) -> usize {
+        match self {
+            IndexVariant::Hnsw { index, .. } => index.len(),
+            IndexVariant::Flat { index } => index.len(),
+        }
+    }
+
+    /// Check if index is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Get memory usage in bytes.
+    #[inline]
+    pub fn memory_usage(&self) -> usize {
+        match self {
+            IndexVariant::Hnsw { index, storage } => {
+                storage.binary_data.capacity() + index.memory_usage()
+            }
+            IndexVariant::Flat { index } => index.memory_usage(),
+        }
+    }
+
+    /// Get estimated serialized size in bytes.
+    #[inline]
+    pub fn serialized_size(&self) -> usize {
+        match self {
+            IndexVariant::Hnsw { index, storage } => {
+                // Header + vector data + graph overhead estimate
+                64 + storage.binary_data.len() + index.len() * 64
+            }
+            IndexVariant::Flat { index } => index.serialized_size(),
+        }
+    }
+
+    /// Check if this is an HNSW index.
+    #[inline]
+    pub fn is_hnsw(&self) -> bool {
+        matches!(self, IndexVariant::Hnsw { .. })
+    }
+
+    /// Check if this is a Flat index.
+    #[inline]
+    pub fn is_flat(&self) -> bool {
+        matches!(self, IndexVariant::Flat { .. })
+    }
+
+    /// Get HNSW config (only valid for HNSW variant).
+    /// Returns None for Flat index.
+    #[inline]
+    pub fn hnsw_config(&self) -> Option<&HnswConfig> {
+        match self {
+            IndexVariant::Hnsw { index, .. } => Some(&index.config),
+            IndexVariant::Flat { .. } => None,
+        }
+    }
+
+    /// Try to get mutable HNSW index and storage.
+    /// Returns error if this is a Flat index.
+    #[inline]
+    pub fn as_hnsw_mut(&mut self) -> Result<(&mut HnswIndex, &mut VectorStorage), EdgeVecError> {
+        match self {
+            IndexVariant::Hnsw { index, storage } => Ok((index, storage)),
+            IndexVariant::Flat { .. } => Err(EdgeVecError::Validation(
+                "This operation is only supported for HNSW index. Use IndexType.Hnsw in config."
+                    .to_string(),
+            )),
+        }
+    }
+
+    /// Try to get immutable HNSW index and storage.
+    /// Returns error if this is a Flat index.
+    #[inline]
+    pub fn as_hnsw(&self) -> Result<(&HnswIndex, &VectorStorage), EdgeVecError> {
+        match self {
+            IndexVariant::Hnsw { index, storage } => Ok((index, storage)),
+            IndexVariant::Flat { .. } => Err(EdgeVecError::Validation(
+                "This operation is only supported for HNSW index. Use IndexType.Hnsw in config."
+                    .to_string(),
+            )),
+        }
+    }
+
+    /// Try to get mutable Flat index.
+    /// Returns error if this is an HNSW index.
+    #[inline]
+    pub fn as_flat_mut(&mut self) -> Result<&mut BinaryFlatIndex, EdgeVecError> {
+        match self {
+            IndexVariant::Flat { index } => Ok(index),
+            IndexVariant::Hnsw { .. } => Err(EdgeVecError::Validation(
+                "This operation is only supported for Flat index. Use IndexType.Flat in config."
+                    .to_string(),
+            )),
+        }
+    }
+
+    /// Try to get immutable Flat index.
+    /// Returns error if this is an HNSW index.
+    #[inline]
+    pub fn as_flat(&self) -> Result<&BinaryFlatIndex, EdgeVecError> {
+        match self {
+            IndexVariant::Flat { index } => Ok(index),
+            IndexVariant::Hnsw { .. } => Err(EdgeVecError::Validation(
+                "This operation is only supported for Flat index. Use IndexType.Flat in config."
+                    .to_string(),
+            )),
+        }
     }
 }
 
@@ -249,6 +581,10 @@ impl EdgeVecConfig {
 ///
 /// This struct is serializable for persistence via `postcard`.
 /// The `liveness` field is skipped as it is runtime state.
+///
+/// Supports both Flat and HNSW index types via the `indexType` configuration.
+/// Use `IndexType.Flat` for insert-heavy workloads with exact search,
+/// or `IndexType.Hnsw` (default) for large-scale approximate search.
 ///
 /// # Safety Note
 ///
@@ -260,10 +596,8 @@ impl EdgeVecConfig {
 #[allow(clippy::unsafe_derive_deserialize)]
 #[wasm_bindgen]
 pub struct EdgeVec {
-    #[allow(dead_code)]
-    inner: HnswIndex,
-    #[allow(dead_code)]
-    storage: VectorStorage,
+    /// The underlying index (either Flat or HNSW).
+    inner: IndexVariant,
     /// Metadata store for attaching key-value pairs to vectors.
     #[serde(default)]
     metadata: MetadataStore,
@@ -301,39 +635,65 @@ impl EdgeVec {
             init_logging();
         });
 
-        // Convert EdgeVecConfig to HnswConfig
-        let metric_code = match config.metric.as_deref() {
-            Some("cosine") => HnswConfig::METRIC_COSINE,
-            Some("dot") => HnswConfig::METRIC_DOT_PRODUCT,
-            Some("l2") | None => HnswConfig::METRIC_L2_SQUARED,
-            Some(other) => {
-                return Err(EdgeVecError::Validation(format!("Unknown metric: {other}")).into())
+        // Dispatch based on index type
+        let inner = match config.index_type() {
+            JsIndexType::Flat => {
+                // Flat index: create BinaryFlatIndex directly
+                let index = BinaryFlatIndex::new(config.dimensions as usize);
+                IndexVariant::Flat { index }
+            }
+            JsIndexType::Hnsw => {
+                // HNSW index: create with full configuration
+                let metric_code = match config.metric.as_deref() {
+                    Some("cosine") => HnswConfig::METRIC_COSINE,
+                    Some("dot") => HnswConfig::METRIC_DOT_PRODUCT,
+                    Some("l2") | None => HnswConfig::METRIC_L2_SQUARED,
+                    Some("hamming") => HnswConfig::METRIC_HAMMING,
+                    Some(other) => {
+                        return Err(
+                            EdgeVecError::Validation(format!("Unknown metric: {other}")).into()
+                        )
+                    }
+                };
+
+                let mut hnsw_config = HnswConfig::new(config.dimensions);
+                if let Some(m) = config.m {
+                    hnsw_config.m = m;
+                }
+                if let Some(m0) = config.m0 {
+                    hnsw_config.m0 = m0;
+                }
+                if let Some(ef) = config.ef_construction {
+                    hnsw_config.ef_construction = ef;
+                }
+                if let Some(ef) = config.ef_search {
+                    hnsw_config.ef_search = ef;
+                }
+                hnsw_config.metric = metric_code;
+
+                // Initialize storage (in-memory for now)
+                let mut storage = VectorStorage::new(&hnsw_config, None);
+
+                // Set up binary storage if:
+                // 1. Explicit VectorType::Binary is specified, OR
+                // 2. Metric is Hamming (implies binary vectors)
+                if config.vector_type == Some(VectorType::Binary)
+                    || metric_code == HnswConfig::METRIC_HAMMING
+                {
+                    storage
+                        .set_storage_type(crate::storage::StorageType::Binary(config.dimensions));
+                }
+
+                let index = HnswIndex::new(hnsw_config, &storage).map_err(EdgeVecError::from)?;
+                IndexVariant::Hnsw {
+                    index: Box::new(index),
+                    storage,
+                }
             }
         };
 
-        let mut hnsw_config = HnswConfig::new(config.dimensions);
-        if let Some(m) = config.m {
-            hnsw_config.m = m;
-        }
-        if let Some(m0) = config.m0 {
-            hnsw_config.m0 = m0;
-        }
-        if let Some(ef) = config.ef_construction {
-            hnsw_config.ef_construction = ef;
-        }
-        if let Some(ef) = config.ef_search {
-            hnsw_config.ef_search = ef;
-        }
-        hnsw_config.metric = metric_code;
-
-        // Initialize storage (in-memory for now)
-        let storage = VectorStorage::new(&hnsw_config, None);
-
-        let index = HnswIndex::new(hnsw_config, &storage).map_err(EdgeVecError::from)?;
-
         Ok(EdgeVec {
-            inner: index,
-            storage,
+            inner,
             metadata: MetadataStore::new(),
             memory_config: MemoryConfig::default(),
             liveness: Arc::new(AtomicBool::new(true)),
@@ -357,40 +717,573 @@ impl EdgeVec {
     #[allow(clippy::needless_pass_by_value)]
     #[allow(clippy::cast_possible_truncation)]
     pub fn insert(&mut self, vector: Float32Array) -> Result<u32, JsValue> {
-        let len = vector.length();
-        if len != self.inner.config.dimensions {
+        match &mut self.inner {
+            IndexVariant::Hnsw { index, storage } => {
+                let len = vector.length();
+                let dimensions = index.config.dimensions;
+                if len != dimensions {
+                    return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                        expected: dimensions as usize,
+                        actual: len as usize,
+                    })
+                    .into());
+                }
+
+                let vec = vector.to_vec();
+
+                #[cfg(debug_assertions)]
+                if vec.iter().any(|v| !v.is_finite()) {
+                    return Err(EdgeVecError::Validation(
+                        "Vector contains non-finite values".to_string(),
+                    )
+                    .into());
+                }
+
+                let id = index.insert(&vec, storage).map_err(EdgeVecError::from)?;
+
+                track_vector_insert(dimensions);
+
+                if id.0 > u64::from(u32::MAX) {
+                    return Err(
+                        EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into(),
+                    );
+                }
+                Ok(id.0 as u32)
+            }
+            IndexVariant::Flat { .. } => Err(EdgeVecError::Validation(
+                "insert() not supported for Flat index. Use insertBinary() instead.".to_string(),
+            )
+            .into()),
+        }
+    }
+
+    // =========================================================================
+    // BINARY VECTOR API (v0.6.0)
+    // =========================================================================
+
+    /// Inserts a pre-packed binary vector into the index.
+    ///
+    /// This method is for binary vectors (1-bit quantized) using Hamming distance.
+    /// Use this when you have pre-quantized data (e.g., from Turso's `f1bit_blob`).
+    ///
+    /// # Arguments
+    ///
+    /// * `vector` - A Uint8Array containing packed binary data. Length must equal
+    ///   `ceil(dimensions / 8)` bytes.
+    ///
+    /// # Returns
+    ///
+    /// The assigned Vector ID (u32).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Storage is not in Binary mode (metric != "hamming")
+    /// - Byte length doesn't match expected bytes for dimensions
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(1024); // 1024 bits = 128 bytes
+    /// config.metric = 'hamming';
+    /// const db = new EdgeVec(config);
+    ///
+    /// // Direct binary insertion (e.g., from Turso f1bit_blob)
+    /// const binaryVector = new Uint8Array(128); // 1024 bits packed
+    /// const id = db.insertBinary(binaryVector);
+    /// ```
+    #[wasm_bindgen(js_name = "insertBinary")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn insert_binary(&mut self, vector: Uint8Array) -> Result<u32, JsValue> {
+        match &mut self.inner {
+            IndexVariant::Hnsw { index, storage } => {
+                // Validate metric is Hamming for HNSW
+                if index.config.metric != HnswConfig::METRIC_HAMMING {
+                    return Err(EdgeVecError::Validation(
+                        "insertBinary requires metric='hamming'. Current metric is not Hamming."
+                            .to_string(),
+                    )
+                    .into());
+                }
+
+                let expected_bytes = ((index.config.dimensions + 7) / 8) as usize;
+                let len = vector.length() as usize;
+
+                if len != expected_bytes {
+                    return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                        expected: expected_bytes,
+                        actual: len,
+                    })
+                    .into());
+                }
+
+                let vec = vector.to_vec();
+                let id = index
+                    .insert_binary(&vec, storage)
+                    .map_err(EdgeVecError::from)?;
+
+                if id.0 > u64::from(u32::MAX) {
+                    return Err(
+                        EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into(),
+                    );
+                }
+                Ok(id.0 as u32)
+            }
+            IndexVariant::Flat { index } => {
+                // Fast path for Flat index - minimal overhead like old BinaryFlatVec
+                // BinaryFlatIndex::insert already asserts dimension match
+                let vec = vector.to_vec();
+                let id = index.insert(&vec);
+                Ok(id.0 as u32)
+            }
+        }
+    }
+
+    /// Inserts an f32 vector with automatic binary quantization.
+    ///
+    /// The vector is converted to binary (1 bit per dimension) using sign quantization:
+    /// - Positive values → 1
+    /// - Non-positive values → 0
+    ///
+    /// # Arguments
+    ///
+    /// * `vector` - A Float32Array containing the vector data (must match dimensions).
+    ///
+    /// # Returns
+    ///
+    /// The assigned Vector ID (u32).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Storage is not in Binary mode (metric != "hamming")
+    /// - Dimensions don't match
+    /// - Vector contains NaNs
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(1024);
+    /// config.metric = 'hamming';
+    /// const db = new EdgeVec(config);
+    ///
+    /// // Insert f32 vector with automatic binary quantization
+    /// const f32Vector = new Float32Array(1024).fill(0.5); // Gets quantized to all 1s
+    /// const id = db.insertWithBq(f32Vector);
+    /// ```
+    #[wasm_bindgen(js_name = "insertWithBq")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn insert_with_bq(&mut self, vector: Float32Array) -> Result<u32, JsValue> {
+        match &mut self.inner {
+            IndexVariant::Hnsw { index, storage } => {
+                // Validate metric is Hamming
+                if index.config.metric != HnswConfig::METRIC_HAMMING {
+                    return Err(EdgeVecError::Validation(
+                        "insertWithBq requires metric='hamming'. Current metric is not Hamming."
+                            .to_string(),
+                    )
+                    .into());
+                }
+
+                let len = vector.length();
+                if len != index.config.dimensions {
+                    return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                        expected: index.config.dimensions as usize,
+                        actual: len as usize,
+                    })
+                    .into());
+                }
+
+                let vec = vector.to_vec();
+
+                #[cfg(debug_assertions)]
+                if vec.iter().any(|v| !v.is_finite()) {
+                    return Err(EdgeVecError::Validation(
+                        "Vector contains non-finite values".to_string(),
+                    )
+                    .into());
+                }
+
+                let id = index
+                    .insert_with_bq(&vec, storage)
+                    .map_err(EdgeVecError::from)?;
+
+                if id.0 > u64::from(u32::MAX) {
+                    return Err(
+                        EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into(),
+                    );
+                }
+                Ok(id.0 as u32)
+            }
+            IndexVariant::Flat { .. } => Err(EdgeVecError::Validation(
+                "insertWithBq() not supported for Flat index. Use insertBinary() instead."
+                    .to_string(),
+            )
+            .into()),
+        }
+    }
+
+    /// Searches for nearest neighbors using a binary query vector.
+    ///
+    /// Uses Hamming distance to find the K most similar binary vectors.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - A Uint8Array containing the binary query vector.
+    /// * `k` - The number of neighbors to return.
+    ///
+    /// # Returns
+    ///
+    /// An array of objects: `[{ id: u32, score: f32 }, ...]` where `score` is
+    /// the Hamming distance (number of differing bits).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Storage is not in Binary mode (metric != "hamming")
+    /// - Query byte length doesn't match expected
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// const config = new EdgeVecConfig(1024);
+    /// config.metric = 'hamming';
+    /// const db = new EdgeVec(config);
+    ///
+    /// // ... insert binary vectors ...
+    ///
+    /// const queryBinary = new Uint8Array(128);
+    /// const results = db.searchBinary(queryBinary, 10);
+    /// results.forEach(r => console.log(`ID: ${r.id}, Hamming Distance: ${r.score}`));
+    /// ```
+    #[wasm_bindgen(js_name = "searchBinary")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_binary(&self, query: Uint8Array, k: usize) -> Result<JsValue, JsValue> {
+        match &self.inner {
+            IndexVariant::Hnsw { index, storage } => {
+                // Validate metric is Hamming for HNSW
+                if index.config.metric != HnswConfig::METRIC_HAMMING {
+                    return Err(EdgeVecError::Validation(
+                        "searchBinary requires metric='hamming'. Current metric is not Hamming."
+                            .to_string(),
+                    )
+                    .into());
+                }
+
+                let expected_bytes = ((index.config.dimensions + 7) / 8) as usize;
+                let len = query.length() as usize;
+
+                if len != expected_bytes {
+                    return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                        expected: expected_bytes,
+                        actual: len,
+                    })
+                    .into());
+                }
+
+                let vec = query.to_vec();
+                let results = index
+                    .search_binary(&vec, k, storage)
+                    .map_err(EdgeVecError::from)?;
+
+                let arr = Array::new_with_length(results.len() as u32);
+                for (i, result) in results.iter().enumerate() {
+                    let obj = Object::new();
+                    Reflect::set(
+                        &obj,
+                        &JsValue::from_str("id"),
+                        &JsValue::from(result.vector_id.0 as u32),
+                    )?;
+                    Reflect::set(
+                        &obj,
+                        &JsValue::from_str("score"),
+                        &JsValue::from(result.distance),
+                    )?;
+                    arr.set(i as u32, obj.into());
+                }
+
+                Ok(arr.into())
+            }
+            IndexVariant::Flat { index } => {
+                // Fast path for Flat index - BinaryFlatIndex::search asserts dimension match
+                let vec = query.to_vec();
+                let results = index.search(&vec, k);
+
+                let arr = Array::new_with_length(results.len() as u32);
+                for (i, result) in results.iter().enumerate() {
+                    let obj = Object::new();
+                    Reflect::set(
+                        &obj,
+                        &JsValue::from_str("id"),
+                        &JsValue::from(result.id.0 as u32),
+                    )?;
+                    Reflect::set(
+                        &obj,
+                        &JsValue::from_str("score"),
+                        &JsValue::from(result.distance),
+                    )?;
+                    arr.set(i as u32, obj.into());
+                }
+
+                Ok(arr.into())
+            }
+        }
+    }
+
+    /// Searches binary vectors with a custom ef_search parameter.
+    ///
+    /// This allows tuning the recall/speed tradeoff per-query:
+    /// - Lower ef_search = faster, lower recall
+    /// - Higher ef_search = slower, higher recall
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - A Uint8Array containing the binary query vector.
+    /// * `k` - The number of neighbors to return.
+    /// * `ef_search` - Size of dynamic candidate list (must be >= k).
+    ///
+    /// # Returns
+    ///
+    /// An array of objects: `[{ id: u32, score: f32 }, ...]`
+    ///
+    /// # Example (JavaScript)
+    ///
+    /// ```javascript
+    /// // Low ef_search = fast, ~90% recall
+    /// const fastResults = db.searchBinaryWithEf(query, 10, 20);
+    ///
+    /// // High ef_search = slower, ~99% recall
+    /// const accurateResults = db.searchBinaryWithEf(query, 10, 200);
+    /// ```
+    #[wasm_bindgen(js_name = "searchBinaryWithEf")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_binary_with_ef(
+        &self,
+        query: Uint8Array,
+        k: usize,
+        ef_search: usize,
+    ) -> Result<JsValue, JsValue> {
+        // HNSW-only: ef_search parameter only applies to HNSW
+        let (index, storage) = self.inner.as_hnsw()?;
+
+        // Validate metric is Hamming
+        if index.config.metric != HnswConfig::METRIC_HAMMING {
+            return Err(EdgeVecError::Validation(
+                "searchBinaryWithEf requires metric='hamming'. Current metric is not Hamming."
+                    .to_string(),
+            )
+            .into());
+        }
+
+        let expected_bytes = ((index.config.dimensions + 7) / 8) as usize;
+        let len = query.length() as usize;
+
+        if len != expected_bytes {
             return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
-                expected: self.inner.config.dimensions as usize,
-                actual: len as usize,
+                expected: expected_bytes,
+                actual: len,
             })
             .into());
         }
 
-        let vec = vector.to_vec();
+        let vec = query.to_vec();
 
-        // Removed explicit iter().any() check for performance in Release mode
-        // The check was adding ~20% overhead on O(N) iteration
-        #[cfg(debug_assertions)]
-        if vec.iter().any(|v| !v.is_finite()) {
-            return Err(
-                EdgeVecError::Validation("Vector contains non-finite values".to_string()).into(),
-            );
-        }
-
-        // insert() automatically handles BQ storage when enabled (via insert_impl Step 6)
-        let id = self
-            .inner
-            .insert(&vec, &mut self.storage)
+        let results = index
+            .search_binary_with_ef(&vec, k, ef_search, storage)
             .map_err(EdgeVecError::from)?;
 
-        // Track memory allocation for memory pressure monitoring
-        track_vector_insert(self.inner.config.dimensions);
-
-        // Safety: VectorId is u64, we cast to u32 as requested by API.
-        if id.0 > u64::from(u32::MAX) {
-            return Err(EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into());
+        let arr = Array::new_with_length(results.len() as u32);
+        for (i, result) in results.iter().enumerate() {
+            let obj = Object::new();
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("id"),
+                &JsValue::from(result.vector_id.0 as u32),
+            )?;
+            Reflect::set(
+                &obj,
+                &JsValue::from_str("score"),
+                &JsValue::from(result.distance),
+            )?;
+            arr.set(i as u32, obj.into());
         }
-        Ok(id.0 as u32)
+
+        Ok(arr.into())
+    }
+
+    /// Searches binary vectors with optional metadata filtering.
+    ///
+    /// Combines binary vector search (Hamming distance) with metadata filtering.
+    ///
+    /// # Arguments
+    ///
+    /// * `query` - Binary query vector as Uint8Array (packed bits, ceil(dimensions/8) bytes)
+    /// * `k` - Maximum number of results to return
+    /// * `options_json` - JSON string with search options:
+    ///   - `filter`: Optional SQL-like filter expression (e.g., `"category = \"gpu\""`)
+    ///   - `strategy`: Filter strategy - `"auto"`, `"pre"`, `"post"`, or `"hybrid"`
+    ///   - `oversample_factor`: Oversample factor for post/hybrid strategies (default: 3.0)
+    ///   - `include_metadata`: Whether to include metadata in results (default: false)
+    ///
+    /// # Returns
+    ///
+    /// JSON string containing search results with Hamming distances.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Storage is not in Binary mode (metric != "hamming")
+    /// - Query byte length doesn't match expected dimensions
+    /// - Options JSON is invalid
+    /// - Filter expression parsing fails
+    /// - Search fails
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const queryBinary = new Uint8Array(128); // 1024 bits
+    /// const result = JSON.parse(db.searchBinaryFiltered(queryBinary, 10, JSON.stringify({
+    ///   filter: 'category = "gpu"',
+    ///   strategy: 'auto',
+    ///   include_metadata: true
+    /// })));
+    /// console.log(`Found ${result.results.length} binary matches with filter`);
+    /// ```
+    #[wasm_bindgen(js_name = "searchBinaryFiltered")]
+    #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn search_binary_filtered(
+        &mut self,
+        query: Uint8Array,
+        k: usize,
+        options_json: &str,
+    ) -> Result<String, JsValue> {
+        use crate::filter::{parse, FilterStrategy, FilteredSearcher};
+
+        // HNSW-only: Filtered search requires HNSW index
+        let (index, storage) = self.inner.as_hnsw()?;
+
+        // Start total timing
+        let total_start = web_sys::window()
+            .and_then(|w| w.performance())
+            .map(|p| p.now());
+
+        // Validate metric is Hamming
+        if index.config.metric != HnswConfig::METRIC_HAMMING {
+            return Err(EdgeVecError::Validation(
+                "searchBinaryFiltered requires metric='hamming'. Current metric is not Hamming."
+                    .to_string(),
+            )
+            .into());
+        }
+
+        // Validate query dimensions
+        let expected_bytes = ((index.config.dimensions + 7) / 8) as usize;
+        let len = query.length() as usize;
+
+        if len != expected_bytes {
+            return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                expected: expected_bytes,
+                actual: len,
+            })
+            .into());
+        }
+
+        let query_vec = query.to_vec();
+
+        // Parse options
+        let options: SearchFilteredOptions = serde_json::from_str(options_json)
+            .map_err(|e| JsValue::from_str(&format!("Invalid options JSON: {e}")))?;
+
+        // Parse filter if provided (and time it)
+        let filter_start = web_sys::window()
+            .and_then(|w| w.performance())
+            .map(|p| p.now());
+
+        let filter = match &options.filter {
+            Some(filter_str) => {
+                Some(parse(filter_str).map_err(|e| filter::filter_error_to_jsvalue(&e))?)
+            }
+            None => None,
+        };
+
+        // Convert strategy
+        // NOTE: For binary search, the strategy is always forced to PreFilter internally.
+        // PostFilter and Hybrid could miss top-K results because binary search returns
+        // a fixed candidate set based on Hamming distance. PreFilter ensures all matching
+        // vectors are considered before ranking by Hamming distance.
+        // The strategy parameter is accepted for API compatibility but ignored.
+        let strategy = match options.strategy.as_deref() {
+            Some("pre") => FilterStrategy::PreFilter,
+            Some("post") => FilterStrategy::PostFilter {
+                oversample: options.oversample_factor.unwrap_or(3.0),
+            },
+            Some("hybrid") => FilterStrategy::Hybrid {
+                oversample_min: 1.5,
+                oversample_max: options.oversample_factor.unwrap_or(10.0),
+            },
+            _ => FilterStrategy::Auto,
+        };
+
+        // Create metadata store adapter
+        let metadata_adapter = EdgeVecMetadataAdapter::new(&self.metadata, index.len());
+
+        // Execute filtered binary search (always uses PreFilter internally)
+        let mut searcher = FilteredSearcher::new(index, storage, &metadata_adapter);
+        let result = searcher
+            .search_binary_filtered(&query_vec, k, filter.as_ref(), strategy)
+            .map_err(|e| JsValue::from_str(&format!("Binary filtered search failed: {e}")))?;
+
+        // Calculate filter time (includes parsing + evaluation)
+        let filter_time_ms = match (
+            filter_start,
+            web_sys::window().and_then(|w| w.performance()),
+        ) {
+            (Some(start), Some(perf)) => perf.now() - start,
+            _ => 0.0,
+        };
+
+        // Check if metadata should be included
+        let include_metadata = options.include_metadata.unwrap_or(false);
+
+        // Build response (similar structure to searchFiltered, but no vector field since binary)
+        let response = SearchFilteredResult {
+            results: result
+                .results
+                .iter()
+                .map(|r| {
+                    let id = r.vector_id.0 as u32;
+                    SearchFilteredItem {
+                        id,
+                        score: r.distance,
+                        metadata: if include_metadata {
+                            self.metadata
+                                .get_all(id)
+                                .and_then(|m| serde_json::to_value(m).ok())
+                        } else {
+                            None
+                        },
+                        vector: None, // Binary vectors not returned (different format)
+                    }
+                })
+                .collect(),
+            complete: result.complete,
+            observed_selectivity: result.observed_selectivity,
+            strategy_used: strategy_to_string(&result.strategy_used),
+            vectors_evaluated: result.vectors_evaluated,
+            filter_time_ms,
+            total_time_ms: match (total_start, web_sys::window().and_then(|w| w.performance())) {
+                (Some(start), Some(perf)) => perf.now() - start,
+                _ => 0.0,
+            },
+        };
+
+        serde_json::to_string(&response)
+            .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))
     }
 
     /// Inserts a batch of vectors into the index (flat array format).
@@ -418,7 +1311,10 @@ impl EdgeVec {
         vectors: Float32Array,
         count: usize,
     ) -> Result<Uint32Array, JsValue> {
-        let dim = self.inner.config.dimensions as usize;
+        // HNSW-only: F32 batch insert requires HNSW index
+        let (index, storage) = self.inner.as_hnsw_mut()?;
+
+        let dim = index.config.dimensions as usize;
         let expected_len = count * dim;
 
         if vectors.length() as usize != expected_len {
@@ -446,13 +1342,10 @@ impl EdgeVec {
         for i in 0..count {
             let start = i * dim;
             let end = start + dim;
-            // Safety: bounds checked by logic above (vec_data len == count * dim)
             let vector_slice = &vec_data[start..end];
 
-            // insert() automatically handles BQ storage when enabled (via insert_impl Step 6)
-            let id = self
-                .inner
-                .insert(vector_slice, &mut self.storage)
+            let id = index
+                .insert(vector_slice, storage)
                 .map_err(EdgeVecError::from)?;
 
             if id.0 > u64::from(u32::MAX) {
@@ -464,7 +1357,7 @@ impl EdgeVec {
         }
 
         // Track memory allocation for the batch
-        track_batch_insert(count, self.inner.config.dimensions);
+        track_batch_insert(count, index.config.dimensions);
 
         Ok(Uint32Array::from(&ids[..]))
     }
@@ -604,10 +1497,13 @@ impl EdgeVec {
     #[allow(clippy::needless_pass_by_value)]
     #[allow(clippy::cast_possible_truncation)]
     pub fn search(&self, query: Float32Array, k: usize) -> Result<JsValue, JsValue> {
+        // HNSW-only: F32 search is only for HNSW index
+        let (index, storage) = self.inner.as_hnsw()?;
+
         let len = query.length();
-        if len != self.inner.config.dimensions {
+        if len != index.config.dimensions {
             return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
-                expected: self.inner.config.dimensions as usize,
+                expected: index.config.dimensions as usize,
                 actual: len as usize,
             })
             .into());
@@ -621,10 +1517,7 @@ impl EdgeVec {
             .into());
         }
 
-        let results = self
-            .inner
-            .search(&vec, k, &self.storage)
-            .map_err(EdgeVecError::from)?;
+        let results = index.search(&vec, k, storage).map_err(EdgeVecError::from)?;
 
         let arr = Array::new_with_length(results.len() as u32);
         for (i, result) in results.iter().enumerate() {
@@ -660,10 +1553,11 @@ impl EdgeVec {
     /// The returned iterator holds a reference to this `EdgeVec` instance.
     /// You MUST ensure `EdgeVec` is not garbage collected or freed while using the iterator.
     #[wasm_bindgen]
-    #[must_use]
-    pub fn save_stream(&self, chunk_size: Option<usize>) -> PersistenceIterator {
+    pub fn save_stream(&self, chunk_size: Option<usize>) -> Result<PersistenceIterator, JsValue> {
+        // HNSW-only: Chunked streaming is only implemented for HNSW
+        let (index, storage) = self.inner.as_hnsw()?;
         let size = chunk_size.unwrap_or(10 * 1024 * 1024); // 10MB default
-        let writer = (&self.storage, &self.inner);
+        let writer = (storage, index);
         let iter = writer.export_chunked(size);
 
         // SAFETY: We transmute the lifetime to 'static to allow returning the iterator to JS.
@@ -672,10 +1566,10 @@ impl EdgeVec {
         // This is a common pattern in wasm-bindgen for iterators.
         let static_iter = unsafe { std::mem::transmute::<ChunkIter<'_>, ChunkIter<'static>>(iter) };
 
-        PersistenceIterator {
+        Ok(PersistenceIterator {
             iter: static_iter,
             liveness: self.liveness.clone(),
-        }
+        })
     }
 
     /// Saves the database to IndexedDB.
@@ -769,8 +1663,10 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = softDelete)]
     #[allow(clippy::cast_possible_truncation)]
     pub fn soft_delete(&mut self, vector_id: u32) -> Result<bool, JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw_mut()?;
         let id = crate::hnsw::VectorId(u64::from(vector_id));
-        self.inner
+        index
             .soft_delete(id)
             .map_err(|e| JsValue::from_str(&format!("soft_delete failed: {e}")))
     }
@@ -792,8 +1688,10 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = isDeleted)]
     #[allow(clippy::cast_possible_truncation)]
     pub fn is_deleted(&self, vector_id: u32) -> Result<bool, JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw()?;
         let id = crate::hnsw::VectorId(u64::from(vector_id));
-        self.inner
+        index
             .is_deleted(id)
             .map_err(|e| JsValue::from_str(&format!("is_deleted failed: {e}")))
     }
@@ -804,10 +1702,11 @@ impl EdgeVec {
     ///
     /// The number of vectors that have been soft-deleted but not yet compacted.
     #[wasm_bindgen(js_name = deletedCount)]
-    #[must_use]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn deleted_count(&self) -> u32 {
-        self.inner.deleted_count() as u32
+    pub fn deleted_count(&self) -> Result<u32, JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw()?;
+        Ok(index.deleted_count() as u32)
     }
 
     /// Get the count of live (non-deleted) vectors.
@@ -816,10 +1715,11 @@ impl EdgeVec {
     ///
     /// The number of vectors that are currently searchable.
     #[wasm_bindgen(js_name = liveCount)]
-    #[must_use]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn live_count(&self) -> u32 {
-        self.inner.live_count() as u32
+    pub fn live_count(&self) -> Result<u32, JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw()?;
+        Ok(index.live_count() as u32)
     }
 
     /// Get the ratio of deleted to total vectors.
@@ -829,9 +1729,10 @@ impl EdgeVec {
     /// A value between 0.0 and 1.0 representing the tombstone ratio.
     /// 0.0 means no deletions, 1.0 means all vectors deleted.
     #[wasm_bindgen(js_name = tombstoneRatio)]
-    #[must_use]
-    pub fn tombstone_ratio(&self) -> f64 {
-        self.inner.tombstone_ratio()
+    pub fn tombstone_ratio(&self) -> Result<f64, JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw()?;
+        Ok(index.tombstone_ratio())
     }
 
     /// Check if compaction is recommended.
@@ -844,9 +1745,10 @@ impl EdgeVec {
     /// * `true` if compaction is recommended
     /// * `false` if tombstone ratio is below threshold
     #[wasm_bindgen(js_name = needsCompaction)]
-    #[must_use]
-    pub fn needs_compaction(&self) -> bool {
-        self.inner.needs_compaction()
+    pub fn needs_compaction(&self) -> Result<bool, JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw()?;
+        Ok(index.needs_compaction())
     }
 
     /// Get the current compaction threshold.
@@ -856,9 +1758,10 @@ impl EdgeVec {
     /// The threshold ratio (0.0 to 1.0) above which `needsCompaction()` returns true.
     /// Default is 0.3 (30%).
     #[wasm_bindgen(js_name = compactionThreshold)]
-    #[must_use]
-    pub fn compaction_threshold(&self) -> f64 {
-        self.inner.compaction_threshold()
+    pub fn compaction_threshold(&self) -> Result<f64, JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw()?;
+        Ok(index.compaction_threshold())
     }
 
     /// Set the compaction threshold.
@@ -867,8 +1770,11 @@ impl EdgeVec {
     ///
     /// * `ratio` - The new threshold (clamped to 0.01 - 0.99).
     #[wasm_bindgen(js_name = setCompactionThreshold)]
-    pub fn set_compaction_threshold(&mut self, ratio: f64) {
-        self.inner.set_compaction_threshold(ratio);
+    pub fn set_compaction_threshold(&mut self, ratio: f64) -> Result<(), JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw_mut()?;
+        index.set_compaction_threshold(ratio);
+        Ok(())
     }
 
     /// Get a warning message if compaction is recommended.
@@ -888,9 +1794,10 @@ impl EdgeVec {
     /// }
     /// ```
     #[wasm_bindgen(js_name = compactionWarning)]
-    #[must_use]
-    pub fn compaction_warning(&self) -> Option<String> {
-        self.inner.compaction_warning()
+    pub fn compaction_warning(&self) -> Result<Option<String>, JsValue> {
+        // HNSW-only: Soft delete is not supported for Flat index
+        let (index, _storage) = self.inner.as_hnsw()?;
+        Ok(index.compaction_warning())
     }
 
     /// Compact the index by rebuilding without tombstones.
@@ -927,14 +1834,17 @@ impl EdgeVec {
     #[wasm_bindgen]
     #[allow(clippy::cast_possible_truncation)]
     pub fn compact(&mut self) -> Result<WasmCompactionResult, JsValue> {
-        let (new_index, new_storage, result) = self
-            .inner
-            .compact(&self.storage)
+        let (index, storage) = self.inner.as_hnsw_mut()?;
+
+        let (new_index, new_storage, result) = index
+            .compact(storage)
             .map_err(|e| JsValue::from_str(&format!("compact failed: {e}")))?;
 
         // Replace internal state with compacted versions
-        self.inner = new_index;
-        self.storage = new_storage;
+        self.inner = IndexVariant::Hnsw {
+            index: Box::new(new_index),
+            storage: new_storage,
+        };
 
         Ok(WasmCompactionResult {
             tombstones_removed: result.tombstones_removed as u32,
@@ -998,6 +1908,8 @@ impl EdgeVec {
         &mut self,
         ids: js_sys::Uint32Array,
     ) -> Result<WasmBatchDeleteResult, JsValue> {
+        let (index, _storage) = self.inner.as_hnsw_mut()?;
+
         // Convert Uint32Array to Vec<VectorId>
         let id_vec: Vec<u32> = ids.to_vec();
         let vec_ids: Vec<crate::hnsw::VectorId> = id_vec
@@ -1006,7 +1918,7 @@ impl EdgeVec {
             .collect();
 
         // Call core batch delete
-        let result = self.inner.soft_delete_batch(&vec_ids);
+        let result = index.soft_delete_batch(&vec_ids);
 
         Ok(WasmBatchDeleteResult {
             deleted: result.deleted as u32,
@@ -1054,6 +1966,8 @@ impl EdgeVec {
         &mut self,
         ids: js_sys::Float64Array,
     ) -> Result<WasmBatchDeleteResult, JsValue> {
+        let (index, _storage) = self.inner.as_hnsw_mut()?;
+
         // Convert Float64Array to Vec<VectorId>
         // Safe for IDs < 2^53 (Number.MAX_SAFE_INTEGER)
         let id_vec: Vec<f64> = ids.to_vec();
@@ -1063,7 +1977,7 @@ impl EdgeVec {
             .collect();
 
         // Call core batch delete
-        let result = self.inner.soft_delete_batch(&vec_ids);
+        let result = index.soft_delete_batch(&vec_ids);
 
         Ok(WasmBatchDeleteResult {
             deleted: result.deleted as u32,
@@ -1113,8 +2027,7 @@ impl EdgeVec {
         key: &str,
         value: &metadata::JsMetadataValue,
     ) -> Result<(), JsError> {
-        self.inner
-            .metadata
+        self.metadata
             .insert(vector_id, key, value.inner.clone())
             .map_err(metadata::metadata_error_to_js)
     }
@@ -1142,7 +2055,7 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = "getMetadata")]
     #[must_use]
     pub fn get_metadata(&self, vector_id: u32, key: &str) -> Option<metadata::JsMetadataValue> {
-        metadata::metadata_value_to_js(self.inner.metadata.get(vector_id, key))
+        metadata::metadata_value_to_js(self.metadata.get(vector_id, key))
     }
 
     /// Gets all metadata for a vector as a JavaScript object.
@@ -1172,7 +2085,7 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = "getAllMetadata")]
     #[must_use]
     pub fn get_all_metadata(&self, vector_id: u32) -> JsValue {
-        metadata::metadata_to_js_object(&self.inner.metadata, vector_id)
+        metadata::metadata_to_js_object(&self.metadata, vector_id)
     }
 
     /// Deletes a metadata key for a vector.
@@ -1200,8 +2113,7 @@ impl EdgeVec {
     /// ```
     #[wasm_bindgen(js_name = "deleteMetadata")]
     pub fn delete_metadata(&mut self, vector_id: u32, key: &str) -> Result<bool, JsError> {
-        self.inner
-            .metadata
+        self.metadata
             .delete(vector_id, key)
             .map_err(metadata::metadata_error_to_js)
     }
@@ -1227,7 +2139,7 @@ impl EdgeVec {
     /// ```
     #[wasm_bindgen(js_name = "deleteAllMetadata")]
     pub fn delete_all_metadata(&mut self, vector_id: u32) -> bool {
-        self.inner.metadata.delete_all(vector_id)
+        self.metadata.delete_all(vector_id)
     }
 
     /// Checks if a metadata key exists for a vector.
@@ -1251,7 +2163,7 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = "hasMetadata")]
     #[must_use]
     pub fn has_metadata(&self, vector_id: u32, key: &str) -> bool {
-        self.inner.metadata.has_key(vector_id, key)
+        self.metadata.has_key(vector_id, key)
     }
 
     /// Returns the number of metadata keys for a vector.
@@ -1273,7 +2185,7 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = "metadataKeyCount")]
     #[must_use]
     pub fn metadata_key_count(&self, vector_id: u32) -> usize {
-        self.inner.metadata.key_count(vector_id)
+        self.metadata.key_count(vector_id)
     }
 
     /// Returns the total number of vectors with metadata.
@@ -1291,7 +2203,7 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = "metadataVectorCount")]
     #[must_use]
     pub fn metadata_vector_count(&self) -> usize {
-        self.inner.metadata.vector_count()
+        self.metadata.vector_count()
     }
 
     /// Returns the total number of metadata key-value pairs across all vectors.
@@ -1309,7 +2221,7 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = "totalMetadataCount")]
     #[must_use]
     pub fn total_metadata_count(&self) -> usize {
-        self.inner.metadata.total_key_count()
+        self.metadata.total_key_count()
     }
 
     // =========================================================================
@@ -1364,11 +2276,13 @@ impl EdgeVec {
         vector: Float32Array,
         metadata_js: JsValue,
     ) -> Result<u32, JsValue> {
+        let dimensions = self.inner.dimensions();
+
         // Validate vector dimension
         let len = vector.length();
-        if len != self.inner.config.dimensions {
+        if len != dimensions {
             return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
-                expected: self.inner.config.dimensions as usize,
+                expected: dimensions as usize,
                 actual: len as usize,
             })
             .into());
@@ -1384,16 +2298,23 @@ impl EdgeVec {
         }
 
         // Parse JavaScript object into HashMap<String, MetadataValue>
-        let metadata = parse_js_metadata_object(&metadata_js)?;
+        let metadata_map = parse_js_metadata_object(&metadata_js)?;
 
-        // Use the core insert_with_metadata method
-        let id = self
-            .inner
-            .insert_with_metadata(&mut self.storage, &vec, metadata)
-            .map_err(EdgeVecError::from)?;
+        // Insert vector first (works for both HNSW and Flat)
+        let (index, storage) = self.inner.as_hnsw_mut()?;
+        let id = index.insert(&vec, storage).map_err(EdgeVecError::from)?;
+
+        // Store metadata in EdgeVec's metadata store (shared across index types)
+        #[allow(clippy::cast_possible_truncation)]
+        let metadata_id = id.0 as u32;
+        for (key, value) in metadata_map {
+            self.metadata
+                .insert(metadata_id, &key, value)
+                .map_err(|e| EdgeVecError::Validation(format!("Metadata error: {e}")))?;
+        }
 
         // Track memory allocation for memory pressure monitoring
-        track_vector_insert(self.inner.config.dimensions);
+        track_vector_insert(dimensions);
 
         // Safety: VectorId is u64, we cast to u32 as requested by API.
         if id.0 > u64::from(u32::MAX) {
@@ -1459,11 +2380,13 @@ impl EdgeVec {
             return Err(JsValue::from_str("k must be greater than 0"));
         }
 
+        let (index, storage) = self.inner.as_hnsw()?;
+
         // Validate query dimensions
         let len = query.length();
-        if len != self.inner.config.dimensions {
+        if len != index.config.dimensions {
             return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
-                expected: self.inner.config.dimensions as usize,
+                expected: index.config.dimensions as usize,
                 actual: len as usize,
             })
             .into());
@@ -1481,10 +2404,10 @@ impl EdgeVec {
         let filter_expr = parse(filter).map_err(|e| filter::filter_error_to_jsvalue(&e))?;
 
         // Create metadata store adapter
-        let metadata_adapter = EdgeVecMetadataAdapter::new(&self.inner.metadata, self.inner.len());
+        let metadata_adapter = EdgeVecMetadataAdapter::new(&self.metadata, index.len());
 
         // Execute filtered search with auto strategy
-        let mut searcher = FilteredSearcher::new(&self.inner, &self.storage, &metadata_adapter);
+        let mut searcher = FilteredSearcher::new(index, storage, &metadata_adapter);
         let result = searcher
             .search_filtered(&query_vec, k, Some(&filter_expr), FilterStrategy::Auto)
             .map_err(|e| JsValue::from_str(&format!("Search failed: {e}")))?;
@@ -1533,7 +2456,7 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = "getVectorMetadata")]
     #[must_use]
     pub fn get_vector_metadata(&self, id: u32) -> JsValue {
-        metadata::metadata_to_js_object(&self.inner.metadata, id)
+        metadata::metadata_to_js_object(&self.metadata, id)
     }
 
     // =========================================================================
@@ -1583,11 +2506,13 @@ impl EdgeVec {
             return Err(JsValue::from_str("k must be greater than 0"));
         }
 
+        let (index, storage) = self.inner.as_hnsw()?;
+
         // Validate query dimensions
         let len = query.length();
-        if len != self.inner.config.dimensions {
+        if len != index.config.dimensions {
             return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
-                expected: self.inner.config.dimensions as usize,
+                expected: index.config.dimensions as usize,
                 actual: len as usize,
             })
             .into());
@@ -1602,9 +2527,8 @@ impl EdgeVec {
         }
 
         // Execute BQ search
-        let results = self
-            .inner
-            .search_bq(&query_vec, k, &self.storage)
+        let results = index
+            .search_bq(&query_vec, k, storage)
             .map_err(EdgeVecError::from)?;
 
         // Convert results to JavaScript array
@@ -1692,11 +2616,13 @@ impl EdgeVec {
             return Err(JsValue::from_str("rescoreFactor must be greater than 0"));
         }
 
+        let (index, storage) = self.inner.as_hnsw()?;
+
         // Validate query dimensions
         let len = query.length();
-        if len != self.inner.config.dimensions {
+        if len != index.config.dimensions {
             return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
-                expected: self.inner.config.dimensions as usize,
+                expected: index.config.dimensions as usize,
                 actual: len as usize,
             })
             .into());
@@ -1711,9 +2637,8 @@ impl EdgeVec {
         }
 
         // Execute BQ rescored search
-        let results = self
-            .inner
-            .search_bq_rescored(&query_vec, k, rescore_factor, &self.storage)
+        let results = index
+            .search_bq_rescored(&query_vec, k, rescore_factor, storage)
             .map_err(EdgeVecError::from)?;
 
         // Convert results to JavaScript array
@@ -1795,11 +2720,13 @@ impl EdgeVec {
             return Err(JsValue::from_str("k must be greater than 0"));
         }
 
+        let (index, storage) = self.inner.as_hnsw()?;
+
         // Validate query dimensions
         let len = query.length();
-        if len != self.inner.config.dimensions {
+        if len != index.config.dimensions {
             return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
-                expected: self.inner.config.dimensions as usize,
+                expected: index.config.dimensions as usize,
                 actual: len as usize,
             })
             .into());
@@ -1814,7 +2741,7 @@ impl EdgeVec {
         }
 
         // Determine search strategy
-        let use_bq = opts.use_bq && self.inner.bq_storage.is_some();
+        let use_bq = opts.use_bq && index.bq_storage.is_some();
         let rescore_factor = opts.rescore_factor.max(1);
 
         // Execute appropriate search based on options
@@ -1826,9 +2753,8 @@ impl EdgeVec {
 
                 // Get BQ candidates with overfetch
                 let overfetch_k = opts.k.saturating_mul(rescore_factor);
-                let bq_candidates = self
-                    .inner
-                    .search_bq(&query_vec, overfetch_k, &self.storage)
+                let bq_candidates = index
+                    .search_bq(&query_vec, overfetch_k, storage)
                     .map_err(EdgeVecError::from)?;
 
                 // Filter candidates using metadata
@@ -1836,11 +2762,7 @@ impl EdgeVec {
                 let mut filtered: Vec<_> = bq_candidates
                     .into_iter()
                     .filter(|(vid, _)| {
-                        let metadata = self
-                            .inner
-                            .metadata
-                            .get_all(vid.0 as u32)
-                            .unwrap_or(&empty_map);
+                        let metadata = self.metadata.get_all(vid.0 as u32).unwrap_or(&empty_map);
                         crate::filter::evaluate(&filter_expr, metadata).unwrap_or(false)
                     })
                     .take(opts.k)
@@ -1849,12 +2771,8 @@ impl EdgeVec {
                 // Rescore filtered candidates with F32 if we have enough
                 if !filtered.is_empty() {
                     use super::hnsw::rescore::rescore_top_k;
-                    let rescored = rescore_top_k(
-                        &filtered,
-                        &query_vec,
-                        &self.storage,
-                        opts.k.min(filtered.len()),
-                    );
+                    let rescored =
+                        rescore_top_k(&filtered, &query_vec, storage, opts.k.min(filtered.len()));
                     filtered = rescored
                         .into_iter()
                         .map(|(id, dist)| (id, 1.0 / (1.0 + dist)))
@@ -1864,16 +2782,15 @@ impl EdgeVec {
                 filtered
             } else {
                 // BQ only (no filter)
-                self.inner
-                    .search_bq_rescored(&query_vec, opts.k, rescore_factor, &self.storage)
+                index
+                    .search_bq_rescored(&query_vec, opts.k, rescore_factor, storage)
                     .map_err(EdgeVecError::from)?
             }
         } else if let Some(ref filter_str) = opts.filter {
             // F32 + filter (no BQ)
             let filter_expr = parse(filter_str).map_err(|e| filter::filter_error_to_jsvalue(&e))?;
-            let metadata_adapter =
-                EdgeVecMetadataAdapter::new(&self.inner.metadata, self.inner.len());
-            let mut searcher = FilteredSearcher::new(&self.inner, &self.storage, &metadata_adapter);
+            let metadata_adapter = EdgeVecMetadataAdapter::new(&self.metadata, index.len());
+            let mut searcher = FilteredSearcher::new(index, storage, &metadata_adapter);
             let result = searcher
                 .search_filtered(&query_vec, opts.k, Some(&filter_expr), FilterStrategy::Auto)
                 .map_err(|e| JsValue::from_str(&format!("Search failed: {e}")))?;
@@ -1884,9 +2801,8 @@ impl EdgeVec {
                 .collect()
         } else {
             // Pure F32 search (no BQ, no filter)
-            let search_results = self
-                .inner
-                .search(&query_vec, opts.k, &self.storage)
+            let search_results = index
+                .search(&query_vec, opts.k, storage)
                 .map_err(EdgeVecError::from)?;
             search_results
                 .into_iter()
@@ -1932,7 +2848,10 @@ impl EdgeVec {
     #[wasm_bindgen(js_name = "hasBQ")]
     #[must_use]
     pub fn has_bq(&self) -> bool {
-        self.inner.bq_storage.is_some()
+        match &self.inner {
+            IndexVariant::Hnsw { index, .. } => index.bq_storage.is_some(),
+            IndexVariant::Flat { .. } => false, // Flat index doesn't support BQ
+        }
     }
 
     /// Enables binary quantization on this index.
@@ -1960,8 +2879,9 @@ impl EdgeVec {
     /// ```
     #[wasm_bindgen(js_name = "enableBQ")]
     pub fn enable_bq(&mut self) -> Result<(), JsValue> {
-        self.inner
-            .enable_bq(&self.storage)
+        let (index, storage) = self.inner.as_hnsw_mut()?;
+        index
+            .enable_bq(storage)
             .map_err(|e| EdgeVecError::from(e).into())
     }
 
@@ -2037,11 +2957,13 @@ impl EdgeVec {
             .and_then(|w| w.performance())
             .map(|p| p.now());
 
+        let (index, storage) = self.inner.as_hnsw()?;
+
         // Validate query dimensions
         let len = query.length();
-        if len != self.inner.config.dimensions {
+        if len != index.config.dimensions {
             return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
-                expected: self.inner.config.dimensions as usize,
+                expected: index.config.dimensions as usize,
                 actual: len as usize,
             })
             .into());
@@ -2085,10 +3007,10 @@ impl EdgeVec {
         };
 
         // Create metadata store adapter
-        let metadata_adapter = EdgeVecMetadataAdapter::new(&self.inner.metadata, self.inner.len());
+        let metadata_adapter = EdgeVecMetadataAdapter::new(&self.metadata, index.len());
 
         // Execute filtered search
-        let mut searcher = FilteredSearcher::new(&self.inner, &self.storage, &metadata_adapter);
+        let mut searcher = FilteredSearcher::new(index, storage, &metadata_adapter);
         let result = searcher
             .search_filtered(&query_vec, k, filter.as_ref(), strategy)
             .map_err(|e| JsValue::from_str(&format!("Search failed: {e}")))?;
@@ -2117,15 +3039,14 @@ impl EdgeVec {
                         id,
                         score: r.distance,
                         metadata: if include_metadata {
-                            self.inner
-                                .metadata
+                            self.metadata
                                 .get_all(id)
                                 .and_then(|m| serde_json::to_value(m).ok())
                         } else {
                             None
                         },
                         vector: if include_vectors {
-                            Some(self.storage.get_vector(r.vector_id).to_vec())
+                            Some(storage.get_vector(r.vector_id).to_vec())
                         } else {
                             None
                         },
@@ -2312,7 +3233,11 @@ impl EdgeVec {
             self.memory_config.critical_threshold,
         );
 
-        let needs_compaction = self.inner.needs_compaction();
+        // needs_compaction only applies to HNSW indexes (Flat has no tombstones)
+        let needs_compaction = match &self.inner {
+            IndexVariant::Hnsw { index, .. } => index.needs_compaction(),
+            IndexVariant::Flat { .. } => false,
+        };
 
         let recommendation = match pressure.level {
             MemoryPressureLevel::Normal => MemoryRecommendation {
@@ -2357,6 +3282,39 @@ impl EdgeVec {
     pub fn get_memory_config(&self) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(&self.memory_config)
             .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// Get approximate memory usage in bytes.
+    ///
+    /// Returns the total memory used by the index, including:
+    /// - Vector storage (binary vectors)
+    /// - HNSW graph structure (nodes and neighbor lists)
+    /// - Internal metadata
+    ///
+    /// # Returns
+    ///
+    /// Total bytes used by the index.
+    ///
+    /// # Example
+    ///
+    /// ```javascript
+    /// const bytes = index.memoryUsage();
+    /// console.log(`Index using ${(bytes / 1024 / 1024).toFixed(2)} MB`);
+    /// ```
+    #[wasm_bindgen(js_name = "memoryUsage")]
+    pub fn memory_usage(&self) -> usize {
+        // Dispatch to IndexVariant which handles both Flat and HNSW
+        self.inner.memory_usage()
+    }
+
+    /// Get estimated serialized size in bytes.
+    ///
+    /// Returns an estimate of the size when saved to disk.
+    /// For Flat indexes, this is just the header + vector data.
+    /// For HNSW indexes, includes graph overhead.
+    #[wasm_bindgen(js_name = "serializedSize")]
+    pub fn serialized_size(&self) -> usize {
+        self.inner.serialized_size()
     }
 }
 
