@@ -3,6 +3,7 @@
 use crate::error::EdgeVecError;
 use crate::flat::BinaryFlatIndex;
 use crate::hnsw::{GraphError, HnswConfig, HnswIndex};
+use crate::metadata::validation::{validate_key, validate_value, MAX_KEYS_PER_VECTOR};
 use crate::metadata::MetadataStore;
 use crate::persistence::{chunking::ChunkIter, ChunkedWriter, PersistenceError};
 use crate::storage::VectorStorage;
@@ -480,11 +481,19 @@ impl IndexVariant {
     }
 
     /// Get memory usage in bytes.
+    ///
+    /// Includes all vector storage buffers (f32, quantized, binary) plus index overhead.
     #[inline]
     pub fn memory_usage(&self) -> usize {
         match self {
             IndexVariant::Hnsw { index, storage } => {
-                storage.binary_data.capacity() + index.memory_usage()
+                // Count all vector data buffers
+                let vector_data = storage.data_f32.capacity() * std::mem::size_of::<f32>()
+                    + storage.quantized_data.capacity()
+                    + storage.binary_data.capacity();
+                // Deleted flags (1 bit per vector, capacity in bits / 8)
+                let deleted_bits = storage.deleted.capacity() / 8;
+                vector_data + deleted_bits + index.memory_usage()
             }
             IndexVariant::Flat { index } => index.memory_usage(),
         }
@@ -670,6 +679,22 @@ impl EdgeVec {
                     hnsw_config.ef_search = ef;
                 }
                 hnsw_config.metric = metric_code;
+
+                // Validate Binary + non-Hamming incompatibility
+                if config.vector_type == Some(VectorType::Binary)
+                    && metric_code != HnswConfig::METRIC_HAMMING
+                {
+                    return Err(EdgeVecError::Validation(format!(
+                        "VectorType::Binary requires metric='hamming'. Current metric is '{}'",
+                        match metric_code {
+                            HnswConfig::METRIC_L2_SQUARED => "l2",
+                            HnswConfig::METRIC_COSINE => "cosine",
+                            HnswConfig::METRIC_DOT_PRODUCT => "dot",
+                            _ => "unknown",
+                        }
+                    ))
+                    .into());
+                }
 
                 // Initialize storage (in-memory for now)
                 let mut storage = VectorStorage::new(&hnsw_config, None);
@@ -2300,17 +2325,37 @@ impl EdgeVec {
         // Parse JavaScript object into HashMap<String, MetadataValue>
         let metadata_map = parse_js_metadata_object(&metadata_js)?;
 
-        // Insert vector first (works for both HNSW and Flat)
+        // Pre-validate ALL metadata BEFORE vector insert (atomicity guarantee)
+        if metadata_map.len() > MAX_KEYS_PER_VECTOR {
+            return Err(EdgeVecError::Validation(format!(
+                "Too many metadata keys: {} (max {})",
+                metadata_map.len(),
+                MAX_KEYS_PER_VECTOR
+            ))
+            .into());
+        }
+
+        // Validate each key-value pair upfront
+        for (key, value) in &metadata_map {
+            validate_key(key).map_err(|e| {
+                EdgeVecError::Validation(format!("Invalid metadata key '{}': {}", key, e))
+            })?;
+            validate_value(value).map_err(|e| {
+                EdgeVecError::Validation(format!("Invalid metadata value for '{}': {}", key, e))
+            })?;
+        }
+
+        // NOW insert vector (metadata guaranteed not to fail after pre-validation)
         let (index, storage) = self.inner.as_hnsw_mut()?;
         let id = index.insert(&vec, storage).map_err(EdgeVecError::from)?;
 
-        // Store metadata in EdgeVec's metadata store (shared across index types)
+        // Store pre-validated metadata (should not fail)
         #[allow(clippy::cast_possible_truncation)]
         let metadata_id = id.0 as u32;
         for (key, value) in metadata_map {
             self.metadata
                 .insert(metadata_id, &key, value)
-                .map_err(|e| EdgeVecError::Validation(format!("Metadata error: {e}")))?;
+                .expect("pre-validated metadata should not fail");
         }
 
         // Track memory allocation for memory pressure monitoring

@@ -525,6 +525,37 @@ impl VectorStorage {
                 storage.deleted.push(false);
                 storage.next_id = id + 1;
                 max_id = max_id.max(id);
+            } else if entry.entry_type == 2 {
+                // Insert Binary
+                if payload.len() < 8 {
+                    return Err(StorageError::Corrupted(
+                        "Binary insert payload too short".into(),
+                    ));
+                }
+                let id_bytes: [u8; 8] = payload[0..8].try_into().expect("checked");
+                let id = u64::from_le_bytes(id_bytes);
+
+                let vec_bytes = &payload[8..];
+
+                // For binary, expected bytes = ceil(dimensions / 8)
+                let expected_bytes = (config.dimensions as usize + 7) / 8;
+                if vec_bytes.len() != expected_bytes {
+                    return Err(StorageError::Corrupted(format!(
+                        "Binary vector length mismatch: expected {} bytes, got {}",
+                        expected_bytes,
+                        vec_bytes.len()
+                    )));
+                }
+
+                // Set storage type to Binary if not already (first binary entry)
+                if !matches!(storage.config, StorageType::Binary(_)) {
+                    storage.config = StorageType::Binary(config.dimensions);
+                }
+
+                storage.binary_data.extend_from_slice(vec_bytes);
+                storage.deleted.push(false);
+                storage.next_id = id + 1;
+                max_id = max_id.max(id);
             }
         }
 
