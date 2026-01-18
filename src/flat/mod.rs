@@ -79,6 +79,11 @@ impl BinaryFlatIndex {
     ///
     /// * `dimensions` - Number of bits per vector (must be divisible by 8)
     /// * `capacity` - Number of vectors to pre-allocate space for
+    ///
+    /// # Panics
+    ///
+    /// Panics if dimensions is not divisible by 8.
+    /// Panics if capacity * bytes_per_vector overflows.
     #[must_use]
     pub fn with_capacity(dimensions: usize, capacity: usize) -> Self {
         assert!(
@@ -87,8 +92,11 @@ impl BinaryFlatIndex {
             dimensions
         );
         let bytes_per_vector = dimensions / 8;
+        let total_bytes = capacity
+            .checked_mul(bytes_per_vector)
+            .expect("capacity * bytes_per_vector overflow");
         Self {
-            vectors: Vec::with_capacity(capacity * bytes_per_vector),
+            vectors: Vec::with_capacity(total_bytes),
             dimensions,
             bytes_per_vector,
             count: 0,

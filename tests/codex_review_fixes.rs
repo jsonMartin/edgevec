@@ -94,6 +94,78 @@ mod binary_wal_recovery {
 
         assert_eq!(recovered.len(), 0, "Empty WAL should recover to empty storage");
     }
+
+    /// Test that WAL with only F32 entries (entry_type 0) recovers correctly.
+    /// Note: Mixed entry types (F32 + Binary in same WAL) are NOT supported.
+    /// Each WAL should contain only one entry type.
+    #[test]
+    fn test_recover_f32_only_wal() {
+        let dimensions = 4_u32;
+        let config = HnswConfig::new(dimensions);
+        let backend = MemoryBackend::new();
+        let mut wal = WalAppender::new(Box::new(backend.clone()), 1);
+
+        // Write F32 vectors (entry_type = 0)
+        let f32_vectors: Vec<Vec<f32>> = vec![
+            vec![1.0, 2.0, 3.0, 4.0],
+            vec![5.0, 6.0, 7.0, 8.0],
+            vec![9.0, 10.0, 11.0, 12.0],
+        ];
+
+        for (i, vec) in f32_vectors.iter().enumerate() {
+            let id = (i + 1) as u64;
+            let mut payload = Vec::with_capacity(8 + vec.len() * 4);
+            payload.extend_from_slice(&id.to_le_bytes());
+            for &v in vec {
+                payload.extend_from_slice(&v.to_le_bytes());
+            }
+            wal.append(0, &payload).expect("WAL append failed");
+        }
+
+        // Recover
+        let recovered = VectorStorage::recover(Box::new(backend), &config)
+            .expect("Recovery should succeed");
+
+        assert_eq!(recovered.len(), 3, "Should recover 3 F32 vectors");
+    }
+
+    /// Test documenting that mixed WAL entry types are not supported.
+    /// If F32 vectors exist and then Binary is added, the storage switches to Binary mode
+    /// and F32 data becomes inaccessible via normal retrieval.
+    /// This is a known limitation - users should not mix entry types in a single WAL.
+    #[test]
+    fn test_mixed_entry_types_documented_limitation() {
+        let dimensions = 64_u32; // 8 bytes for binary
+        let config = HnswConfig::new(dimensions);
+        let backend = MemoryBackend::new();
+        let mut wal = WalAppender::new(Box::new(backend.clone()), 1);
+
+        // First, write an F32 vector (entry_type = 0)
+        let f32_vec: Vec<f32> = (0..64).map(|i| i as f32).collect();
+        let mut payload = Vec::with_capacity(8 + f32_vec.len() * 4);
+        payload.extend_from_slice(&1_u64.to_le_bytes());
+        for &v in &f32_vec {
+            payload.extend_from_slice(&v.to_le_bytes());
+        }
+        wal.append(0, &payload).expect("WAL append failed");
+
+        // Then write a Binary vector (entry_type = 2)
+        let binary_vec = vec![0xAA_u8; 8]; // 64 bits
+        let mut payload2 = Vec::with_capacity(8 + binary_vec.len());
+        payload2.extend_from_slice(&2_u64.to_le_bytes());
+        payload2.extend_from_slice(&binary_vec);
+        wal.append(2, &payload2).expect("WAL append failed");
+
+        // Recovery succeeds but storage is now in Binary mode
+        let recovered = VectorStorage::recover(Box::new(backend), &config)
+            .expect("Recovery succeeds but may have inconsistent state");
+
+        // len() counts deleted flags, which tracks both F32 and Binary inserts
+        assert_eq!(recovered.len(), 2, "Both entries counted in len()");
+
+        // The storage config is now Binary (switched when binary entry encountered)
+        // This is the documented limitation: don't mix entry types
+    }
 }
 
 // ============================================================================

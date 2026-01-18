@@ -856,10 +856,27 @@ impl EdgeVec {
                 Ok(id.0 as u32)
             }
             IndexVariant::Flat { index } => {
-                // Fast path for Flat index - minimal overhead like old BinaryFlatVec
-                // BinaryFlatIndex::insert already asserts dimension match
+                // Validate dimensions before insert to return proper error instead of panic
+                let expected_bytes = index.bytes_per_vector();
+                let len = vector.length() as usize;
+
+                if len != expected_bytes {
+                    return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                        expected: expected_bytes,
+                        actual: len,
+                    })
+                    .into());
+                }
+
                 let vec = vector.to_vec();
                 let id = index.insert(&vec);
+
+                // Check for u32 overflow (consistent with HNSW path)
+                if id.0 > u64::from(u32::MAX) {
+                    return Err(
+                        EdgeVecError::Validation("Vector ID overflowed u32".to_string()).into(),
+                    );
+                }
                 Ok(id.0 as u32)
             }
         }
@@ -1033,7 +1050,18 @@ impl EdgeVec {
                 Ok(arr.into())
             }
             IndexVariant::Flat { index } => {
-                // Fast path for Flat index - BinaryFlatIndex::search asserts dimension match
+                // Validate dimensions before search to return proper error instead of panic
+                let expected_bytes = index.bytes_per_vector();
+                let len = query.length() as usize;
+
+                if len != expected_bytes {
+                    return Err(EdgeVecError::Graph(GraphError::DimensionMismatch {
+                        expected: expected_bytes,
+                        actual: len,
+                    })
+                    .into());
+                }
+
                 let vec = query.to_vec();
                 let results = index.search(&vec, k);
 

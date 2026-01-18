@@ -363,22 +363,24 @@ impl VectorStorage {
     ///
     /// Panics if the vector ID is invalid (0).
     /// Panics if storage is not in binary mode.
+    /// Panics if vector ID is out of bounds.
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     pub fn get_binary_vector(&self, id: VectorId) -> &[u8] {
-        assert!(
-            id != VectorId::INVALID,
-            "attempted to access invalid vector id 0"
-        );
-
         let bits = match &self.config {
             StorageType::Binary(b) => *b,
             _ => panic!("get_binary_vector called on non-binary storage"),
         };
 
+        // Use checked_sub to safely convert 1-based ID to 0-based index
+        let idx = (id.0 as usize)
+            .checked_sub(1)
+            .expect("attempted to access invalid vector id 0");
+
         let bytes_per_vector = ((bits + 7) / 8) as usize;
-        let idx = (id.0 as usize) - 1;
-        let start = idx * bytes_per_vector;
+        let start = idx
+            .checked_mul(bytes_per_vector)
+            .expect("vector offset overflow");
 
         &self.binary_data[start..start + bytes_per_vector]
     }
