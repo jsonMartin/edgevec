@@ -413,12 +413,15 @@
                 // benchmarkHamming returns microseconds per iteration
                 const latencyUs = wasmModule.benchmarkHamming(bytes, iterations);
                 const backend = wasmModule.getSimdBackend();
+                const latencyOk = Number.isFinite(latencyUs) && latencyUs > 0;
 
-                document.getElementById('latency-time').textContent = latencyUs.toFixed(3) + ' μs';
+                document.getElementById('latency-time').textContent =
+                    latencyOk ? latencyUs.toFixed(3) + ' μs' : 'N/A';
                 document.getElementById('simd-backend-result').textContent = backend.toUpperCase();
 
-                const opsPerSec = 1000000 / latencyUs;
-                document.getElementById('throughput').textContent = formatNumber(opsPerSec);
+                const opsPerSec = latencyOk ? 1000000 / latencyUs : 0;
+                document.getElementById('throughput').textContent =
+                    latencyOk ? formatNumber(opsPerSec) : 'N/A';
 
                 console.log('Hamming benchmark:', { latencyUs, backend, bytes, iterations });
             } catch (e) {
@@ -444,15 +447,19 @@
             for (const bytes of sizes) {
                 try {
                     const latencyUs = wasmModule.benchmarkHamming(bytes, iterations);
-                    const opsPerSec = 1000000 / latencyUs;
-                    results.push({ bytes, latencyUs, opsPerSec });
+                    const latencyOk = Number.isFinite(latencyUs) && latencyUs > 0;
+                    const opsPerSec = latencyOk ? 1000000 / latencyUs : 0;
+
+                    if (latencyOk) {
+                        results.push({ bytes, latencyUs, opsPerSec });
+                    }
 
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>${bytes} bytes</td>
                         <td class="num">${bytes * 8}</td>
-                        <td class="num" style="color: #00ff88">${latencyUs.toFixed(3)}</td>
-                        <td class="num" style="color: #00d4ff">${formatNumber(opsPerSec)}</td>
+                        <td class="num" style="color: #00ff88">${latencyOk ? latencyUs.toFixed(3) : 'N/A'}</td>
+                        <td class="num" style="color: #00d4ff">${latencyOk ? formatNumber(opsPerSec) : 'N/A'}</td>
                     `;
                     tbody.appendChild(row);
 
@@ -466,6 +473,10 @@
             btn.textContent = 'Run All Sizes';
 
             // Show average latency
+            if (results.length === 0) {
+                showSummary('error', 'No valid benchmark results.');
+                return;
+            }
             const avgLatency = results.reduce((sum, r) => sum + r.latencyUs, 0) / results.length;
             showSummary('success', `Average latency: ${avgLatency.toFixed(3)} μs using WASM SIMD128`);
         }

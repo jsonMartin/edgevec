@@ -554,7 +554,6 @@
 
             // Calculate average time per scan (total / iterations)
             const newAvgMs = result.new_ms / iterations;
-            const currentAvgMs = result.current_ms / iterations;
 
             const resultsHtml = `
                 <div class="benchmark-results">
@@ -928,8 +927,14 @@
         }
 
         function clearDatabase() {
-            db = null;
-            flatDb = null;
+            if (db) {
+                db.free();
+                db = null;
+            }
+            if (flatDb) {
+                flatDb.free();
+                flatDb = null;
+            }
             vectorCount = 0;
             flatVectorCount = 0;
             currentDimensions = 0;

@@ -622,6 +622,14 @@ impl HnswIndex {
         storage: &VectorStorage,
         search_ctx: &mut SearchContext,
     ) -> Result<Vec<SearchResult>, GraphError> {
+        // Guard: binary search requires Hamming metric
+        if self.config.metric != HnswConfig::METRIC_HAMMING {
+            return Err(GraphError::InvalidConfig(format!(
+                "search_binary requires metric=Hamming, got {}",
+                self.config.metric
+            )));
+        }
+
         let Some(entry_point) = self.entry_point() else {
             return Ok(Vec::new());
         };

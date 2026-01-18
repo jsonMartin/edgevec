@@ -503,8 +503,11 @@ impl IndexVariant {
     pub fn serialized_size(&self) -> usize {
         match self {
             IndexVariant::Hnsw { index, storage } => {
-                // Header + vector data + graph overhead estimate
-                64 + storage.binary_data.len() + index.len() * 64
+                // Header + vector data (f32, quantized, or binary) + graph overhead estimate
+                let vector_data = storage.data_f32.len() * std::mem::size_of::<f32>()
+                    + storage.quantized_data.len()
+                    + storage.binary_data.len();
+                64 + vector_data + index.len() * 64
             }
             IndexVariant::Flat { index } => index.serialized_size(),
         }
