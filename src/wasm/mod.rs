@@ -285,7 +285,6 @@ pub enum JsIndexType {
     Hnsw = 1,
 }
 
-
 /// Configuration for EdgeVec database.
 #[wasm_bindgen]
 pub struct EdgeVecConfig {
@@ -648,7 +647,8 @@ impl EdgeVec {
         let inner = match config.index_type() {
             JsIndexType::Flat => {
                 // Flat index: create BinaryFlatIndex directly
-                let index = BinaryFlatIndex::new(config.dimensions as usize);
+                let index =
+                    BinaryFlatIndex::new(config.dimensions as usize).map_err(EdgeVecError::from)?;
                 IndexVariant::Flat { index }
             }
             JsIndexType::Hnsw => {
@@ -869,7 +869,7 @@ impl EdgeVec {
                 }
 
                 let vec = vector.to_vec();
-                let id = index.insert(&vec);
+                let id = index.insert(&vec).map_err(EdgeVecError::from)?;
 
                 // Check for u32 overflow (consistent with HNSW path)
                 if id.0 > u64::from(u32::MAX) {
@@ -1063,7 +1063,7 @@ impl EdgeVec {
                 }
 
                 let vec = query.to_vec();
-                let results = index.search(&vec, k);
+                let results = index.search(&vec, k).map_err(EdgeVecError::from)?;
 
                 let arr = Array::new_with_length(results.len() as u32);
                 for (i, result) in results.iter().enumerate() {

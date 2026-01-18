@@ -44,8 +44,8 @@ mod binary_wal_recovery {
         }
 
         // Recover storage from WAL
-        let recovered = VectorStorage::recover(Box::new(backend), &config)
-            .expect("Recovery should succeed");
+        let recovered =
+            VectorStorage::recover(Box::new(backend), &config).expect("Recovery should succeed");
 
         // Verify all vectors recovered
         assert_eq!(recovered.len(), 5, "Should recover 5 vectors");
@@ -54,11 +54,7 @@ mod binary_wal_recovery {
         for (i, expected) in vectors.iter().enumerate() {
             let id = VectorId((i + 1) as u64);
             let actual = recovered.get_binary_vector(id);
-            assert_eq!(
-                actual, expected.as_slice(),
-                "Vector {} should match",
-                i + 1
-            );
+            assert_eq!(actual, expected.as_slice(), "Vector {} should match", i + 1);
         }
     }
 
@@ -80,7 +76,10 @@ mod binary_wal_recovery {
 
         // Recovery should fail with dimension mismatch
         let result = VectorStorage::recover(Box::new(backend), &config);
-        assert!(result.is_err(), "Recovery should fail on dimension mismatch");
+        assert!(
+            result.is_err(),
+            "Recovery should fail on dimension mismatch"
+        );
     }
 
     /// Test that empty binary WAL recovers to empty storage.
@@ -92,7 +91,11 @@ mod binary_wal_recovery {
         let recovered =
             VectorStorage::recover(Box::new(backend), &config).expect("Recovery should succeed");
 
-        assert_eq!(recovered.len(), 0, "Empty WAL should recover to empty storage");
+        assert_eq!(
+            recovered.len(),
+            0,
+            "Empty WAL should recover to empty storage"
+        );
     }
 
     /// Test that WAL with only F32 entries (entry_type 0) recovers correctly.
@@ -123,8 +126,8 @@ mod binary_wal_recovery {
         }
 
         // Recover
-        let recovered = VectorStorage::recover(Box::new(backend), &config)
-            .expect("Recovery should succeed");
+        let recovered =
+            VectorStorage::recover(Box::new(backend), &config).expect("Recovery should succeed");
 
         assert_eq!(recovered.len(), 3, "Should recover 3 F32 vectors");
     }
@@ -203,7 +206,9 @@ mod binary_metric_validation {
 
         // Insert binary vector
         let binary = vec![0xAA_u8; 8]; // 64 bits
-        let id = storage.insert_binary(&binary).expect("Insert should succeed");
+        let id = storage
+            .insert_binary(&binary)
+            .expect("Insert should succeed");
 
         // Retrieve and verify
         let retrieved = storage.get_binary_vector(id);

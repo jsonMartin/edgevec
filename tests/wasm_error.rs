@@ -121,7 +121,9 @@ fn test_binary_with_l2_metric_rejected() {
 
     let msg = Reflect::get(&err, &"message".into()).unwrap();
     assert!(
-        msg.as_string().unwrap().contains("requires metric='hamming'"),
+        msg.as_string()
+            .unwrap()
+            .contains("requires metric='hamming'"),
         "Error should mention hamming requirement"
     );
 }
@@ -192,7 +194,10 @@ fn test_insert_binary_non_hamming_rejected() {
 
     let result = db.insert_binary(binary_vec);
 
-    assert!(result.is_err(), "insertBinary should fail on non-Hamming index");
+    assert!(
+        result.is_err(),
+        "insertBinary should fail on non-Hamming index"
+    );
     let err = result.unwrap_err();
 
     let code = Reflect::get(&err, &"code".into()).unwrap();
@@ -200,7 +205,9 @@ fn test_insert_binary_non_hamming_rejected() {
 
     let msg = Reflect::get(&err, &"message".into()).unwrap();
     assert!(
-        msg.as_string().unwrap().contains("requires metric='hamming'"),
+        msg.as_string()
+            .unwrap()
+            .contains("requires metric='hamming'"),
         "Error should mention hamming requirement"
     );
 }
@@ -222,7 +229,10 @@ fn test_search_binary_non_hamming_rejected() {
 
     let result = db.search_binary(binary_query, 5);
 
-    assert!(result.is_err(), "searchBinary should fail on non-Hamming index");
+    assert!(
+        result.is_err(),
+        "searchBinary should fail on non-Hamming index"
+    );
     let err = result.err().expect("already checked is_err");
 
     let code = Reflect::get(&err, &"code".into()).unwrap();
@@ -243,7 +253,10 @@ fn test_insert_binary_hamming_succeeds() {
     let binary_vec = Uint8Array::new_with_length(8);
     let result = db.insert_binary(binary_vec);
 
-    assert!(result.is_ok(), "insertBinary should succeed on Hamming index");
+    assert!(
+        result.is_ok(),
+        "insertBinary should succeed on Hamming index"
+    );
 }
 
 /// Test that searchBinary with Hamming metric succeeds.
@@ -268,5 +281,8 @@ fn test_search_binary_hamming_succeeds() {
     let query = Uint8Array::new_with_length(8);
     let result = db.search_binary(query, 3);
 
-    assert!(result.is_ok(), "searchBinary should succeed on Hamming index");
+    assert!(
+        result.is_ok(),
+        "searchBinary should succeed on Hamming index"
+    );
 }

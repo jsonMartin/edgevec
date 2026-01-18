@@ -22,6 +22,28 @@
 use crate::hnsw::VectorId;
 use crate::metric::{Hamming, Metric};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+/// Errors that can occur when using `BinaryFlatIndex`.
+#[derive(Debug, Clone, Error)]
+pub enum FlatIndexError {
+    /// Dimensions must be divisible by 8.
+    #[error("dimensions must be divisible by 8, got {0}")]
+    InvalidDimensions(usize),
+
+    /// Vector length doesn't match expected bytes.
+    #[error("vector length {actual} doesn't match expected {expected}")]
+    DimensionMismatch {
+        /// Expected number of bytes.
+        expected: usize,
+        /// Actual number of bytes provided.
+        actual: usize,
+    },
+
+    /// Capacity overflow when allocating storage.
+    #[error("capacity overflow: {0} * {1} exceeds usize::MAX")]
+    CapacityOverflow(usize, usize),
+}
 
 /// Search result from flat index.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -55,22 +77,19 @@ impl BinaryFlatIndex {
     ///
     /// * `dimensions` - Number of bits per vector (must be divisible by 8)
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if dimensions is not divisible by 8.
-    #[must_use]
-    pub fn new(dimensions: usize) -> Self {
-        assert!(
-            dimensions % 8 == 0,
-            "dimensions must be divisible by 8, got {}",
-            dimensions
-        );
-        Self {
+    /// Returns [`FlatIndexError::InvalidDimensions`] if dimensions is not divisible by 8.
+    pub fn new(dimensions: usize) -> Result<Self, FlatIndexError> {
+        if dimensions % 8 != 0 {
+            return Err(FlatIndexError::InvalidDimensions(dimensions));
+        }
+        Ok(Self {
             vectors: Vec::new(),
             dimensions,
             bytes_per_vector: dimensions / 8,
             count: 0,
-        }
+        })
     }
 
     /// Create a new binary flat index with pre-allocated capacity.
@@ -80,27 +99,24 @@ impl BinaryFlatIndex {
     /// * `dimensions` - Number of bits per vector (must be divisible by 8)
     /// * `capacity` - Number of vectors to pre-allocate space for
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if dimensions is not divisible by 8.
-    /// Panics if capacity * bytes_per_vector overflows.
-    #[must_use]
-    pub fn with_capacity(dimensions: usize, capacity: usize) -> Self {
-        assert!(
-            dimensions % 8 == 0,
-            "dimensions must be divisible by 8, got {}",
-            dimensions
-        );
+    /// Returns [`FlatIndexError::InvalidDimensions`] if dimensions is not divisible by 8.
+    /// Returns [`FlatIndexError::CapacityOverflow`] if capacity * bytes_per_vector overflows.
+    pub fn with_capacity(dimensions: usize, capacity: usize) -> Result<Self, FlatIndexError> {
+        if dimensions % 8 != 0 {
+            return Err(FlatIndexError::InvalidDimensions(dimensions));
+        }
         let bytes_per_vector = dimensions / 8;
         let total_bytes = capacity
             .checked_mul(bytes_per_vector)
-            .expect("capacity * bytes_per_vector overflow");
-        Self {
+            .ok_or(FlatIndexError::CapacityOverflow(capacity, bytes_per_vector))?;
+        Ok(Self {
             vectors: Vec::with_capacity(total_bytes),
             dimensions,
             bytes_per_vector,
             count: 0,
-        }
+        })
     }
 
     /// Insert a binary vector into the index.
@@ -113,23 +129,22 @@ impl BinaryFlatIndex {
     ///
     /// The ID of the inserted vector.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if vector length doesn't match bytes_per_vector.
+    /// Returns [`FlatIndexError::DimensionMismatch`] if vector length doesn't match.
     #[inline]
-    pub fn insert(&mut self, vector: &[u8]) -> VectorId {
-        assert_eq!(
-            vector.len(),
-            self.bytes_per_vector,
-            "vector length {} doesn't match expected {}",
-            vector.len(),
-            self.bytes_per_vector
-        );
+    pub fn insert(&mut self, vector: &[u8]) -> Result<VectorId, FlatIndexError> {
+        if vector.len() != self.bytes_per_vector {
+            return Err(FlatIndexError::DimensionMismatch {
+                expected: self.bytes_per_vector,
+                actual: vector.len(),
+            });
+        }
 
         self.vectors.extend_from_slice(vector);
         self.count += 1;
         // Start IDs at 1 to match EdgeVec/VectorStorage convention (0 is reserved sentinel)
-        VectorId(self.count as u64)
+        Ok(VectorId(self.count as u64))
     }
 
     /// Search for the k nearest neighbors to a query vector.
@@ -145,22 +160,19 @@ impl BinaryFlatIndex {
     ///
     /// Vector of search results sorted by distance (ascending).
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if query length doesn't match `bytes_per_vector()`.
-    #[must_use]
-    #[allow(clippy::missing_panics_doc)]
-    pub fn search(&self, query: &[u8], k: usize) -> Vec<FlatSearchResult> {
-        assert_eq!(
-            query.len(),
-            self.bytes_per_vector,
-            "query length {} doesn't match expected {}",
-            query.len(),
-            self.bytes_per_vector
-        );
+    /// Returns [`FlatIndexError::DimensionMismatch`] if query length doesn't match.
+    pub fn search(&self, query: &[u8], k: usize) -> Result<Vec<FlatSearchResult>, FlatIndexError> {
+        if query.len() != self.bytes_per_vector {
+            return Err(FlatIndexError::DimensionMismatch {
+                expected: self.bytes_per_vector,
+                actual: query.len(),
+            });
+        }
 
         if self.count == 0 || k == 0 {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let k = k.min(self.count);
@@ -181,21 +193,19 @@ impl BinaryFlatIndex {
         // Partial sort to get top k (more efficient than full sort for small k)
         if k < self.count / 10 {
             // Use partial sort for small k
-            results.select_nth_unstable_by(k - 1, |a, b| {
-                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            results.select_nth_unstable_by(k - 1, |a, b| a.1.total_cmp(&b.1));
             results.truncate(k);
-            results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            results.sort_by(|a, b| a.1.total_cmp(&b.1));
         } else {
             // Full sort for large k
-            results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            results.sort_by(|a, b| a.1.total_cmp(&b.1));
             results.truncate(k);
         }
 
-        results
+        Ok(results
             .into_iter()
             .map(|(id, distance)| FlatSearchResult { id, distance })
-            .collect()
+            .collect())
     }
 
     /// Get a vector by ID.
@@ -289,7 +299,7 @@ mod tests {
 
     #[test]
     fn test_new() {
-        let index = BinaryFlatIndex::new(1024);
+        let index = BinaryFlatIndex::new(1024).unwrap();
         assert_eq!(index.dimensions(), 1024);
         assert_eq!(index.bytes_per_vector(), 128);
         assert_eq!(index.len(), 0);
@@ -298,12 +308,12 @@ mod tests {
 
     #[test]
     fn test_insert_and_get() {
-        let mut index = BinaryFlatIndex::new(64); // 8 bytes per vector
+        let mut index = BinaryFlatIndex::new(64).unwrap(); // 8 bytes per vector
         let v1 = vec![0xFF; 8];
         let v2 = vec![0x00; 8];
 
-        let id1 = index.insert(&v1);
-        let id2 = index.insert(&v2);
+        let id1 = index.insert(&v1).unwrap();
+        let id2 = index.insert(&v2).unwrap();
 
         assert_eq!(id1, VectorId(1)); // IDs are 1-based
         assert_eq!(id2, VectorId(2));
@@ -315,19 +325,19 @@ mod tests {
 
     #[test]
     fn test_search_exact_match() {
-        let mut index = BinaryFlatIndex::new(64);
+        let mut index = BinaryFlatIndex::new(64).unwrap();
 
         // Insert some vectors
         let v1 = vec![0xFF; 8];
         let v2 = vec![0x00; 8];
         let v3 = vec![0xAA; 8];
 
-        index.insert(&v1);
-        index.insert(&v2);
-        index.insert(&v3);
+        index.insert(&v1).unwrap();
+        index.insert(&v2).unwrap();
+        index.insert(&v3).unwrap();
 
         // Search for exact match
-        let results = index.search(&v2, 1);
+        let results = index.search(&v2, 1).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, VectorId(2)); // v2 is second insert, ID=2
         assert_eq!(results[0].distance, 0.0);
@@ -335,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_search_ordering() {
-        let mut index = BinaryFlatIndex::new(64);
+        let mut index = BinaryFlatIndex::new(64).unwrap();
 
         // Insert vectors with known distances from query
         let query = vec![0x00; 8]; // All zeros
@@ -343,11 +353,11 @@ mod tests {
         let v2 = vec![0x0F; 8]; // 32 bits different
         let v3 = vec![0x01; 8]; // 8 bits different
 
-        index.insert(&v1); // id=1, dist=64
-        index.insert(&v2); // id=2, dist=32
-        index.insert(&v3); // id=3, dist=8
+        index.insert(&v1).unwrap(); // id=1, dist=64
+        index.insert(&v2).unwrap(); // id=2, dist=32
+        index.insert(&v3).unwrap(); // id=3, dist=8
 
-        let results = index.search(&query, 3);
+        let results = index.search(&query, 3).unwrap();
 
         // Should be ordered by distance (IDs are 1-based)
         assert_eq!(results[0].id, VectorId(3)); // Closest
@@ -360,15 +370,15 @@ mod tests {
 
     #[test]
     fn test_search_k_limit() {
-        let mut index = BinaryFlatIndex::new(64);
+        let mut index = BinaryFlatIndex::new(64).unwrap();
 
         for i in 0..100 {
             let v: Vec<u8> = (0..8).map(|j| ((i + j) % 256) as u8).collect();
-            index.insert(&v);
+            index.insert(&v).unwrap();
         }
 
         let query = vec![0x00; 8];
-        let results = index.search(&query, 5);
+        let results = index.search(&query, 5).unwrap();
 
         assert_eq!(results.len(), 5);
         // Results should be sorted by distance
@@ -379,29 +389,29 @@ mod tests {
 
     #[test]
     fn test_empty_search() {
-        let index = BinaryFlatIndex::new(64);
+        let index = BinaryFlatIndex::new(64).unwrap();
         let query = vec![0x00; 8];
-        let results = index.search(&query, 10);
+        let results = index.search(&query, 10).unwrap();
         assert!(results.is_empty());
     }
 
     #[test]
     fn test_search_k_zero() {
-        let mut index = BinaryFlatIndex::new(64);
+        let mut index = BinaryFlatIndex::new(64).unwrap();
         // Insert enough vectors to trigger the partial sort path (count >= 10)
         for _ in 0..20 {
-            index.insert(&vec![0xFF; 8]);
+            index.insert(&[0xFF; 8]).unwrap();
         }
-        // k=0 should return empty, not panic
-        let results = index.search(&vec![0x00; 8], 0);
+        // k=0 should return empty, not error
+        let results = index.search(&[0x00; 8], 0).unwrap();
         assert!(results.is_empty());
     }
 
     #[test]
     fn test_clear() {
-        let mut index = BinaryFlatIndex::new(64);
-        index.insert(&vec![0xFF; 8]);
-        index.insert(&vec![0x00; 8]);
+        let mut index = BinaryFlatIndex::new(64).unwrap();
+        index.insert(&[0xFF; 8]).unwrap();
+        index.insert(&[0x00; 8]).unwrap();
 
         assert_eq!(index.len(), 2);
 
@@ -413,11 +423,11 @@ mod tests {
 
     #[test]
     fn test_memory_usage() {
-        let mut index = BinaryFlatIndex::with_capacity(1024, 1000);
+        let mut index = BinaryFlatIndex::with_capacity(1024, 1000).unwrap();
         assert!(index.memory_usage() > 0);
 
         for _ in 0..100 {
-            index.insert(&vec![0xAA; 128]);
+            index.insert(&[0xAA; 128]).unwrap();
         }
 
         let usage = index.memory_usage();
@@ -426,15 +436,38 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "dimensions must be divisible by 8")]
     fn test_invalid_dimensions() {
-        let _ = BinaryFlatIndex::new(100); // Not divisible by 8
+        let result = BinaryFlatIndex::new(100); // Not divisible by 8
+        assert!(matches!(
+            result,
+            Err(FlatIndexError::InvalidDimensions(100))
+        ));
     }
 
     #[test]
-    #[should_panic(expected = "vector length")]
     fn test_invalid_vector_length() {
-        let mut index = BinaryFlatIndex::new(64);
-        index.insert(&vec![0xFF; 16]); // Wrong size
+        let mut index = BinaryFlatIndex::new(64).unwrap();
+        let result = index.insert(&[0xFF; 16]); // Wrong size
+        assert!(matches!(
+            result,
+            Err(FlatIndexError::DimensionMismatch {
+                expected: 8,
+                actual: 16
+            })
+        ));
+    }
+
+    #[test]
+    fn test_invalid_query_length() {
+        let mut index = BinaryFlatIndex::new(64).unwrap();
+        index.insert(&[0xFF; 8]).unwrap();
+        let result = index.search(&[0x00; 16], 1); // Wrong query size
+        assert!(matches!(
+            result,
+            Err(FlatIndexError::DimensionMismatch {
+                expected: 8,
+                actual: 16
+            })
+        ));
     }
 }

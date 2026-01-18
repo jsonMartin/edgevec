@@ -219,10 +219,9 @@ impl IndexType {
     }
 }
 
-
 pub use batch::BatchInsertable;
 pub use error::BatchError;
-pub use flat::{BinaryFlatIndex, FlatSearchResult};
+pub use flat::{BinaryFlatIndex, FlatIndexError, FlatSearchResult};
 pub use hnsw::{BatchDeleteError, BatchDeleteResult, HnswConfig, HnswIndex, SearchResult};
 pub use metric::Metric;
 

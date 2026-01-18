@@ -515,7 +515,6 @@ pub mod wasm {
         }
     }
 
-
     /// Cosine Similarity using WASM SIMD128.
     ///
     /// # Safety
@@ -1172,7 +1171,6 @@ pub mod x86 {
 
         sum
     }
-
 
     /// Horizontal sum of f32x8
     #[inline]
