@@ -137,6 +137,10 @@ name = "distance_bench"
 harness = false
 
 [[bench]]
+name = "flat_bench"
+harness = false
+
+[[bench]]
 name = "persistence_bench"
 harness = false
 
@@ -227,6 +231,11 @@ harness = false
 [[bench]]
 name = "sparse_storage_bench"
 harness = false
+
+[[bench]]
+name = "hybrid_bench"
+harness = false
+required-features = ["sparse"]
 
 [[example]]
 name = "batch_insert"
